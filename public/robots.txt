@@ -1,0 +1,5 @@
+# CRMate Robots.txt
+User-agent: *
+Disallow: /api/
+Disallow: /settings/
+Allow: /

@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221 83% 53%;
+    --radius: 0.5rem;
+  }
+}
+
+/* Smooth rendering */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: radial-gradient(circle at 15% 20%, rgba(143, 194, 240, 0.18) 0%, transparent 40%),
+              radial-gradient(circle at 85% 75%, rgba(119, 206, 105, 0.12) 0%, transparent 45%),
+              #EFF3F8;
+  background-attachment: fixed;
+  color: #292D32;
+  font-family: var(--font-urbanist), var(--font-cairo), system-ui, -apple-system, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1;
+  min-height: 100vh;
+}
+
+/* Global transition smoothness */
+*, *::before, *::after {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glassmorphism & Plecto Card Utilities */
+@layer utilities {
+  /* Frosted Glass Card - Matching Plecto 1:1 */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 1.5rem;
+    box-shadow: 0 10px 30px -5px rgba(41, 45, 50, 0.04), 
+                0 4px 12px -2px rgba(41, 45, 50, 0.02),
+                inset 0 1px 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .glass-card-interactive {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(16px) saturate(160%);
+    -webkit-backdrop-filter: blur(16px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 1.5rem;
+    box-shadow: 0 10px 30px -5px rgba(41, 45, 50, 0.04),
+                0 4px 12px -2px rgba(41, 45, 50, 0.02),
+                inset 0 1px 1px 0 rgba(255, 255, 255, 0.9);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-card-interactive:hover {
+    transform: translateY(-3px);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 20px 40px -10px rgba(41, 45, 50, 0.08),
+                0 8px 16px -4px rgba(41, 45, 50, 0.03),
+                inset 0 1px 1px 0 rgba(255, 255, 255, 1);
+    border-color: rgba(143, 194, 240, 0.6);
+  }
+
+  .crmate-pill-dark {
+    background: #292D32;
+    color: #FFFFFF;
+    border-radius: 9999px;
+  }
+
+  .crmate-badge-green {
+    background: rgba(119, 206, 105, 0.18);
+    color: #2e7d32;
+    border-radius: 9999px;
+    font-weight: 800;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 100px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Smooth modal backdrop */
+.backdrop-blur-xs {
+  backdrop-filter: blur(4px);
+}
+
+/* Focus ring improvements */
+input:focus, select:focus, textarea:focus, button:focus-visible {
+  outline: none;
+  ring: 2px;
+}
+
+/* Better select styling */
+select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  appearance: none;
+  padding-right: 2.5rem;
+}
+
+/* Subtle animation for badges */
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.badge-pulse {
+  animation: gentle-pulse 2s ease-in-out infinite;
+}
+
+/* Smooth page transitions */
+main {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Print-friendly */
+@media print {
+  aside, header, .no-print { display: none !important; }
+  main { padding: 0 !important; margin: 0 !important; }
+}
+
+/* Shake animation for auth failure */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
