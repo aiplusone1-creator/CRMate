@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Project, QuotationStatus } from '@/types/crm';
 import { useCRM } from '@/lib/store/crm-context';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 interface AddQuotationModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export function AddQuotationModal({
   existingVersionsCount 
 }: AddQuotationModalProps) {
   const { addQuotation } = useCRM();
+  const { isRTL } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const nextVersion = existingVersionsCount + 1;
@@ -250,12 +252,12 @@ export function AddQuotationModal({
                 onChange={(e) => setStatus(e.target.value as QuotationStatus)}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white"
               >
-                <option value="sent">Sent to Client (مقدم للعميل)</option>
-                <option value="under_review">Under Review / Evaluation (قيد المراجعة)</option>
-                <option value="approved">Approved / PO Expected (معتمد)</option>
-                <option value="revised">Revised / Superseded (معدل)</option>
-                <option value="draft">Internal Draft (مسودة)</option>
-                <option value="rejected">Rejected (مرفوض)</option>
+                <option value="sent">{isRTL ? 'مقدم للعميل' : 'Sent to Client'}</option>
+                <option value="under_review">{isRTL ? 'قيد المراجعة والتقييم' : 'Under Review / Evaluation'}</option>
+                <option value="approved">{isRTL ? 'معتمد / في انتظار أمر الشراء' : 'Approved / PO Expected'}</option>
+                <option value="revised">{isRTL ? 'معدل ومحدث' : 'Revised / Superseded'}</option>
+                <option value="draft">{isRTL ? 'مسودة داخلية' : 'Internal Draft'}</option>
+                <option value="rejected">{isRTL ? 'مرفوض' : 'Rejected'}</option>
               </select>
             </div>
           </div>

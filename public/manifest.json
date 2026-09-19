@@ -1,0 +1,16 @@
+{
+  "name": "CRMate — Intelligent Sales CRM",
+  "short_name": "CRMate",
+  "description": "High-velocity sales management and pipeline intelligence for Al Mespar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EFF3F8",
+  "theme_color": "#292D32",
+  "icons": [
+    {
+      "src": "/icon",
+      "sizes": "32x32",
+      "type": "image/png"
+    }
+  ]
+}

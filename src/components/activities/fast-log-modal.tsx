@@ -29,6 +29,7 @@ import {
   VisitPurpose, 
   ActivityOutcome 
 } from '@/types/crm';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 interface FastLogModalProps {
   isOpen: boolean;
@@ -48,6 +49,7 @@ export function FastLogModal({
   defaultGoal
 }: FastLogModalProps) {
   const { projects, contacts, companies, addActivity, completePlannedActivity, currentUser } = useCRM();
+  const { t, isRTL } = useLanguage();
 
   // Form State
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -186,25 +188,25 @@ export function FastLogModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
       onKeyDown={handleKeyDown}
     >
-      <div className="glass-card bg-white/95 rounded-3xl max-w-xl w-full shadow-2xl border border-white/90 overflow-hidden flex flex-col max-h-[95vh] backdrop-blur-2xl animate-in zoom-in-95 duration-150">
+      <div className="glass-card rounded-3xl max-w-xl w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 overflow-hidden flex flex-col max-h-[95vh] backdrop-blur-2xl animate-in zoom-in-95 duration-150">
         
         {/* CRMate Frosted Modal Header */}
-        <div className="px-6 py-5 border-b border-slate-100/80 bg-white/80 flex items-center justify-between shrink-0">
+        <div className="px-6 py-5 border-b border-slate-100/80 dark:border-slate-800 bg-white/40 dark:bg-[#232A38]/70 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] flex items-center justify-center shadow-2xs">
+            <div className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shadow-2xs">
               <Phone className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-black text-[#292D32] text-lg font-urbanist leading-tight">Log Sales Activity</h2>
-              <p className="text-xs text-slate-500 font-medium">Fast entry &bull; Target under 20 seconds</p>
+              <h2 className="font-black text-[#292D32] dark:text-white text-lg font-urbanist leading-tight">Log Sales Activity</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Fast entry &bull; Target under 20 seconds</p>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="p-2 rounded-2xl text-slate-400 hover:text-[#292D32] hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-2xl text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -216,7 +218,7 @@ export function FastLogModal({
           {/* 1. Project & Contact Selector */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-[#292D32] mb-1.5">
+              <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">
                 Project *
               </label>
               <select
@@ -226,11 +228,11 @@ export function FastLogModal({
                   const p = projects.find(proj => proj.id === e.target.value);
                   if (p?.primary_contact_id) setSelectedContactId(p.primary_contact_id);
                 }}
-                className="w-full px-3.5 py-2.5 text-xs font-semibold border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] bg-white/90 text-slate-900 shadow-2xs"
+                className="w-full px-3.5 py-2.5 text-xs font-semibold border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] bg-white/90 dark:bg-[#141820] text-slate-900 dark:text-white shadow-2xs"
               >
-                <option value="">-- General / Hunting (No Project) --</option>
+                <option value="" className="dark:bg-[#141820] dark:text-white">-- General / Hunting (No Project) --</option>
                 {projects.map(p => (
-                  <option key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id} className="dark:bg-[#141820] dark:text-white">
                     {p.pr_number} - {p.name}
                   </option>
                 ))}
@@ -238,17 +240,17 @@ export function FastLogModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#292D32] mb-1.5">
+              <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">
                 Contact Person
               </label>
               <select
                 value={selectedContactId}
                 onChange={e => setSelectedContactId(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs font-semibold border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] bg-white/90 text-slate-900 shadow-2xs"
+                className="w-full px-3.5 py-2.5 text-xs font-semibold border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] bg-white/90 dark:bg-[#141820] text-slate-900 dark:text-white shadow-2xs"
               >
-                <option value="">-- No Contact / General --</option>
+                <option value="" className="dark:bg-[#141820] dark:text-white">-- No Contact / General --</option>
                 {projectContacts.map(c => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} className="dark:bg-[#141820] dark:text-white">
                     {c.full_name} ({c.job_title || 'Contact'})
                   </option>
                 ))}
@@ -258,7 +260,7 @@ export function FastLogModal({
 
           {/* 2. Interaction Channel (Large 1-click buttons) */}
           <div>
-            <label className="block text-xs font-bold text-[#292D32] mb-2">
+            <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-2">
               Channel
             </label>
             <div className="grid grid-cols-4 gap-2">
@@ -269,10 +271,10 @@ export function FastLogModal({
                     key={ch.value}
                     type="button"
                     onClick={() => setChannel(ch.value)}
-                    className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all shadow-2xs ${
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all shadow-2xs cursor-pointer ${
                       isSelected 
-                        ? 'bg-[#292D32] text-white border-[#292D32] shadow-xs' 
-                        : 'bg-white/80 text-slate-700 border-slate-200/80 hover:bg-slate-100 hover:border-slate-300'
+                        ? 'bg-[#292D32] dark:bg-[#8FC2F0] text-white dark:text-[#141820] border-[#292D32] dark:border-[#8FC2F0] shadow-xs' 
+                        : 'bg-white/80 dark:bg-[#141820] text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     {channelIcons[ch.value]}
@@ -285,7 +287,7 @@ export function FastLogModal({
 
           {/* 3. Outcome Chips (Fast 1-click presets) */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">
+            <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
               Outcome
             </label>
             <div className="flex flex-wrap gap-1.5">
@@ -296,10 +298,10 @@ export function FastLogModal({
                     key={out.value}
                     type="button"
                     onClick={() => setOutcome(out.value)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-[#292D32] text-white border-[#292D32] shadow-xs'
-                        : 'bg-white/90 text-slate-700 border-slate-200/80 hover:border-slate-300 hover:bg-slate-50'
+                        ? 'bg-[#292D32] dark:bg-[#8FC2F0] text-white dark:text-[#141820] border-[#292D32] dark:border-[#8FC2F0] shadow-xs'
+                        : 'bg-white/90 dark:bg-[#141820] text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                   >
                     {out.label}
@@ -312,7 +314,7 @@ export function FastLogModal({
           {/* 4. Notes (OPTIONAL - Arabic/English supported) */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-[#292D32]">
+              <label className="text-xs font-bold text-[#292D32] dark:text-slate-200">
                 Notes & Summary <span className="text-slate-400 font-normal lowercase">(optional)</span>
               </label>
               <span className="text-[10px] text-slate-400 font-medium">Arabic or English</span>
@@ -322,13 +324,13 @@ export function FastLogModal({
               placeholder="e.g. العميل أكد استلام التسعيرة وسيتم الرد يوم الأحد القادم..."
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 shadow-2xs font-medium"
+              className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white shadow-2xs font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
           </div>
 
           {/* 5. Next Action with Presets */}
           <div>
-            <label className="block text-xs font-bold text-[#292D32] mb-1.5">
+            <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">
               Next Action Required
             </label>
             <input
@@ -336,7 +338,7 @@ export function FastLogModal({
               placeholder="e.g. Follow up with procurement"
               value={nextAction}
               onChange={e => setNextAction(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs font-semibold bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 shadow-2xs"
+              className="w-full px-3.5 py-2.5 text-xs font-semibold bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white shadow-2xs placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
             {/* Action Presets */}
             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -345,7 +347,7 @@ export function FastLogModal({
                   key={idx}
                   type="button"
                   onClick={() => setNextAction(preset)}
-                  className="text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition-colors"
+                  className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-[#232A38] hover:bg-slate-200 dark:hover:bg-slate-700 px-2.5 py-1 rounded-lg transition-colors border border-transparent dark:border-slate-700/60 cursor-pointer"
                 >
                   + {preset}
                 </button>
@@ -355,67 +357,67 @@ export function FastLogModal({
 
           {/* 6. Next Follow-up Date with Fast Presets */}
           <div>
-            <label className="block text-xs font-bold text-[#292D32] mb-1.5">
-              Next Follow-up Date
+            <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">
+              {isRTL ? 'تاريخ المتابعة القادمة' : 'Next Follow-up Date'}
             </label>
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <button
                 type="button"
                 onClick={() => setQuickDate(1)}
-                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 bg-white/90 hover:bg-slate-100 font-bold text-slate-700 shadow-2xs"
+                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700 bg-white/90 dark:bg-[#141820] hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer"
               >
-                Tomorrow
+                {isRTL ? 'غداً' : 'Tomorrow'}
               </button>
               <button
                 type="button"
                 onClick={setNextSaturday}
-                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 bg-white/90 hover:bg-slate-100 font-bold text-slate-700 shadow-2xs"
+                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700 bg-white/90 dark:bg-[#141820] hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer"
               >
-                Next Saturday (السبت)
+                {isRTL ? 'السبت القادم' : 'Next Saturday'}
               </button>
               <button
                 type="button"
                 onClick={() => setQuickDate(3)}
-                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 bg-white/90 hover:bg-slate-100 font-bold text-slate-700 shadow-2xs"
+                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700 bg-white/90 dark:bg-[#141820] hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer"
               >
-                In 3 Days
+                {isRTL ? 'بعد 3 أيام' : 'In 3 Days'}
               </button>
               <button
                 type="button"
                 onClick={() => setQuickDate(7)}
-                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 bg-white/90 hover:bg-slate-100 font-bold text-slate-700 shadow-2xs"
+                className="text-xs px-3 py-1 rounded-xl border border-slate-200/80 dark:border-slate-700 bg-white/90 dark:bg-[#141820] hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-slate-700 dark:text-slate-300 shadow-2xs cursor-pointer"
               >
-                Next Week
+                {isRTL ? 'الأسبوع القادم' : 'Next Week'}
               </button>
             </div>
             <input
               type="date"
               value={nextDate}
               onChange={e => setNextDate(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-xs font-semibold bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 shadow-2xs"
+              className="w-full px-3.5 py-2.5 text-xs font-semibold bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white shadow-2xs"
             />
           </div>
 
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-slate-100 flex items-center justify-between shrink-0">
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
             <span className="text-[11px] text-slate-400 font-medium">
-              Press <kbd className="font-mono bg-slate-100 px-1.5 py-0.5 rounded-lg border border-slate-200 text-slate-600 font-bold">Ctrl+Enter</kbd> to save
+              Press <kbd className="font-mono bg-slate-100 dark:bg-[#232A38] px-1.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold">Ctrl+Enter</kbd> to save
             </span>
 
             <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-[#232A38] hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-5 py-2.5 text-xs font-bold text-white bg-[#292D32] hover:bg-[#1E2124] rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                className="px-5 py-2.5 text-xs font-bold text-white dark:text-[#141820] bg-[#292D32] hover:bg-[#1E2124] dark:bg-[#8FC2F0] dark:hover:bg-[#7ab2e3] rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
               >
-                <Check className="w-4 h-4 text-[#77CE69]" />
+                <Check className="w-4 h-4 text-[#77CE69] dark:text-[#141820]" />
                 <span>{isSubmitting ? 'Saving...' : 'Save Activity (15s)'}</span>
               </button>
             </div>

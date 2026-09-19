@@ -46,8 +46,10 @@ import {
   scopePlannedActivities, 
   scopeRequests 
 } from '@/lib/logic/scope';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 export default function MyDayPage() {
+  const { isRTL, t } = useLanguage();
   const { 
     currentUser, 
     plannedActivities, 
@@ -106,8 +108,11 @@ export default function MyDayPage() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
   const todayDisplay = useMemo(() => {
     const d = new Date();
+    if (isRTL) {
+      return d.toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    }
     return d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
-  }, []);
+  }, [isRTL]);
 
   // Today's planned tasks
   const todayTasks = useMemo(() => {
@@ -191,13 +196,15 @@ export default function MyDayPage() {
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-amber-400 text-xs font-bold tracking-wide uppercase">
             <Sun className="w-4 h-4 animate-spin-slow" />
-            <span>Daily Execution Dashboard &bull; {todayDisplay}</span>
+            <span>{isRTL ? `لوحة المهام اليومية والمتابعات • ${todayDisplay}` : `Daily Execution Dashboard • ${todayDisplay}`}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Good day, {currentUser.full_name.split(' ')[0]}
+            {isRTL ? `يومك سعيد، ${currentUser.full_name.split(' ')[0]}` : `Good day, ${currentUser.full_name.split(' ')[0]}`}
           </h1>
           <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-            Here is your sales action queue for today. Complete scheduled client commitments, resolve overdue pipeline blockers, and log actions in under 20 seconds.
+            {isRTL 
+              ? 'إليك قائمة الإجراءات والمهام المجدولة لليوم. تابع التزامات العملاء، وتجاوز العقبات المتأخرة، وسجل تفاعلاتك البيعية بسرعة.' 
+              : 'Here is your sales action queue for today. Complete scheduled client commitments, resolve overdue pipeline blockers, and log actions in under 20 seconds.'}
           </p>
         </div>
 
@@ -205,14 +212,14 @@ export default function MyDayPage() {
           {/* Manager Rep Selector */}
           {isManager && (
             <div className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-xl border border-white/20 text-xs backdrop-blur-md">
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Rep:</span>
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">{isRTL ? 'المندوب:' : 'Rep:'}</span>
               <select
                 value={selectedSalesFilter}
                 onChange={(e) => setSelectedSalesFilter(e.target.value)}
-                className="bg-slate-900/80 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-none"
+                className="bg-slate-900/80 border border-white/20 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-none cursor-pointer"
               >
-                <option value="all">All Sales Team ({teamMembers.length})</option>
-                {teamMembers.map(m => (
+                <option value="all">{isRTL ? `كافة فريق المبيعات (${teamMembers.filter(m => m.role === 'sales_engineer').length})` : `All Sales Team (${teamMembers.filter(m => m.role === 'sales_engineer').length})`}</option>
+                {teamMembers.filter(m => m.role === 'sales_engineer').map(m => (
                   <option key={m.id} value={m.id}>{m.full_name}</option>
                 ))}
               </select>
@@ -222,101 +229,121 @@ export default function MyDayPage() {
           {currentRole !== 'viewer' && (
             <button
               onClick={() => setIsQuickAddOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-1.5"
+              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold border border-white/20 transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Add Day Task</span>
+              <span>{isRTL ? '+ إضافة مهمة يومية' : '+ Add Day Task'}</span>
             </button>
           )}
 
           <button
             onClick={() => openFastLog()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Fast Log (&lt; 20s)</span>
+            <span>{isRTL ? 'تسجيل سريع (< 20ث)' : 'Fast Log (< 20s)'}</span>
           </button>
         </div>
       </div>
 
       {/* Daily KPI Metrics Bar */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
+        <div className="glass-card p-4 rounded-2xl flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-[#8FC2F0] flex items-center justify-center font-bold text-sm">
             <CalendarCheck2 className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-semibold text-slate-500 block leading-tight">Due Today</span>
-            <span className="text-xl font-black text-slate-900">{todayTasks.length} tasks</span>
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block leading-tight">
+              {isRTL ? 'تستحق اليوم' : 'Due Today'}
+            </span>
+            <span className="text-xl font-black text-slate-900 dark:text-white">
+              {todayTasks.length} {isRTL ? 'مهمة' : 'tasks'}
+            </span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm">
+        <div className="glass-card p-4 rounded-2xl flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold text-sm">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-semibold text-slate-500 block leading-tight">Overdue Attention</span>
-            <span className="text-xl font-black text-rose-600">{overdueProjects.length} projects</span>
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block leading-tight">
+              {isRTL ? 'مشاريع متأخرة' : 'Overdue Attention'}
+            </span>
+            <span className="text-xl font-black text-rose-600 dark:text-rose-400">
+              {overdueProjects.length} {isRTL ? 'مشروع' : 'projects'}
+            </span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+        <div className="glass-card p-4 rounded-2xl flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-semibold text-slate-500 block leading-tight">Completed Today</span>
-            <span className="text-xl font-black text-slate-900">{activitiesLoggedToday.length} logged</span>
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block leading-tight">
+              {isRTL ? 'أُنجزت اليوم' : 'Completed Today'}
+            </span>
+            <span className="text-xl font-black text-slate-900 dark:text-white">
+              {activitiesLoggedToday.length} {isRTL ? 'نشاط مسجل' : 'logged'}
+            </span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">
+        <div className="glass-card p-4 rounded-2xl flex items-center gap-3.5">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-sm">
             <Flame className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-semibold text-slate-500 block leading-tight">Hot Leads</span>
-            <span className="text-xl font-black text-slate-900">{hotLeads.length} active</span>
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block leading-tight">
+              {isRTL ? 'فرص مشتعلة' : 'Hot Leads'}
+            </span>
+            <span className="text-xl font-black text-slate-900 dark:text-white">
+              {hotLeads.length} {isRTL ? 'نشطة' : 'active'}
+            </span>
           </div>
         </div>
       </div>
 
       {/* Quick Add Modal */}
       {isQuickAddOpen && (
-        <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-md animate-in fade-in duration-150">
-          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Plus className="w-4 h-4 text-blue-600" />
-              <span>Schedule Impromptu Task for Today</span>
+        <div className="glass-card p-5 rounded-2xl border border-blue-200 dark:border-[#8FC2F0]/25 shadow-xl animate-in fade-in duration-150">
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Plus className="w-4 h-4 text-blue-600 dark:text-[#8FC2F0]" />
+              <span>{isRTL ? 'جدولة مهمة سريعة لليوم' : 'Schedule Impromptu Task for Today'}</span>
             </h3>
             <button 
               onClick={() => setIsQuickAddOpen(false)}
-              className="text-xs text-slate-400 hover:text-slate-600 font-semibold"
+              className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-semibold cursor-pointer"
             >
-              Cancel
+              {isRTL ? 'إلغاء' : 'Cancel'}
             </button>
           </div>
 
           <form onSubmit={handleCreateQuickTask} className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">Target Action / Goal</label>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                {isRTL ? 'الهدف / الإجراء المستهدف' : 'Target Action / Goal'}
+              </label>
               <input
                 type="text"
                 required
                 value={newGoal}
                 onChange={(e) => setNewGoal(e.target.value)}
-                placeholder="e.g. Call procurement manager for revision update"
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={isRTL ? 'مثال: الاتصال بمدير المشتريات لمتابعة اعتماد العرض' : 'e.g. Call procurement manager for revision update'}
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">Project</label>
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                {isRTL ? 'المشروع' : 'Project'}
+              </label>
               <select
                 value={newProjectId}
                 onChange={(e) => setNewProjectId(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -326,25 +353,27 @@ export default function MyDayPage() {
 
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">Channel</label>
+                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                  {isRTL ? 'القناة' : 'Channel'}
+                </label>
                 <select
                   value={newChannel}
                   onChange={(e) => setNewChannel(e.target.value as ActivityChannel)}
-                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="call">Call</option>
-                  <option value="meeting_f2f">F2F Meeting</option>
-                  <option value="visit">Site Visit</option>
-                  <option value="hunting">Hunting</option>
-                  <option value="email">Email</option>
+                  <option value="call">{isRTL ? 'اتصال هاتفي' : 'Call'}</option>
+                  <option value="meeting_f2f">{isRTL ? 'اجتماع حضوري' : 'F2F Meeting'}</option>
+                  <option value="visit">{isRTL ? 'زيارة ميدانية' : 'Site Visit'}</option>
+                  <option value="hunting">{isRTL ? 'استكشاف ميداني' : 'Hunting'}</option>
+                  <option value="email">{isRTL ? 'بريد إلكتروني' : 'Email'}</option>
                 </select>
               </div>
 
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shrink-0"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shrink-0 cursor-pointer"
               >
-                Add Task
+                {isRTL ? 'إضافة' : 'Add Task'}
               </button>
             </div>
           </form>
@@ -352,55 +381,59 @@ export default function MyDayPage() {
       )}
 
       {/* Main Tabs Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-200">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800">
         <button
           onClick={() => setActiveTab('schedule')}
-          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
             activeTab === 'schedule'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-blue-600 dark:border-[#8FC2F0] text-blue-600 dark:text-[#8FC2F0]'
+              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
           }`}
         >
           <CalendarCheck2 className="w-4 h-4" />
-          <span>Today&apos;s Schedule ({todayTasks.length})</span>
+          <span>{isRTL ? `جدول اليوم (${todayTasks.length})` : `Today's Schedule (${todayTasks.length})`}</span>
         </button>
 
         <button
           onClick={() => setActiveTab('overdue')}
-          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
             activeTab === 'overdue'
-              ? 'border-rose-600 text-rose-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-rose-600 dark:border-rose-500 text-rose-600 dark:text-rose-400'
+              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
           }`}
         >
           <AlertTriangle className="w-4 h-4" />
-          <span>Overdue Follow-ups ({overdueProjects.length})</span>
+          <span>{isRTL ? `متابعات متأخرة (${overdueProjects.length})` : `Overdue Follow-ups (${overdueProjects.length})`}</span>
         </button>
 
         <button
           onClick={() => setActiveTab('hotleads')}
-          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
             activeTab === 'hotleads'
-              ? 'border-amber-600 text-amber-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-amber-600 dark:border-amber-500 text-amber-600 dark:text-amber-400'
+              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
           }`}
         >
           <Flame className="w-4 h-4" />
-          <span>Hot Leads Directory ({hotLeads.length})</span>
+          <span>{isRTL ? `دليل الفرص النشطة (${hotLeads.length})` : `Hot Leads Directory (${hotLeads.length})`}</span>
         </button>
 
         <button
           onClick={() => setActiveTab('approvals')}
-          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 ${
+          className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${
             activeTab === 'approvals'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-indigo-600 dark:border-indigo-400 text-indigo-600 dark:text-indigo-400'
+              : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
           }`}
         >
           <ShieldCheck className="w-4 h-4" />
-          <span>{isManager ? `Pending Approvals (${pendingApprovals.length})` : `My Requests (${myRequests.length})`}</span>
+          <span>
+            {isManager 
+              ? (isRTL ? `طلبات الاعتماد (${pendingApprovals.length})` : `Pending Approvals (${pendingApprovals.length})`)
+              : (isRTL ? `طلباتي (${myRequests.length})` : `My Requests (${myRequests.length})`)}
+          </span>
           {activeRequestsCount > 0 && (
-            <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-1.5 py-0.5 rounded-full">
+            <span className="bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[10px] font-black px-1.5 py-0.5 rounded-full">
               {activeRequestsCount}
             </span>
           )}
@@ -411,18 +444,22 @@ export default function MyDayPage() {
       {activeTab === 'schedule' && (
         <div className="space-y-3">
           {todayTasks.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+            <div className="glass-card rounded-3xl p-12 text-center">
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <h3 className="text-base font-bold text-slate-900">All Scheduled Tasks Clear!</h3>
-              <p className="text-xs text-slate-500 mt-1 mb-5 max-w-sm mx-auto">
-                You have completed all planned tasks for today. You can check the overdue queue or schedule new sales touchpoints.
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                {isRTL ? 'تم إنجاز كافة المهام المجدولة لليوم!' : 'All Scheduled Tasks Clear!'}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-5 max-w-sm mx-auto">
+                {isRTL 
+                  ? 'لقد أنهيت جميع التزاماتك اليومية. يمكنك مراجعة الصفقات المتأخرة أو جدولة زيارات واتصالات جديدة.'
+                  : 'You have completed all planned tasks for today. You can check the overdue queue or schedule new sales touchpoints.'}
               </p>
               <button
                 onClick={() => setIsQuickAddOpen(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ Schedule New Action</span>
+                <span>{isRTL ? '+ جدولة إجراء جديد' : '+ Schedule New Action'}</span>
               </button>
             </div>
           ) : (
@@ -438,7 +475,7 @@ export default function MyDayPage() {
                 <div 
                   key={task.id}
                   className={`glass-card-interactive rounded-3xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                    isDone ? 'opacity-60 bg-emerald-50/50' : ''
+                    isDone ? 'opacity-60 bg-emerald-50/50 dark:bg-emerald-950/20' : ''
                   }`}
                 >
                   <div className="flex items-start gap-3.5 flex-1 min-w-0">
@@ -449,11 +486,11 @@ export default function MyDayPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         {task.project_id && project ? (
-                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-[#8FC2F0] border border-blue-200 dark:border-blue-800">
                             {project.pr_number}
                           </span>
                         ) : task.custom_target ? (
-                          <span className="text-[10px] font-extrabold uppercase tracking-wide px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wide px-1.5 py-0.2 rounded bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                             Custom Target
                           </span>
                         ) : null}
@@ -462,13 +499,13 @@ export default function MyDayPage() {
                           {ch.label}
                         </span>
                         {task.priority === 'urgent' && (
-                          <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                          <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 px-1.5 py-0.2 rounded flex items-center gap-0.5">
                             <Flame className="w-2.5 h-2.5" />
                             Urgent
                           </span>
                         )}
                         {task.is_auto_suggested && (
-                          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">
+                          <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.2 rounded">
                             Suggested &bull; {task.suggestion_reason}
                           </span>
                         )}
@@ -479,30 +516,30 @@ export default function MyDayPage() {
                         {task.project_id && project ? (
                           <Link 
                             href={`/projects/${project.id}`}
-                            className="text-base font-black text-slate-900 hover:text-blue-600 transition-colors inline-block"
+                            className="text-base font-black text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-[#8FC2F0] transition-colors inline-block"
                           >
                             {task.project_name || project.name}
                           </Link>
                         ) : (task.project_name || task.custom_target) ? (
-                          <h4 className="text-base font-black text-slate-900">
+                          <h4 className="text-base font-black text-slate-900 dark:text-white">
                             {task.project_name || task.custom_target}
                           </h4>
                         ) : null}
                       </div>
 
-                      <p className="text-sm font-semibold text-slate-700 mt-0.5 leading-snug">
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-0.5 leading-snug">
                         {task.goal}
                       </p>
 
-                      <div className="flex items-center gap-3 text-xs text-slate-500 font-medium mt-1 flex-wrap">
+                      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 flex-wrap">
                         {task.company_name && (
-                          <span className="text-slate-600 font-medium flex items-center gap-1">
+                          <span className="text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1">
                             <Building2 className="w-3.5 h-3.5 text-slate-400" />
                             {task.company_name}
                           </span>
                         )}
                         {(task.contact_name || contact?.full_name) && (
-                          <span className="text-slate-600 font-medium">
+                          <span className="text-slate-600 dark:text-slate-400 font-medium">
                             Contact: {task.contact_name || contact?.full_name}
                           </span>
                         )}
@@ -511,7 +548,7 @@ export default function MyDayPage() {
                             href={task.google_maps_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold flex items-center gap-1 hover:bg-emerald-100 text-[11px]"
+                            className="text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 font-bold flex items-center gap-1 hover:bg-emerald-100 text-[11px]"
                           >
                             <Navigation className="w-2.5 h-2.5 text-emerald-600" />
                             <span>Maps ↗</span>
@@ -528,7 +565,7 @@ export default function MyDayPage() {
                         href={waLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                        className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
                         title="Chat on WhatsApp"
                       >
                         <MessageCircle className="w-4 h-4" />
@@ -537,7 +574,7 @@ export default function MyDayPage() {
                     {cleanPhone && (
                       <a
                         href={`tel:${cleanPhone}`}
-                        className="p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                         title="Call Contact"
                       >
                         <Phone className="w-4 h-4" />
@@ -574,10 +611,10 @@ export default function MyDayPage() {
       {activeTab === 'overdue' && (
         <div className="space-y-3">
           {overdueProjects.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+            <div className="glass-card rounded-3xl p-12 text-center">
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <h3 className="text-base font-bold text-slate-900">Zero Overdue Follow-ups!</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">Zero Overdue Follow-ups!</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                 Outstanding! All projects have up-to-date touchpoints and healthy follow-up timelines.
               </p>
             </div>
@@ -590,32 +627,32 @@ export default function MyDayPage() {
 
               return (
                 <div 
-                  key={proj.id}
-                  className="bg-white rounded-xl border border-rose-200 p-4 shadow-2xs hover:shadow-md transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  key={proj.id} 
+                  className="glass-card-interactive rounded-2xl border border-rose-200/80 dark:border-rose-900/40 p-4 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 px-2 py-0.5 rounded-full flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
                         {diffDays} days overdue
                       </span>
-                      <span className="text-[10px] font-mono font-semibold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                      <span className="text-[10px] font-mono font-semibold text-slate-400 dark:text-slate-400 bg-slate-50 dark:bg-[#232A38] px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-700">
                         {proj.pr_number}
                       </span>
-                      <span className="text-xs font-black text-slate-900">
+                      <span className="text-xs font-black text-slate-900 dark:text-white">
                         {formatCurrencySAR(proj.estimated_value)}
                       </span>
                     </div>
 
                     <Link 
                       href={`/projects/${proj.id}`}
-                      className="text-sm font-bold text-slate-900 hover:text-blue-600 transition-colors line-clamp-1"
+                      className="text-sm font-bold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-[#8FC2F0] transition-colors line-clamp-1"
                     >
                       {proj.name}
                     </Link>
 
-                    <div className="text-xs text-slate-600 mt-1 bg-rose-50/50 p-2 rounded-lg border border-rose-100/60 font-medium">
-                      <span className="font-bold text-rose-800 uppercase text-[10px] block">Pending Commitment:</span>
+                    <div className="text-xs text-slate-600 dark:text-slate-300 mt-1 bg-rose-50/50 dark:bg-rose-950/20 p-2 rounded-xl border border-rose-100/60 dark:border-rose-900/40 font-medium">
+                      <span className="font-bold text-rose-800 dark:text-rose-400 uppercase text-[10px] block">Pending Commitment:</span>
                       {proj.next_action || 'Follow-up date expired without recorded next action.'}
                     </div>
                   </div>
@@ -627,7 +664,7 @@ export default function MyDayPage() {
                         href={waLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                        className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
                         title="Chat on WhatsApp"
                       >
                         <MessageCircle className="w-4 h-4" />
@@ -636,7 +673,7 @@ export default function MyDayPage() {
                     {cleanPhone && (
                       <a
                         href={`tel:${cleanPhone}`}
-                        className="p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                         title="Call Contact"
                       >
                         <Phone className="w-4 h-4" />
@@ -671,22 +708,22 @@ export default function MyDayPage() {
             return (
               <div 
                 key={contact.id}
-                className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs hover:border-amber-400 transition-all flex items-start justify-between gap-4"
+                className="glass-card-interactive rounded-2xl p-4 transition-all flex items-start justify-between gap-4"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full flex items-center gap-1">
                       <Flame className="w-3 h-3 text-amber-500 fill-amber-500" />
                       Hot Lead
                     </span>
                     <span className="text-xs text-slate-400 font-medium">{contact.city || 'Western Region'}</span>
                   </div>
 
-                  <h4 className="text-sm font-bold text-slate-900 mt-1">{contact.full_name}</h4>
-                  <div className="text-xs text-slate-500 font-medium">{contact.job_title} &bull; {contact.company_name}</div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white mt-1">{contact.full_name}</h4>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">{contact.job_title} &bull; {contact.company_name}</div>
 
                   {contact.phone && (
-                    <div className="text-xs font-mono text-slate-600 mt-2">
+                    <div className="text-xs font-mono text-slate-600 dark:text-slate-300 mt-2">
                       {contact.phone}
                     </div>
                   )}
@@ -699,7 +736,7 @@ export default function MyDayPage() {
                         href={waLink}
                         target="_blank"
                         rel="noreferrer"
-                        className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                        className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
                         title="Chat on WhatsApp"
                       >
                         <MessageCircle className="w-4 h-4" />
@@ -708,7 +745,7 @@ export default function MyDayPage() {
                     {cleanPhone && (
                       <a
                         href={`tel:${cleanPhone}`}
-                        className="p-2 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                        className="p-2 rounded-lg bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                         title="Call Contact"
                       >
                         <Phone className="w-4 h-4" />
@@ -719,7 +756,7 @@ export default function MyDayPage() {
                   {currentRole !== 'viewer' && (
                     <button
                       onClick={() => openFastLog({ project: project || null, contactId: contact.id })}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors flex items-center gap-1"
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-blue-600 dark:text-[#8FC2F0] bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1"
                     >
                       <Plus className="w-3 h-3" />
                       <span>Log Call</span>
@@ -736,12 +773,12 @@ export default function MyDayPage() {
       {activeTab === 'approvals' && (
         <div className="space-y-4">
           {displayRequests.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+            <div className="glass-card rounded-3xl p-12 text-center">
               <ShieldCheck className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 {isManager ? 'No Pending Approvals' : 'No Open Requests'}
               </h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
                 {isManager
                   ? 'All quotation discount and technical approval requests have been resolved. You are completely caught up!'
                   : 'You do not have any open approval requests at this moment. You can submit requests directly from any project card.'}
@@ -756,14 +793,14 @@ export default function MyDayPage() {
               return (
                 <div 
                   key={req.id}
-                  className={`bg-white rounded-2xl p-5 border transition-all shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                  className={`glass-card-interactive rounded-2xl p-5 border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                     req.status === 'pending'
                       ? isUrgent
-                        ? 'border-rose-300 bg-rose-50/20'
+                        ? 'border-rose-300 dark:border-rose-800 bg-rose-50/20 dark:bg-rose-950/25'
                         : isHigh
-                          ? 'border-amber-300 bg-amber-50/20'
-                          : 'border-slate-200 hover:border-indigo-300'
-                      : 'border-slate-200 opacity-80'
+                          ? 'border-amber-300 dark:border-amber-800 bg-amber-50/20 dark:bg-amber-950/25'
+                          : 'border-slate-200 dark:border-[#8FC2F0]/20 hover:border-indigo-300 dark:hover:border-indigo-500'
+                      : 'border-slate-200/80 dark:border-[#8FC2F0]/15 opacity-80'
                   }`}
                 >
                   <div className="flex items-start gap-3.5 flex-1 min-w-0">
@@ -784,43 +821,43 @@ export default function MyDayPage() {
                         {project && (
                           <Link 
                             href={`/projects/${project.id}`}
-                            className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:underline border border-blue-200"
+                            className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-[#8FC2F0] hover:underline border border-blue-200 dark:border-blue-800"
                           >
                             {project.pr_number}
                           </Link>
                         )}
-                        <span className="text-sm font-extrabold text-slate-900">
+                        <span className="text-sm font-extrabold text-slate-900 dark:text-white">
                           {project?.name || req.project_id}
                         </span>
 
                         {/* Badges */}
                         <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          isUrgent ? 'bg-rose-100 text-rose-800' : isHigh ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
+                          isUrgent ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300' : isHigh ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300' : 'bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300'
                         }`}>
                           {req.urgency}
                         </span>
 
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                          req.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
-                          'bg-amber-100 text-amber-800'
+                          req.status === 'approved' ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300' :
+                          req.status === 'rejected' ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300' :
+                          'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
                         }`}>
                           {req.status.toUpperCase()}
                         </span>
                       </div>
 
                       {/* Request details summary */}
-                      <div className="text-xs text-slate-600 font-medium mt-1.5 flex items-center gap-2 flex-wrap">
+                      <div className="text-xs text-slate-600 dark:text-slate-400 font-medium mt-1.5 flex items-center gap-2 flex-wrap">
                         <span>
-                          Type: <strong className="text-slate-800">{req.type === 'discount' && req.payload.discount_pct ? `Discount ${req.payload.discount_pct}%` : req.type.replace('_', ' ')}</strong>
+                          Type: <strong className="text-slate-800 dark:text-slate-200">{req.type === 'discount' && req.payload.discount_pct ? `Discount ${req.payload.discount_pct}%` : req.type.replace('_', ' ')}</strong>
                         </span>
                         {req.quotation_amount && (
                           <span>
-                            &bull; Value: <strong className="text-slate-800">{formatCurrencySAR(req.quotation_amount)}</strong>
+                            &bull; Value: <strong className="text-slate-800 dark:text-slate-200">{formatCurrencySAR(req.quotation_amount)}</strong>
                           </span>
                         )}
                         <span>
-                          &bull; Requested by <strong className="text-slate-800">{req.requester_name || req.requested_by}</strong>
+                          &bull; Requested by <strong className="text-slate-800 dark:text-slate-200">{req.requester_name || req.requested_by}</strong>
                         </span>
                         <span>
                           &bull; {formatDateString(req.created_at)}
@@ -829,7 +866,7 @@ export default function MyDayPage() {
 
                       {/* Reason snippet */}
                       {(req.payload.reason || req.payload.notes) && (
-                        <p className="text-xs text-slate-700 mt-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100 italic">
+                        <p className="text-xs text-slate-700 dark:text-slate-300 mt-2 bg-slate-50 dark:bg-[#141820] p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 italic">
                           &ldquo;{req.payload.reason || req.payload.notes}&rdquo;
                         </p>
                       )}

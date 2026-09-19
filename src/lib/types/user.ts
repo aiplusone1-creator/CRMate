@@ -18,6 +18,7 @@ export interface User {
   title?: string;
   territory?: string;
   phone?: string;
+  avatar_url?: string;
 }
 
 export interface AuthSession {
@@ -30,7 +31,8 @@ export interface AuthSession {
 export type AuthErrorCode = 
   | 'INVALID_EMAIL' 
   | 'INVALID_PASSWORD' 
-  | 'INACTIVE_USER';
+  | 'INACTIVE_USER'
+  | 'USER_NOT_FOUND';
 
 export class AuthError extends Error {
   code: AuthErrorCode;

@@ -140,24 +140,24 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-150">
-      <div className="glass-card bg-white/95 rounded-3xl max-w-2xl w-full max-h-[92vh] shadow-2xl border border-white/90 flex flex-col overflow-hidden backdrop-blur-2xl animate-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-150">
+      <div className="glass-card rounded-3xl max-w-2xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
         
         {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-slate-100/80 flex items-center justify-between bg-white/80 shrink-0">
+        <div className="px-6 py-5 border-b border-slate-100/80 dark:border-slate-800/80 flex items-center justify-between bg-white/80 dark:bg-[#141820]/80 shrink-0">
           <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] flex items-center justify-center shadow-2xs">
+            <span className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shadow-2xs">
               <Briefcase className="w-5 h-5" />
             </span>
             <div>
-              <h2 className="font-black text-[#292D32] text-lg font-urbanist">Edit Project Details</h2>
-              <p className="text-xs text-slate-500 font-medium">Ref: {project.pr_number} &bull; {project.name}</p>
+              <h2 className="font-black text-[#292D32] dark:text-white text-lg font-urbanist">Edit Project Details</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Ref: {project.pr_number} &bull; {project.name}</p>
             </div>
           </div>
 
           <button 
             onClick={onClose}
-            className="p-2 rounded-2xl text-slate-400 hover:text-[#292D32] hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-2xl text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -169,7 +169,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
           {/* Row 1: PR Number & Project Name */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Project Code / #PR *
               </label>
               <input
@@ -178,12 +178,12 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
                 value={prNumber}
                 onChange={e => setPrNumber(e.target.value)}
                 placeholder="e.g. PR1004"
-                className="w-full px-3 py-2 text-sm font-mono font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                className="w-full px-3 py-2 text-sm font-mono font-bold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
               />
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Project Title & Name *
               </label>
               <input
@@ -192,7 +192,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="e.g. Rosemond Hotel MEP Package"
-                className="w-full px-3 py-2 text-sm font-semibold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm font-semibold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
               />
             </div>
           </div>
@@ -200,14 +200,14 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
           {/* Row 2: Company & Contact */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Company / Contractor / Client *
               </label>
               <select
                 required
                 value={companyId}
                 onChange={e => handleCompanyChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
               >
                 {companies.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -216,13 +216,13 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Primary Contact Person
               </label>
               <select
                 value={primaryContactId}
                 onChange={e => setPrimaryContactId(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- Select Contact --</option>
                 {contacts
@@ -239,11 +239,11 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
           {/* Row 3: Location, Opportunity Type & Priority */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Location (City)</label>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Location (City)</label>
               <select
                 value={location}
                 onChange={e => setLocation(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {SAUDI_LOCATIONS.map(loc => (
                   <option key={loc} value={loc}>{loc}</option>
@@ -252,11 +252,11 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Opportunity Type</label>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Opportunity Type</label>
               <select
                 value={opportunityType}
                 onChange={e => setOpportunityType(e.target.value as OpportunityType)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {OPPORTUNITY_TYPES.map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -265,11 +265,11 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Project Priority</label>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Project Priority</label>
               <select
                 value={priority}
                 onChange={e => setPriority(e.target.value as ProjectPriority)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
               >
                 {PROJECT_PRIORITIES.map(p => (
                   <option key={p.value} value={p.value}>{p.label}</option>
@@ -279,20 +279,20 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
           </div>
 
           {/* Row 4: Pipeline Stage & Commercial Value Rule */}
-          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-[#141820]/60 space-y-3">
             <div className="flex items-center justify-between gap-2">
-              <label className="block text-xs font-bold text-slate-900">
+              <label className="block text-xs font-bold text-slate-900 dark:text-white">
                 Pipeline Stage (المرحلة البيعية)
               </label>
 
               {isValueEditable ? (
-                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 inline-flex items-center gap-1">
-                  <Unlock className="w-3 h-3 text-emerald-600" />
+                <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+                  <Unlock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                   <span>Quotation Sent Stage &bull; Value Unlocked</span>
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 inline-flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-amber-600" />
+                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800 inline-flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                   <span>Pre-Quotation &bull; Value Locked</span>
                 </span>
               )}
@@ -301,7 +301,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
             <select
               value={pipelineStage}
               onChange={e => setPipelineStage(e.target.value as PipelineStage)}
-              className="w-full px-3 py-2 text-sm font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full px-3 py-2 text-sm font-bold border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-800 dark:text-white"
             >
               {PIPELINE_STAGES.map(s => (
                 <option key={s.value} value={s.value}>
@@ -311,19 +311,19 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
             </select>
 
             {/* Estimated Value Box with Conditional Unlocking */}
-            <div className="pt-2 border-t border-slate-200/80">
+            <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-slate-800 flex items-center gap-1">
-                      <DollarSign className="w-3.5 h-3.5 text-blue-600" />
+                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                      <DollarSign className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
                       <span>Estimated Value (SAR)</span>
                     </label>
                     {isValueEditable && latestQuotation && (
                       <button
                         type="button"
                         onClick={() => setEstimatedValue(latestQuotation.amount)}
-                        className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline"
+                        className="text-[10px] font-bold text-blue-600 dark:text-[#8FC2F0] hover:underline"
                         title="Fill with latest quote"
                       >
                         Sync Quote ({formatCurrencySAR(latestQuotation.amount)})
@@ -341,8 +341,8 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
                       onChange={e => setEstimatedValue(Number(e.target.value))}
                       className={`w-full px-3 py-2 text-sm font-bold border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                         isValueEditable
-                          ? 'bg-white border-blue-300 text-slate-900'
-                          : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                          ? 'bg-white dark:bg-[#141820] border-blue-300 dark:border-blue-700 text-slate-900 dark:text-white'
+                          : 'bg-slate-100 dark:bg-[#10141a] border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
                       }`}
                       placeholder={isValueEditable ? "e.g. 250000" : "Unlocked in Quotation Sent stage"}
                     />
@@ -353,14 +353,14 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
 
                   {/* Value Rule Explanation */}
                   {!isValueEditable ? (
-                    <p className="text-[11px] text-amber-700 mt-1.5 flex items-start gap-1">
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1.5 flex items-start gap-1">
                       <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                       <span>
                         قبل مرحلة <strong>Quotation Sent</strong> لا يوجد عرض سعر رسمي معتمد، لذا يتم تفعيل خانة السعر بمجرد وصول المشروع لمرحلة <strong>Quotation Sent</strong> وما بعدها.
                       </span>
                     </p>
                   ) : (
-                    <p className="text-[11px] text-emerald-700 mt-1.5 flex items-center gap-1">
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1.5 flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                       <span>تم تفعيل خانة السعر (المشروع في مرحلة تقديم العرض التجاري وما بعدها).</span>
                     </p>
@@ -368,7 +368,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                  <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">
                     Win Probability (%)
                   </label>
                   <div className="flex items-center gap-2">
@@ -378,10 +378,10 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
                       max="100"
                       value={probability}
                       onChange={e => setProbability(Number(e.target.value))}
-                      className="w-24 px-3 py-2 text-sm font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 bg-white"
+                      className="w-24 px-3 py-2 text-sm font-bold border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white bg-white dark:bg-[#141820]"
                     />
-                    <div className="flex-1 text-xs text-slate-500 font-medium">
-                      Weighted: <strong className="text-blue-600">{formatCurrencySAR((Number(estimatedValue) * Number(probability)) / 100)}</strong>
+                    <div className="flex-1 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      Weighted: <strong className="text-blue-600 dark:text-[#8FC2F0]">{formatCurrencySAR((Number(estimatedValue) * Number(probability)) / 100)}</strong>
                     </div>
                   </div>
                 </div>
@@ -392,7 +392,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
           {/* Row 5: Next Action & Follow-up */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Next Strategic Action (الإجراء القادم)
               </label>
               <input
@@ -400,26 +400,26 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
                 value={nextAction}
                 onChange={e => setNextAction(e.target.value)}
                 placeholder="e.g. Follow up with Procurement on commercial revision"
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Next Follow-Up Date (تاريخ المتابعة)
               </label>
               <input
                 type="date"
                 value={nextFollowUpAt}
                 onChange={e => setNextFollowUpAt(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
 
           {/* Row 6: Co-Sales Engineer */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
               Co-Sales Engineer (مهندس المبيعات المساعد)
             </label>
             <input
@@ -427,13 +427,13 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
               value={coEngineer}
               onChange={e => setCoEngineer(e.target.value)}
               placeholder="e.g. Ahmed Mahmoud"
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
           </div>
 
           {/* Row 7: Internal Notes */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
               Internal Notes & Specifications (ملاحظات ومواصفات المشروع)
             </label>
             <textarea
@@ -441,23 +441,23 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
               value={internalNotes}
               onChange={e => setInternalNotes(e.target.value)}
               placeholder="Specifications, client requirements, vendor brands involved..."
-              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
           </div>
 
           {/* Modal Actions */}
-          <div className="pt-4 border-t border-slate-100 flex justify-end gap-2.5">
+          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+              className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-[#1C2130] hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2.5 text-xs font-bold text-white bg-[#292D32] hover:bg-[#1E2124] rounded-xl shadow-xs transition-colors disabled:opacity-50"
+              className="px-5 py-2.5 text-xs font-bold text-white dark:text-[#141820] bg-[#292D32] hover:bg-[#1E2124] dark:bg-[#8FC2F0] dark:hover:bg-[#7ab2e3] rounded-xl shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? 'Saving...' : 'Save Project Changes'}
             </button>

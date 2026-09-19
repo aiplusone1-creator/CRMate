@@ -34,20 +34,17 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
+import { useLanguage } from '@/lib/i18n/language-context';
 import { 
   formatCurrencySAR, 
   formatDateString, 
   normalizePhoneNumber,
+  formatDisplayPhone,
   cn
 } from '@/lib/utils';
-import { 
-  PlannedActivity, 
-  Project, 
-  ActivityChannel, 
-  VisitPurpose, 
-  ProjectPriority 
-} from '@/types/crm';
-import { ACTIVITY_CHANNELS, VISIT_PURPOSES, SAUDI_LOCATIONS } from '@/lib/constants';
+import { SAUDI_LOCATIONS, ACTIVITY_CHANNELS, VISIT_PURPOSES } from '@/lib/constants';
+import { Project, PlannedActivity, ActivityChannel, VisitPurpose, ProjectPriority } from '@/types/crm';
+import { scopeProjects, scopePlannedActivities } from '@/lib/logic/scope';
 
 interface DayConfig {
   name: string;
@@ -60,13 +57,13 @@ interface DayConfig {
 type PlanTargetMode = 'existing_project' | 'custom_project' | 'area_hunting';
 
 const QUICK_AREAS = [
-  'Jeddah Industrial Area 2 (صناعية جدة الثانية)',
-  'Yanbu Industrial City (ينبع الصناعية)',
-  'King Abdullah Economic City (مدينة الملك عبدالله الاقتصادية)',
-  'Makkah Expansion Area (منطقة مكة والتوسعات)',
-  'Madinah Road Consultants (مكاتب الاستشاريين طريق المدينة)',
-  'Al-Kharj Industrial Zone (صناعية الخرج)',
-  'Jeddah Seafront & Obhur (أبحر والكورنيش الشمالي)'
+  { en: 'Jeddah Industrial Area 2', ar: 'صناعية جدة الثانية' },
+  { en: 'Yanbu Industrial City', ar: 'ينبع الصناعية' },
+  { en: 'King Abdullah Economic City', ar: 'مدينة الملك عبدالله الاقتصادية' },
+  { en: 'Makkah Expansion Area', ar: 'منطقة مكة والتوسعات' },
+  { en: 'Madinah Road Consultants', ar: 'مكاتب الاستشاريين طريق المدينة' },
+  { en: 'Al-Kharj Industrial Zone', ar: 'صناعية الخرج' },
+  { en: 'Jeddah Seafront & Obhur', ar: 'أبحر والكورنيش الشمالي' }
 ];
 
 const TIME_SLOTS = [
@@ -95,6 +92,7 @@ export default function MyWeekPage() {
     setSelectedSalesFilter,
     teamMembers
   } = useCRM();
+  const { t, isRTL, language } = useLanguage();
 
   const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin' || currentRole === 'sales_manager' || currentRole === 'admin';
 
@@ -301,48 +299,50 @@ export default function MyWeekPage() {
   const selectedExistingProject = scopedProjects.find(p => p.id === newProjectId);
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-200 text-slate-800">
+    <div className="space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-200 text-[#292D32] dark:text-white font-urbanist">
       
       {/* ========================================================================= */}
       {/* HEADER BAR: SAUDI WORKWEEK NAVIGATION & STATUS */}
       {/* ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs">
+      <div className="crm-card p-6 sm:p-7 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-              <CalendarDays className="w-3 h-3" />
-              <span>Saudi Workweek &bull; Sat &ndash; Thu (6 Days) &bull; من السبت للخميس</span>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>{t('saudiWorkweek')}</span>
             </span>
 
             {isPlanSubmitted ? (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                <Check className="w-3 h-3" />
-                <span>Active Sales Plan</span>
+              <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-[#77CE69]/15 text-[#77CE69] border border-[#77CE69]/30 flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" />
+                <span>{isRTL ? 'خطة مبيعات نشطة' : 'Active Sales Plan'}</span>
               </span>
             ) : (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                Draft Plan
+              <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-amber-500/15 text-amber-600 border border-amber-500/30">
+                {isRTL ? 'مسودة خطة' : 'Draft Plan'}
               </span>
             )}
           </div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            My Week Plan &bull; {workDays[0]?.short} {workDays[0]?.dayNum} &ndash; {workDays[workDays.length - 1]?.short} {workDays[workDays.length - 1]?.dayNum} Sep 2026
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight">
+            {isRTL ? 'خطة الأسبوع الميدانية' : 'My Week Plan'} &bull; {workDays[0]?.short} {workDays[0]?.dayNum} &ndash; {workDays[workDays.length - 1]?.short} {workDays[workDays.length - 1]?.dayNum}
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            6-day structured field planner (Saturday &ndash; Thursday) with Google Maps GPS routing, direct logging, and flexible client targets
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">
+            {isRTL 
+              ? 'مخطط الأسبوع الميداني لـ 6 أيام (السبت - الخميس) بربط الخرائط والتسجيل المباشر وتحديد مستهدفات العملاء'
+              : '6-day structured field planner (Saturday – Thursday) with Google Maps GPS routing, direct logging, and flexible client targets'}
           </p>
         </div>
 
         {/* Progress against 20 Touchpoints Target */}
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="text-xs font-semibold text-slate-400">Week Velocity</div>
-            <div className="text-xl font-black text-slate-900">
-              {completedPlannedWeek} <span className="text-sm text-slate-400 font-bold">/ {totalPlannedWeek} Planned</span>
+            <div className="text-xs font-bold text-slate-400">{isRTL ? 'سرعة الإنجاز' : 'Week Velocity'}</div>
+            <div className="text-xl sm:text-2xl font-extrabold text-[#292D32] dark:text-white">
+              {completedPlannedWeek} <span className="text-sm text-slate-400 font-bold">/ {totalPlannedWeek} {isRTL ? 'مخطط' : 'Planned'}</span>
             </div>
-            <div className="w-36 bg-slate-100 rounded-full h-2 mt-1.5 overflow-hidden">
+            <div className="w-36 bg-slate-100 dark:bg-slate-800 rounded-full h-2 mt-1.5 overflow-hidden">
               <div 
-                className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                className="bg-[#8FC2F0] h-full rounded-full transition-all duration-500"
                 style={{ width: `${weekProgressPercent}%` }}
               />
             </div>
@@ -350,39 +350,39 @@ export default function MyWeekPage() {
 
           {/* Manager Rep Selector */}
           {isManager && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs">
-              <span className="text-[10px] font-bold text-slate-400 px-1 uppercase">Rep:</span>
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-xs">
+              <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">{isRTL ? 'المندوب:' : 'Rep:'}</span>
               <select
                 value={selectedSalesFilter}
                 onChange={(e) => setSelectedSalesFilter(e.target.value)}
-                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-[#292D32] focus:outline-none"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full px-3 py-1 text-xs font-bold text-[#292D32] dark:text-slate-100 focus:outline-none cursor-pointer"
               >
-                <option value="all">All Sales Team ({teamMembers.length})</option>
-                {teamMembers.map(m => (
+                <option value="all">{isRTL ? `كافة فريق المبيعات (${teamMembers.filter(m => m.role === 'sales_engineer').length})` : `All Sales Team (${teamMembers.filter(m => m.role === 'sales_engineer').length})`}</option>
+                {teamMembers.filter(m => m.role === 'sales_engineer').map(m => (
                   <option key={m.id} value={m.id}>{m.full_name}</option>
                 ))}
               </select>
             </div>
           )}
 
-          <div className="flex items-center gap-1 border-l border-slate-200 pl-4">
+          <div className="flex items-center gap-1 border-l border-slate-200 dark:border-slate-800 pl-4">
             <button
               onClick={() => setWeekOffset(prev => prev - 1)}
-              className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
-              title="Previous Week"
+              className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+              title={isRTL ? 'الأسبوع السابق' : 'Previous Week'}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => setWeekOffset(0)}
-              className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+              className="px-3.5 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Current Week
+              {isRTL ? 'الأسبوع الحالي' : 'Current Week'}
             </button>
             <button
               onClick={() => setWeekOffset(prev => prev + 1)}
-              className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors"
-              title="Next Week"
+              className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+              title={isRTL ? 'الأسبوع القادم' : 'Next Week'}
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -393,59 +393,56 @@ export default function MyWeekPage() {
       {/* ========================================================================= */}
       {/* QUICK FILTER BAR */}
       {/* ========================================================================= */}
-      {/* ========================================================================= */}
-      {/* QUICK FILTER BAR */}
-      {/* ========================================================================= */}
-      <div className="glass-card p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-urbanist">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+      <div className="crm-card p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-urbanist">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-72">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search plan by project, area, or goal..."
-              className="w-full pl-9 pr-3 py-2 bg-white/70 border border-slate-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-xs font-medium text-slate-800"
+              placeholder={isRTL ? 'ابحث في الخطة بالمشروع، المنطقة، أو الهدف...' : 'Search plan by project, area, or goal...'}
+              className="w-full pl-10 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
             />
           </div>
 
-          <div className="flex items-center bg-white/60 p-1 rounded-2xl border border-slate-200/80 font-bold">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-full border border-slate-200/80 dark:border-slate-700/80 font-bold">
             <button
               onClick={() => setStatusFilter('all')}
               className={cn(
-                "px-3 py-1.5 rounded-xl transition-all text-xs",
-                statusFilter === 'all' ? "bg-[#292D32] text-white shadow-2xs" : "text-slate-500 hover:text-slate-800"
+                "px-3.5 py-1.5 rounded-full transition-all text-xs cursor-pointer",
+                statusFilter === 'all' ? "bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               )}
             >
-              All ({totalPlannedWeek})
+              {isRTL ? 'الكل' : 'All'} ({totalPlannedWeek})
             </button>
             <button
               onClick={() => setStatusFilter('pending')}
               className={cn(
-                "px-3 py-1.5 rounded-xl transition-all text-xs",
-                statusFilter === 'pending' ? "bg-[#292D32] text-white shadow-2xs" : "text-slate-500 hover:text-slate-800"
+                "px-3.5 py-1.5 rounded-full transition-all text-xs cursor-pointer",
+                statusFilter === 'pending' ? "bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               )}
             >
-              Pending ({totalPlannedWeek - completedPlannedWeek})
+              {isRTL ? 'معلق' : 'Pending'} ({totalPlannedWeek - completedPlannedWeek})
             </button>
             <button
               onClick={() => setStatusFilter('completed')}
               className={cn(
-                "px-3 py-1.5 rounded-xl transition-all text-xs",
-                statusFilter === 'completed' ? "bg-[#77CE69] text-white shadow-2xs" : "text-slate-500 hover:text-slate-800"
+                "px-3.5 py-1.5 rounded-full transition-all text-xs cursor-pointer",
+                statusFilter === 'completed' ? "bg-[#77CE69] text-white shadow-xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               )}
             >
-              Completed ({completedPlannedWeek})
+              {isRTL ? 'مكتمل' : 'Completed'} ({completedPlannedWeek})
             </button>
           </div>
         </div>
 
         <button
           onClick={() => handleOpenAddModal(workDays[0].dateStr)}
-          className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-[#292D32] hover:bg-slate-800 text-white font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors font-urbanist text-xs"
+          className="crm-pill-dark w-full sm:w-auto px-5 py-2.5 flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer text-xs"
         >
           <Plus className="w-4 h-4 text-[#8FC2F0]" />
-          <span>New Sales Activity</span>
+          <span>{isRTL ? '+ نشاط بيعي جديد' : 'New Sales Activity'}</span>
         </button>
       </div>
 
@@ -453,45 +450,45 @@ export default function MyWeekPage() {
       {/* AI AUTO-SUGGESTION ENGINE (PRD Section 5) */}
       {/* ========================================================================= */}
       {suggestedItems.length > 0 && (
-        <div className="glass-card p-6 rounded-3xl border border-[#8FC2F0]/30 shadow-2xs font-urbanist">
+        <div className="crm-card p-6 sm:p-7 font-urbanist">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[#8FC2F0] animate-pulse" />
-              <h3 className="text-xs font-black text-[#292D32] uppercase tracking-wider">
+              <h3 className="text-xs font-extrabold text-[#292D32] dark:text-slate-100 uppercase tracking-wider">
                 Automated Plan Suggestions &bull; Overdue or High Value At Risk
               </h3>
             </div>
-            <span className="text-[11px] text-[#292D32] font-bold bg-[#8FC2F0]/20 px-2.5 py-0.5 rounded-full border border-[#8FC2F0]/30">
+            <span className="text-[11px] text-[#292D32] dark:text-[#8FC2F0] font-bold bg-[#8FC2F0]/20 px-3 py-1 rounded-full border border-[#8FC2F0]/30">
               PRD Smart Cadence Engine
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
             {suggestedItems.map(p => (
               <div 
                 key={p.id}
-                className="glass-card-interactive p-4 rounded-2xl flex flex-col justify-between"
+                className="crm-card-soft p-4 flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 mb-1">
-                    <span>{p.pr_number}</span>
-                    <span className="text-rose-600 font-bold font-sans">
+                  <div className="flex items-center justify-between text-[10px] font-urbanist text-slate-400 mb-1">
+                    <span className="font-bold">{p.pr_number}</span>
+                    <span className="text-rose-600 dark:text-rose-400 font-bold font-sans">
                       {p.calculated_health === 'red' ? 'Needs Attention' : 'High Value'}
                     </span>
                   </div>
-                  <h4 className="text-xs font-bold text-slate-900 line-clamp-1">{p.name}</h4>
-                  <div className="text-[11px] text-slate-500 truncate mt-0.5">{p.company_name}</div>
-                  <div className="text-xs font-black text-slate-800 mt-1">{formatCurrencySAR(p.estimated_value)}</div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">{p.name}</h4>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{p.company_name}</div>
+                  <div className="text-xs font-extrabold text-slate-800 dark:text-slate-200 mt-1 font-urbanist">{formatCurrencySAR(p.estimated_value)}</div>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-[11px]">
+                <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-1 text-[11px]">
                   <span className="text-slate-400 font-medium">Add to:</span>
                   <div className="flex items-center gap-1">
                     {workDays.slice(0, 3).map((d) => (
                       <button
                         key={d.dateStr}
                         onClick={() => handleAcceptSuggestion(p, d.dateStr)}
-                        className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold transition-colors text-[10px]"
+                        className="px-2.5 py-0.5 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] hover:bg-[#8FC2F0]/30 font-bold transition-colors text-[10px] cursor-pointer"
                         title={`Add to ${d.name}`}
                       >
                         {d.short}
@@ -508,16 +505,16 @@ export default function MyWeekPage() {
       {/* ========================================================================= */}
       {/* 5-DAY SAUDI WORKWEEK PLANNER GRID (Sun &ndash; Thu) & Odoo Drag & Drop */}
       {/* ========================================================================= */}
-      <div className="space-y-2">
+      <div className="space-y-2 font-urbanist">
         {/* Odoo Style Drag & Drop Helper Badge */}
         {currentRole !== 'viewer' && (
-          <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-            <span className="flex items-center gap-1.5 font-medium text-slate-600 bg-slate-100/80 px-2.5 py-1 rounded-lg border border-slate-200">
-              <GripVertical className="w-3.5 h-3.5 text-blue-600" />
-              <span>Drag &amp; drop any activity between days to reschedule (مثل نظام Odoo)</span>
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
+            <span className="flex items-center gap-1.5 font-bold text-slate-600 dark:text-slate-300 bg-white/80 dark:bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
+              <GripVertical className="w-3.5 h-3.5 text-[#8FC2F0]" />
+              <span>{t('dragNotice')}</span>
             </span>
             {draggedActivityId && (
-              <span className="text-blue-600 font-bold animate-pulse text-[11px] bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+              <span className="text-[#292D32] dark:text-[#8FC2F0] font-black animate-pulse text-[11px] bg-[#8FC2F0]/20 px-3 py-1 rounded-full border border-[#8FC2F0]/30">
                 Release card on any day to reschedule
               </span>
             )}
@@ -577,26 +574,26 @@ export default function MyWeekPage() {
                   setDragOverDayDate(null);
                   setDraggedActivityId(null);
                 }}
-                className={`rounded-3xl border flex flex-col min-h-[500px] min-w-0 transition-all duration-150 ${
+                className={`rounded-[28px] border flex flex-col min-h-[500px] min-w-0 transition-all duration-150 ${
                   isColumnTargeted
                     ? 'border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 ring-4 ring-[#8FC2F0]/20 shadow-md scale-[1.01]'
                     : isToday 
-                      ? 'border-[#8FC2F0] ring-2 ring-[#8FC2F0]/20 shadow-xs bg-white/80' 
-                      : 'glass-card'
+                      ? 'crm-card ring-2 ring-[#8FC2F0]/50' 
+                      : 'crm-card'
                 }`}
               >
                 {/* Day Column Header */}
-                <div className={`p-4 border-b rounded-t-3xl flex items-center justify-between font-urbanist ${
-                  isToday ? 'bg-[#292D32] text-white border-[#292D32]' : 'bg-white/60 text-slate-800 border-slate-200/60'
+                <div className={`p-4 border-b rounded-t-[28px] flex items-center justify-between font-urbanist ${
+                  isToday ? 'bg-[#292D32] dark:bg-slate-800 text-white border-slate-700' : 'bg-slate-50/50 dark:bg-slate-800/40 text-slate-800 dark:text-slate-100 border-slate-100 dark:border-slate-800'
                 }`}>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-black text-sm tracking-tight">{day.name}</span>
+                      <span className="font-extrabold text-sm tracking-tight">{day.name}</span>
                       <span className={`text-[10px] font-bold ${isToday ? 'text-slate-300' : 'text-slate-400'}`}>
                         ({day.arabic})
                       </span>
                       {isToday && (
-                        <span className="text-[9px] font-extrabold uppercase bg-[#8FC2F0] text-[#292D32] px-2 py-0.2 rounded-full">
+                        <span className="text-[9px] font-extrabold uppercase bg-[#8FC2F0] text-[#292D32] px-2 py-0.5 rounded-full">
                           Today
                         </span>
                       )}
@@ -608,7 +605,7 @@ export default function MyWeekPage() {
 
                   <div className="flex items-center gap-1">
                     <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                      isToday ? 'bg-white/20 text-white' : 'bg-white text-slate-600 border border-slate-200/60 shadow-2xs'
+                      isToday ? 'bg-white/20 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 shadow-2xs'
                     }`}>
                       {dayActivities.length}
                     </span>
@@ -616,12 +613,12 @@ export default function MyWeekPage() {
                     {currentRole !== 'viewer' && (
                       <button
                         onClick={() => handleOpenAddModal(day.dateStr)}
-                        className={`p-1.5 rounded-xl transition-colors ${
-                          isToday ? 'hover:bg-white/20 text-white' : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'
+                        className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors cursor-pointer ${
+                          isToday ? 'hover:bg-white/20 text-white' : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
                         }`}
                         title={`Add activity to ${day.name}`}
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
@@ -631,19 +628,19 @@ export default function MyWeekPage() {
                 <div className="p-3 flex-1 space-y-2.5 overflow-y-auto font-urbanist">
                   {/* Drop Target Indicator when dragging over this day */}
                   {isColumnTargeted && (
-                    <div className="p-3 mb-2 rounded-2xl border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 text-[#292D32] text-xs font-bold text-center flex items-center justify-center gap-1.5 animate-pulse shadow-xs shrink-0">
+                    <div className="p-3 mb-2 rounded-2xl border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] text-xs font-bold text-center flex items-center justify-center gap-1.5 animate-pulse shadow-xs shrink-0">
                       <ArrowDown className="w-4 h-4 text-[#8FC2F0] animate-bounce" />
                       <span>Drop here to move to {day.name}</span>
                     </div>
                   )}
 
                   {dayActivities.length === 0 ? (
-                    <div className="h-full min-h-[140px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200/80 rounded-2xl text-slate-400 text-xs">
+                    <div className="h-full min-h-[140px] flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-200/80 dark:border-slate-700/60 rounded-2xl text-slate-400 dark:text-slate-500 text-xs">
                       <span>No activities scheduled</span>
                       {currentRole !== 'viewer' && (
                         <button
                           onClick={() => handleOpenAddModal(day.dateStr)}
-                          className="mt-2 text-[11px] font-bold text-[#292D32] hover:text-[#8FC2F0] hover:underline flex items-center gap-1 transition-colors"
+                          className="mt-2 text-[11px] font-bold text-[#292D32] dark:text-[#8FC2F0] hover:text-[#8FC2F0] hover:underline flex items-center gap-1 transition-colors"
                         >
                           <Plus className="w-3 h-3" />
                           <span>Plan Activity</span>
@@ -675,7 +672,7 @@ export default function MyWeekPage() {
                             isBeingDragged
                               ? 'opacity-35 border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 shadow-none scale-[0.98]'
                               : isDone 
-                                ? 'glass-card border-[#77CE69]/40 bg-gradient-to-b from-white/90 to-[#77CE69]/10' 
+                                ? 'glass-card border-[#77CE69]/40 bg-gradient-to-b from-white/90 dark:from-[#1C2130]/90 to-[#77CE69]/10 dark:to-[#77CE69]/15' 
                                 : 'glass-card-interactive'
                           } ${currentRole !== 'viewer' ? 'cursor-grab active:cursor-grabbing' : ''}`}
                         >
@@ -685,29 +682,29 @@ export default function MyWeekPage() {
                               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
                                 {currentRole !== 'viewer' && (
                                   <div 
-                                    className="text-slate-300 group-hover:text-blue-500 transition-colors cursor-grab active:cursor-grabbing -ml-1 shrink-0" 
-                                    title="Drag to reschedule (مثل Odoo)"
+                                    className="text-slate-300 dark:text-slate-600 group-hover:text-blue-500 dark:group-hover:text-[#8FC2F0] transition-colors cursor-grab active:cursor-grabbing -ml-1 shrink-0" 
+                                    title={t('dragNotice')}
                                   >
                                     <GripVertical className="w-3.5 h-3.5" />
                                   </div>
                                 )}
 
                                 {item.project_id && proj ? (
-                                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                                     {proj.pr_number}
                                   </span>
                                 ) : item.custom_target ? (
-                                  <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200">
+                                  <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                                     Custom Target
                                   </span>
                                 ) : item.location_name ? (
-                                  <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                                  <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                                     Hunting Zone
                                   </span>
                                 ) : null}
 
                                 {item.priority === 'urgent' && !isDone && (
-                                  <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                     <Flame className="w-2.5 h-2.5" />
                                     Urgent
                                   </span>
@@ -716,7 +713,7 @@ export default function MyWeekPage() {
 
                               <div className="flex items-center gap-1 shrink-0">
                                 {isDone ? (
-                                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                     <Check className="w-3 h-3 stroke-[2.5]" />
                                     Done
                                   </span>
@@ -727,7 +724,7 @@ export default function MyWeekPage() {
                                     draggable={false}
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={() => handleDelete(item.id)}
-                                    className="text-slate-300 hover:text-rose-600 p-1 transition-colors rounded hover:bg-rose-50"
+                                    className="text-slate-300 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1 transition-colors rounded hover:bg-rose-50 dark:hover:bg-rose-950/30"
                                     title="Remove from plan"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -743,18 +740,18 @@ export default function MyWeekPage() {
                                   href={`/projects/${proj.id}`}
                                   draggable={false}
                                   onMouseDown={(e) => e.stopPropagation()}
-                                  className="block text-sm sm:text-base font-black text-slate-900 hover:text-blue-600 transition-colors tracking-tight leading-snug break-words"
+                                  className="block text-sm sm:text-base font-black text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-[#8FC2F0] transition-colors tracking-tight leading-snug break-words"
                                 >
                                   {item.project_name || proj.name}
                                 </Link>
                               ) : (
-                                <h4 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-snug break-words">
+                                <h4 className="text-sm sm:text-base font-black text-slate-900 dark:text-white tracking-tight leading-snug break-words">
                                   {item.project_name || item.custom_target || item.location_name || 'Sales Objective'}
                                 </h4>
                               )}
 
                               {item.company_name && (
-                                <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5 flex items-center gap-1">
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5 flex items-center gap-1">
                                   <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
                                   <span className="truncate">{item.company_name}</span>
                                 </div>
@@ -769,7 +766,7 @@ export default function MyWeekPage() {
                               </span>
                               
                               {item.time_slot && (
-                                <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 bg-slate-100/80 px-2 py-0.5 rounded-md border border-slate-200">
+                                <span className="text-[10px] text-slate-500 dark:text-slate-300 font-semibold flex items-center gap-1 bg-slate-100/80 dark:bg-[#232A38] px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
                                   <Clock className="w-3 h-3 text-slate-400" />
                                   {item.time_slot}
                                 </span>
@@ -777,7 +774,7 @@ export default function MyWeekPage() {
                             </div>
 
                             {/* 4. GOAL / ACTION DESCRIPTION */}
-                            <div className="text-xs text-slate-700 bg-slate-50/90 p-2.5 rounded-lg border border-slate-100 font-normal leading-relaxed break-words">
+                            <div className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50/90 dark:bg-[#141820]/75 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 font-normal leading-relaxed break-words">
                               <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-0.5">
                                 Activity Goal:
                               </span>
@@ -794,10 +791,10 @@ export default function MyWeekPage() {
                                   draggable={false}
                                   onMouseDown={(e) => e.stopPropagation()}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-[11px] font-bold transition-all shadow-2xs group/map"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold transition-all shadow-2xs group/map"
                                   title="Open GPS Location in Google Maps"
                                 >
-                                  <Navigation className="w-3 h-3 text-emerald-600 group-hover/map:scale-110 transition-transform" />
+                                  <Navigation className="w-3 h-3 text-emerald-600 dark:text-emerald-400 group-hover/map:scale-110 transition-transform" />
                                   <span>Google Maps ↗</span>
                                 </a>
                               ) : (item.location_name || item.project_name) ? (
@@ -808,7 +805,7 @@ export default function MyWeekPage() {
                                   draggable={false}
                                   onMouseDown={(e) => e.stopPropagation()}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-blue-600 border border-slate-200 text-[10px] font-semibold transition-colors"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-50 dark:bg-[#141820] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-[#8FC2F0] border border-slate-200 dark:border-slate-800 text-[10px] font-semibold transition-colors"
                                   title="Search Location on Google Maps"
                                 >
                                   <MapPin className="w-2.5 h-2.5 text-slate-400" />
@@ -820,19 +817,19 @@ export default function MyWeekPage() {
                           </div>
 
                           {/* Action Footer */}
-                          <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between">
+                          <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                             {/* Quick Day Rescheduler */}
                             <select
                               value={day.dateStr}
                               draggable={false}
                               onMouseDown={(e) => e.stopPropagation()}
                               onChange={(e) => handleMoveDay(item.id, e.target.value)}
-                              className="text-[10px] text-slate-400 bg-transparent border-0 focus:outline-none hover:text-slate-600 cursor-pointer font-medium"
+                              className="text-[10px] text-slate-400 dark:text-slate-400 bg-transparent border-0 focus:outline-none hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer font-medium"
                               title="Reschedule to another day"
                             >
-                              <option value={day.dateStr}>Move...</option>
+                              <option value={day.dateStr} className="dark:bg-[#1C2130] dark:text-slate-200">Move...</option>
                               {workDays.map(d => (
-                                <option key={d.dateStr} value={d.dateStr}>
+                                <option key={d.dateStr} value={d.dateStr} className="dark:bg-[#1C2130] dark:text-slate-200">
                                   &rarr; {d.short} ({d.dayNum} Sep)
                                 </option>
                               ))}
@@ -851,8 +848,8 @@ export default function MyWeekPage() {
                                 })}
                                 className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 ${
                                   isDone 
-                                    ? 'bg-slate-100 text-slate-500' 
-                                    : 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white shadow-2xs'
+                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400' 
+                                    : 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-300 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white shadow-2xs'
                                 }`}
                               >
                                 <Check className="w-3 h-3" />
@@ -876,21 +873,21 @@ export default function MyWeekPage() {
       {/* ========================================================================= */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[95vh]">
+          <div className="bg-white dark:bg-[#1C2130] rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-[#8FC2F0]/15 overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[95vh]">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#232A38] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
                   <CalendarDays className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base">Plan Sales Activity</h3>
-                  <p className="text-[11px] text-slate-500">Scheduled touchpoint with client or regional hunting</p>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">Plan Sales Activity</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Scheduled touchpoint with client or regional hunting</p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsAddModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -902,14 +899,14 @@ export default function MyWeekPage() {
               {/* Day & Time Selector */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Scheduled Day</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Scheduled Day</label>
                   <select
                     value={selectedDayForAdd}
                     onChange={(e) => setSelectedDayForAdd(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white"
                   >
                     {workDays.map(d => (
-                      <option key={d.dateStr} value={d.dateStr}>
+                      <option key={d.dateStr} value={d.dateStr} className="dark:bg-[#141820] dark:text-white">
                         {d.name} &bull; {d.dayNum} Sep
                       </option>
                     ))}
@@ -917,14 +914,14 @@ export default function MyWeekPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Target Time</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Target Time</label>
                   <select
                     value={timeSlot}
                     onChange={(e) => setTimeSlot(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white"
                   >
                     {TIME_SLOTS.map(slot => (
-                      <option key={slot} value={slot}>{slot}</option>
+                      <option key={slot} value={slot} className="dark:bg-[#141820] dark:text-white">{slot}</option>
                     ))}
                   </select>
                 </div>
@@ -932,48 +929,48 @@ export default function MyWeekPage() {
 
               {/* Target Planning Mode Tabs (Existing Project vs Custom Deal vs Area/Hunting) */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1.5">
-                  Target Activity Type (نوع الهدف)
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  {t('targetActivityType')}
                 </label>
-                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-[11px] font-bold">
+                <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 dark:bg-[#141820] rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] font-bold">
                   <button
                     type="button"
                     onClick={() => setTargetMode('existing_project')}
                     className={cn(
-                      "py-1.5 rounded-lg transition-all flex items-center justify-center gap-1",
+                      "py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer",
                       targetMode === 'existing_project' 
-                        ? "bg-white text-blue-600 shadow-2xs" 
-                        : "text-slate-500 hover:text-slate-800"
+                        ? "bg-white dark:bg-[#232A38] text-blue-600 dark:text-[#8FC2F0] shadow-2xs" 
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                     )}
                   >
                     <Building2 className="w-3.5 h-3.5" />
-                    <span>Existing Project</span>
+                    <span>{t('existingProject')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setTargetMode('custom_project')}
                     className={cn(
-                      "py-1.5 rounded-lg transition-all flex items-center justify-center gap-1",
+                      "py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer",
                       targetMode === 'custom_project' 
-                        ? "bg-white text-purple-600 shadow-2xs" 
-                        : "text-slate-500 hover:text-slate-800"
+                        ? "bg-white dark:bg-[#232A38] text-purple-600 dark:text-purple-300 shadow-2xs" 
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                     )}
                   >
                     <Briefcase className="w-3.5 h-3.5" />
-                    <span>New / Custom Deal</span>
+                    <span>{t('newCustomDeal')}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setTargetMode('area_hunting')}
                     className={cn(
-                      "py-1.5 rounded-lg transition-all flex items-center justify-center gap-1",
+                      "py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer",
                       targetMode === 'area_hunting' 
-                        ? "bg-white text-amber-600 shadow-2xs" 
-                        : "text-slate-500 hover:text-slate-800"
+                        ? "bg-white dark:bg-[#232A38] text-amber-600 dark:text-amber-400 shadow-2xs" 
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                     )}
                   >
                     <Target className="w-3.5 h-3.5" />
-                    <span>Area / Hunting</span>
+                    <span>{t('areaHunting')}</span>
                   </button>
                 </div>
               </div>
@@ -981,7 +978,9 @@ export default function MyWeekPage() {
               {/* Conditional Inputs based on Target Mode */}
               {targetMode === 'existing_project' && (
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Select Existing Project</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {isRTL ? 'اختر المشروع المسجل' : 'Select Existing Project'}
+                  </label>
                   <select
                     value={newProjectId}
                     onChange={(e) => {
@@ -989,10 +988,10 @@ export default function MyWeekPage() {
                       const p = projects.find(proj => proj.id === e.target.value);
                       if (p?.location) setLocationAreaName(p.location);
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white"
                   >
                     {projects.map(p => (
-                      <option key={p.id} value={p.id}>
+                      <option key={p.id} value={p.id} className="dark:bg-[#141820] dark:text-white">
                         {p.pr_number} &bull; {p.name} ({p.company_name} - {p.location})
                       </option>
                     ))}
@@ -1001,39 +1000,43 @@ export default function MyWeekPage() {
               )}
 
               {targetMode === 'custom_project' && (
-                <div className="space-y-3 p-3 bg-purple-50/50 rounded-xl border border-purple-100">
+                <div className="space-y-3 p-3 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-100 dark:border-purple-900/40">
                   <div>
-                    <label className="block font-bold text-purple-900 mb-1">
-                      Project Name (اسم المشروع الجديد أو غير المسجل) *
+                    <label className="block font-bold text-purple-900 dark:text-purple-300 mb-1">
+                      {t('projectNameLabel')} *
                     </label>
                     <input
                       type="text"
                       required
                       value={customProjectName}
                       onChange={(e) => setCustomProjectName(e.target.value)}
-                      placeholder="e.g. Obhur Residential Tower, Taif University Expansion"
-                      className="w-full px-3 py-2 bg-white border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-xs font-semibold"
+                      placeholder={isRTL ? "مثال: برج أبحر السكني، توسعة جامعة الطائف" : "e.g. Obhur Residential Tower, Taif University Expansion"}
+                      className="w-full px-3 py-2 bg-white dark:bg-[#141820] border border-purple-200 dark:border-purple-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-xs font-semibold text-purple-900 dark:text-purple-100 placeholder:text-slate-400"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block font-bold text-purple-900 mb-1">Client / Contractor</label>
+                      <label className="block font-bold text-purple-900 dark:text-purple-300 mb-1">
+                        {isRTL ? 'العميل / المقاول' : 'Client / Contractor'}
+                      </label>
                       <input
                         type="text"
                         value={customCompanyName}
                         onChange={(e) => setCustomCompanyName(e.target.value)}
-                        placeholder="e.g. Binladin Group, Al Bawani"
-                        className="w-full px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs"
+                        placeholder={isRTL ? "مجموعة بن لادن، البواني" : "e.g. Binladin Group, Al Bawani"}
+                        className="w-full px-3 py-1.5 bg-white dark:bg-[#141820] border border-purple-200 dark:border-purple-800 rounded-lg text-xs text-purple-900 dark:text-purple-100 placeholder:text-slate-400"
                       />
                     </div>
                     <div>
-                      <label className="block font-bold text-purple-900 mb-1">City / Region</label>
+                      <label className="block font-bold text-purple-900 dark:text-purple-300 mb-1">
+                        {isRTL ? 'المدينة / المنطقة' : 'City / Region'}
+                      </label>
                       <input
                         type="text"
                         value={locationAreaName}
                         onChange={(e) => setLocationAreaName(e.target.value)}
-                        placeholder="e.g. Jeddah, Makkah"
-                        className="w-full px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs"
+                        placeholder={isRTL ? "جدة، مكة" : "e.g. Jeddah, Makkah"}
+                        className="w-full px-3 py-1.5 bg-white dark:bg-[#141820] border border-purple-200 dark:border-purple-800 rounded-lg text-xs text-purple-900 dark:text-purple-100 placeholder:text-slate-400"
                       />
                     </div>
                   </div>
@@ -1041,46 +1044,53 @@ export default function MyWeekPage() {
               )}
 
               {targetMode === 'area_hunting' && (
-                <div className="space-y-3 p-3 bg-amber-50/50 rounded-xl border border-amber-100">
+                <div className="space-y-3 p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl border border-amber-100 dark:border-amber-900/40">
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">
-                      Target Area / Industrial Zone (اسم المنطقة أو القطاع المستهدف) *
+                    <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                      {t('targetAreaLabel')} *
                     </label>
                     <input
                       type="text"
                       required
                       value={locationAreaName}
                       onChange={(e) => setLocationAreaName(e.target.value)}
-                      placeholder="e.g. Jeddah Industrial Area 2, Yanbu Port Road"
-                      className="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-semibold"
+                      placeholder={isRTL ? "مثال: صناعية جدة الثانية، طريق ميناء ينبع" : "e.g. Jeddah Industrial Area 2, Yanbu Port Road"}
+                      className="w-full px-3 py-2 bg-white dark:bg-[#141820] border border-amber-200 dark:border-amber-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs font-semibold text-amber-900 dark:text-amber-100 placeholder:text-slate-400"
                     />
                   </div>
 
                   {/* Quick Western Region Presets */}
                   <div>
-                    <span className="text-[10px] font-bold text-amber-800 block mb-1">Quick Western Region Zones:</span>
+                    <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 block mb-1">
+                      {isRTL ? 'مناطق سريعة بالغربية:' : 'Quick Western Region Zones:'}
+                    </span>
                     <div className="flex flex-wrap gap-1">
-                      {QUICK_AREAS.slice(0, 4).map(area => (
-                        <button
-                          key={area}
-                          type="button"
-                          onClick={() => setLocationAreaName(area.split(' (')[0])}
-                          className="text-[9px] px-2 py-0.5 rounded bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium transition-colors"
-                        >
-                          {area.split(' (')[0]}
-                        </button>
-                      ))}
+                      {QUICK_AREAS.slice(0, 4).map(area => {
+                        const areaLabel = isRTL ? area.ar : area.en;
+                        return (
+                          <button
+                            key={area.en}
+                            type="button"
+                            onClick={() => setLocationAreaName(areaLabel)}
+                            className="text-[9px] px-2 py-0.5 rounded bg-white dark:bg-[#1C2130] hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-medium transition-colors cursor-pointer"
+                          >
+                            {areaLabel}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-bold text-amber-900 mb-1">Target Sector / Organization Focus</label>
+                    <label className="block font-bold text-amber-900 dark:text-amber-300 mb-1">
+                      {isRTL ? 'القطاع أو نشاط المنشأة المستهدفة' : 'Target Sector / Organization Focus'}
+                    </label>
                     <input
                       type="text"
                       value={customCompanyName}
                       onChange={(e) => setCustomCompanyName(e.target.value)}
-                      placeholder="e.g. HVAC Contractors, Engineering Consultants"
-                      className="w-full px-3 py-1.5 bg-white border border-amber-200 rounded-lg text-xs"
+                      placeholder={isRTL ? "مثال: مقاولو التكييف، مكاتب الاستشارات الهندسية" : "e.g. HVAC Contractors, Engineering Consultants"}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-[#141820] border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-900 dark:text-amber-100 placeholder:text-slate-400"
                     />
                   </div>
                 </div>
@@ -1089,9 +1099,9 @@ export default function MyWeekPage() {
               {/* Google Maps Location Link Field */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700 flex items-center gap-1.5">
-                    <Navigation className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Google Maps Location Link (رابط خرائط جوجل)</span>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Navigation className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    <span>{t('googleMapsLink')}</span>
                   </label>
 
                   {/* Search on Google Maps Helper */}
@@ -1104,7 +1114,7 @@ export default function MyWeekPage() {
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] font-bold text-blue-600 hover:underline flex items-center gap-0.5"
+                      className="text-[10px] font-bold text-blue-600 dark:text-[#8FC2F0] hover:underline flex items-center gap-0.5"
                     >
                       <span>Find on Google Maps ↗</span>
                     </a>
@@ -1117,7 +1127,7 @@ export default function MyWeekPage() {
                     value={googleMapsUrl}
                     onChange={(e) => setGoogleMapsUrl(e.target.value)}
                     placeholder="https://maps.app.goo.gl/... or paste location URL"
-                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-[11px]"
+                    className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-[11px] text-slate-800 dark:text-white placeholder:text-slate-400"
                   />
                   <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                 </div>
@@ -1129,27 +1139,27 @@ export default function MyWeekPage() {
               {/* Channel & Purpose */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Sales Channel</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Sales Channel</label>
                   <select
                     value={newChannel}
                     onChange={(e) => setNewChannel(e.target.value as ActivityChannel)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white"
                   >
                     {ACTIVITY_CHANNELS.map(ch => (
-                      <option key={ch.value} value={ch.value}>{ch.label}</option>
+                      <option key={ch.value} value={ch.value} className="dark:bg-[#141820] dark:text-white">{ch.label}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Visit Purpose</label>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Visit Purpose</label>
                   <select
                     value={newPurpose}
                     onChange={(e) => setNewPurpose(e.target.value as VisitPurpose)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white"
                   >
                     {VISIT_PURPOSES.map(vp => (
-                      <option key={vp.value} value={vp.value}>{vp.label}</option>
+                      <option key={vp.value} value={vp.value} className="dark:bg-[#141820] dark:text-white">{vp.label}</option>
                     ))}
                   </select>
                 </div>
@@ -1157,20 +1167,20 @@ export default function MyWeekPage() {
 
               {/* Target Action & Goal */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Action &amp; Target Goal *</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Action &amp; Target Goal *</label>
                 <input
                   type="text"
                   required
                   value={newGoal}
                   onChange={(e) => setNewGoal(e.target.value)}
                   placeholder="e.g. Conduct hunting visit, meet procurement manager, deliver submittal"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-800 dark:text-white placeholder:text-slate-400"
                 />
               </div>
 
               {/* Priority */}
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Priority</label>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Priority</label>
                 <div className="flex items-center gap-2">
                   {(['urgent', 'high', 'medium', 'low'] as ProjectPriority[]).map(p => (
                     <button
@@ -1179,8 +1189,8 @@ export default function MyWeekPage() {
                       onClick={() => setNewPriority(p)}
                       className={`flex-1 py-1.5 rounded-lg border capitalize font-bold transition-all ${
                         newPriority === p 
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs' 
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          ? 'bg-blue-600 dark:bg-[#8FC2F0] text-white dark:text-[#141820] border-blue-600 dark:border-[#8FC2F0] shadow-xs' 
+                          : 'bg-slate-50 dark:bg-[#141820] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
                       }`}
                     >
                       {p}
@@ -1190,17 +1200,17 @@ export default function MyWeekPage() {
               </div>
 
               {/* Modal Footer */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold"
+                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-md shadow-blue-500/20"
+                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-[#8FC2F0] dark:hover:bg-[#7ab2e3] text-white dark:text-[#141820] font-bold shadow-md shadow-blue-500/20"
                 >
                   Save to Week Plan
                 </button>

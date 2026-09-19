@@ -224,7 +224,7 @@ export default function ImportDataPage() {
               onChange={(e) => setSelectedUserId(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold text-[#292D32] focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-transparent transition-all shadow-xs"
             >
-              {teamMembers.map(member => (
+              {teamMembers.filter(m => m.role === 'sales_engineer').map(member => (
                 <option key={member.id} value={member.id}>
                   {member.full_name} ({member.title || member.role}) - {member.territory || 'National'}
                 </option>

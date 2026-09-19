@@ -33,7 +33,9 @@ import {
   Send,
   ArrowRight,
   FileText,
-  Bell
+  Bell,
+  Mic,
+  ListFilter
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { 
@@ -50,6 +52,8 @@ import {
 import { formatDateString, normalizePhoneNumber } from '@/lib/utils';
 import { AddActivityModal } from '@/components/modals/add-activity-modal';
 import { EditActivityModal } from '@/components/modals/edit-activity-modal';
+import { VoiceActivityModal } from '@/components/activities/voice-activity-modal';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 interface DayConfig {
   name: string;
@@ -61,6 +65,9 @@ interface DayConfig {
 }
 
 export default function ActivitiesPage() {
+  const { language, t } = useLanguage();
+  const isRTL = language === 'ar';
+
   const { 
     activities, 
     projects, 
@@ -100,6 +107,17 @@ export default function ActivitiesPage() {
   const [selectedDateForAdd, setSelectedDateForAdd] = useState<string>('2026-09-17');
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Voice Daily Activity Logger state
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [selectedDateForVoice, setSelectedDateForVoice] = useState<string>('2026-09-17');
+  const [selectedDayLabelForVoice, setSelectedDayLabelForVoice] = useState<string>('');
+
+  const handleOpenVoiceForDay = (dateStr: string, dayArabic?: string, dayName?: string) => {
+    setSelectedDateForVoice(dateStr);
+    setSelectedDayLabelForVoice(isRTL ? `أنشطة يوم ${dayArabic || dateStr}` : `Activities for ${dayName || dateStr}`);
+    setIsVoiceModalOpen(true);
+  };
 
   // Saudi Workdays (Sat-Thu 6 days, or full 7 days)
   const workDays: DayConfig[] = useMemo(() => {
@@ -254,51 +272,51 @@ export default function ActivitiesPage() {
       {/* ========================================================================= */}
       {/* HEADER: WEEK NAVIGATION & VIEW SWITCHER */}
       {/* ========================================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs">
+      <div className="crm-card p-6 sm:p-7 flex flex-col md:flex-row md:items-center justify-between gap-4 font-urbanist">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
-              <CalendarDays className="w-3 h-3" />
-              <span>Weekly Activities Board &bull; جدول الأنشطة الأسبوعي</span>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>{isRTL ? 'جدول الأنشطة الأسبوعي الميداني' : 'Weekly Activities Board'}</span>
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              {thisWeekActivities.length} Activities This Week
+            <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-[#77CE69]/15 text-[#77CE69] border border-[#77CE69]/30">
+              {thisWeekActivities.length} {isRTL ? 'نشاطاً هذا الأسبوع' : 'Activities This Week'}
             </span>
           </div>
 
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">
-            Sales Activities & Execution Log
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight">
+            {isRTL ? 'سجل الأنشطة والزيارات الميدانية' : 'Sales Activities & Execution Log'}
           </h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
-            Daily logs of client calls, consultant meetings, field hunting, and next action commitments.
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
+            {isRTL ? 'سجل متابعات الاتصالات والاجتماعات مع المقاولين والاستشاريين والتحديثات الميدانية والخطوات التالية.' : 'Daily logs of client calls, consultant meetings, field hunting, and next action commitments.'}
           </p>
         </div>
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Week Navigation */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-full border border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setWeekOffset(prev => prev - 1)}
-              className="p-1.5 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-colors"
-              title="Previous Week"
+              className="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center justify-center cursor-pointer"
+              title={isRTL ? 'الأسبوع السابق' : 'Previous Week'}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => setWeekOffset(0)}
-              className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors ${
+              className={`px-3.5 py-1 text-xs font-bold rounded-full transition-colors cursor-pointer ${
                 weekOffset === 0 
-                  ? 'bg-blue-600 text-white shadow-2xs' 
-                  : 'text-slate-600 hover:bg-white'
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs' 
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'
               }`}
             >
-              This Week
+              {isRTL ? 'هذا الأسبوع' : 'This Week'}
             </button>
             <button
               onClick={() => setWeekOffset(prev => prev + 1)}
-              className="p-1.5 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition-colors"
-              title="Next Week"
+              className="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center justify-center cursor-pointer"
+              title={isRTL ? 'الأسبوع القادم' : 'Next Week'}
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -306,15 +324,15 @@ export default function ActivitiesPage() {
 
           {/* Manager Rep Selector */}
           {isManager && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200 text-xs">
-              <span className="text-[10px] font-bold text-slate-400 px-1.5 uppercase">Rep:</span>
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-xs">
+              <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">{isRTL ? 'المندوب:' : 'Rep:'}</span>
               <select
                 value={selectedSalesFilter}
                 onChange={(e) => setSelectedSalesFilter(e.target.value)}
-                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-[#292D32] focus:outline-none"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full px-3 py-1 text-xs font-bold text-[#292D32] dark:text-slate-100 focus:outline-none cursor-pointer"
               >
-                <option value="all">All Sales Team ({teamMembers.length})</option>
-                {teamMembers.map(m => (
+                <option value="all">{isRTL ? 'فريق المبيعات بالكامل' : 'All Sales Team'} ({teamMembers.filter(m => m.role === 'sales_engineer').length})</option>
+                {teamMembers.filter(m => m.role === 'sales_engineer').map(m => (
                   <option key={m.id} value={m.id}>{m.full_name}</option>
                 ))}
               </select>
@@ -322,63 +340,76 @@ export default function ActivitiesPage() {
           )}
 
           {/* View Switcher (Weekly Board vs Table) */}
-          <div className="glass-card p-1 rounded-2xl border border-white/80 shadow-2xs flex items-center font-urbanist">
+          <div className="rounded-full bg-white/90 dark:bg-slate-800/90 p-1.5 border border-slate-200/60 dark:border-slate-700/60 shadow-xs flex items-center font-urbanist">
             <button
               onClick={() => setViewMode('board')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'board'
-                  ? 'bg-[#292D32] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
               title="Weekly Board View"
             >
               <Kanban className="w-3.5 h-3.5" />
-              <span>Weekly Board</span>
+              <span>{isRTL ? 'اللوحة الأسبوعية' : 'Weekly Board'}</span>
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'list'
-                  ? 'bg-[#292D32] text-white shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
-              title="Timeline List View"
+              title="Audit List View"
             >
-              <TableIcon className="w-3.5 h-3.5" />
-              <span>Audit List</span>
+              <ListFilter className="w-3.5 h-3.5" />
+              <span>{isRTL ? 'جدول المراجعة' : 'List Audit'}</span>
             </button>
           </div>
 
-          {/* Log Activity Button */}
+          {/* Log Activity & Voice Debrief Buttons */}
           {currentRole !== 'viewer' && (
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#292D32] hover:bg-slate-800 text-white rounded-2xl text-xs font-bold shadow-xs transition-all font-urbanist"
-            >
-              <Plus className="w-4 h-4 text-[#8FC2F0]" />
-              <span>Log Activity</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleOpenVoiceForDay('2026-09-17', 'الخميس', 'Thursday')}
+                className="crm-pill-dark flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-xs transition-all font-cairo cursor-pointer"
+                title="تسجيل صوتي ذكي لأنشطة اليوم"
+              >
+                <Mic className="w-4 h-4 text-[#8FC2F0]" />
+                <span>تسجيل صوتي لليوم</span>
+              </button>
+
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="crm-pill-dark flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-xs transition-all font-urbanist cursor-pointer"
+              >
+                <Plus className="w-4 h-4 text-[#8FC2F0]" />
+                <span>{isRTL ? '+ تسجيل نشاط' : 'Log Activity'}</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
 
       {/* Week Date Banner & Workdays Toggle */}
-      <div className="glass-card p-5 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-urbanist">
+      <div className="crm-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-urbanist">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] flex items-center justify-center font-black text-sm">
+          <div className="w-11 h-11 rounded-full bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center font-extrabold text-sm">
             W{38 + weekOffset}
           </div>
           <div>
-            <div className="text-sm font-black tracking-tight text-[#292D32] flex items-center gap-2">
+            <div className="text-sm font-extrabold tracking-tight text-[#292D32] dark:text-white flex items-center gap-2">
               <span>{currentWeekLabel}</span>
               {weekOffset === 0 && (
-                <span className="text-[10px] bg-[#77CE69]/20 text-[#292D32] border border-[#77CE69]/30 px-2.5 py-0.5 rounded-full font-black">
-                  Current Week
+                <span className="text-[10px] bg-[#77CE69]/20 text-[#77CE69] border border-[#77CE69]/30 px-3 py-0.5 rounded-full font-bold">
+                  {isRTL ? 'الأسبوع الحالي' : 'Current Week'}
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Drag and drop any activity card between day columns to reschedule its execution date.
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+              {isRTL 
+                ? 'اسحب وأفلت أي بطاقة نشاط بين أعمدة الأيام لإعادة جدولتها بسهولة.' 
+                : 'Drag and drop any activity card between day columns to reschedule its execution date.'}
             </p>
           </div>
         </div>
@@ -386,27 +417,29 @@ export default function ActivitiesPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowWeekend(!showWeekend)}
-            className={`text-xs px-3.5 py-2 rounded-2xl border font-bold transition-all font-urbanist ${
+            className={`text-xs px-4 py-2 rounded-full border font-bold transition-all font-urbanist cursor-pointer ${
               showWeekend
-                ? 'bg-[#292D32] text-white border-[#292D32]'
-                : 'bg-white/70 text-slate-700 border-slate-200/80 hover:bg-white'
+                ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] border-[#292D32] dark:border-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            {showWeekend ? 'Showing 7 Days (Inc. Friday)' : '6 Workdays (Sat–Thu) • من السبت للخميس'}
+            {showWeekend 
+              ? (isRTL ? 'عرض 7 أيام (شامل الجمعة)' : 'Showing 7 Days (Inc. Friday)') 
+              : (isRTL ? '6 أيام عمل (السبت - الخميس)' : '6 Workdays (Sat–Thu)')}
           </button>
         </div>
       </div>
 
       {/* Filters Bar */}
-      <div className="glass-card p-4 rounded-3xl flex flex-col md:flex-row items-center gap-3 font-urbanist">
+      <div className="crm-card p-4 sm:p-5 flex flex-col md:flex-row items-center gap-3 font-urbanist">
         <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search activities by action, project name, company, contact or notes..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-xs bg-white/70 border border-slate-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:bg-white text-slate-900 font-medium"
+            className="w-full pl-10 pr-4 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 font-medium"
           />
         </div>
 
@@ -415,11 +448,11 @@ export default function ActivitiesPage() {
           <select
             value={selectedChannel}
             onChange={e => setSelectedChannel(e.target.value)}
-            className="px-3.5 py-2 text-xs bg-white/70 border border-slate-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 font-bold cursor-pointer"
+            className="px-4 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
           >
-            <option value="all">All Channels</option>
+            <option value="all" className="dark:bg-[#1C2130] dark:text-white">All Channels</option>
             {ACTIVITY_CHANNELS.map(ch => (
-              <option key={ch.value} value={ch.value}>{ch.label}</option>
+              <option key={ch.value} value={ch.value} className="dark:bg-[#1C2130] dark:text-white">{ch.label}</option>
             ))}
           </select>
 
@@ -427,11 +460,11 @@ export default function ActivitiesPage() {
           <select
             value={selectedOutcome}
             onChange={e => setSelectedOutcome(e.target.value)}
-            className="px-3.5 py-2 text-xs bg-white/70 border border-slate-200/80 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 font-bold cursor-pointer"
+            className="px-4 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
           >
-            <option value="all">All Outcomes</option>
+            <option value="all" className="dark:bg-[#1C2130] dark:text-white">All Outcomes</option>
             {ACTIVITY_OUTCOMES.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value} className="dark:bg-[#1C2130] dark:text-white">{o.label}</option>
             ))}
           </select>
         </div>
@@ -462,19 +495,19 @@ export default function ActivitiesPage() {
                   const actId = e.dataTransfer.getData('text/plain') || draggedActivityId;
                   if (actId) handleMoveDay(actId, day.dateStr);
                 }}
-                className={`rounded-3xl border transition-all flex flex-col min-h-[480px] min-w-0 ${
+                className={`rounded-[28px] border transition-all flex flex-col min-h-[480px] min-w-0 ${
                   isDragTarget 
                     ? 'border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 ring-4 ring-[#8FC2F0]/20 scale-[1.01]' 
                     : day.isToday
-                      ? 'border-[#8FC2F0] ring-2 ring-[#8FC2F0]/20 shadow-xs bg-white/80'
-                      : 'glass-card'
+                      ? 'crm-card ring-2 ring-[#8FC2F0]/60'
+                      : 'crm-card'
                 }`}
               >
                 {/* Column Header */}
                 <div className={`p-4 rounded-t-3xl border-b transition-colors flex items-center justify-between font-urbanist ${
                   day.isToday
-                    ? 'bg-[#292D32] text-white border-[#292D32]'
-                    : 'bg-white/60 text-slate-800 border-slate-200/60'
+                    ? 'bg-[#292D32] dark:bg-[#232A38] text-white border-[#292D32] dark:border-slate-700'
+                    : 'bg-white/40 dark:bg-[#232A38]/50 text-slate-800 dark:text-slate-100 border-slate-200/60 dark:border-slate-700/60'
                 }`}>
                   <div>
                     <div className="flex items-center gap-1.5">
@@ -483,7 +516,7 @@ export default function ActivitiesPage() {
                         ({day.arabic})
                       </span>
                     </div>
-                    <div className={`text-xs font-semibold ${day.isToday ? 'text-slate-300' : 'text-slate-500'}`}>
+                    <div className={`text-xs font-semibold ${day.isToday ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}`}>
                       {day.dateStr}
                     </div>
                   </div>
@@ -492,30 +525,45 @@ export default function ActivitiesPage() {
                     <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${
                       day.isToday 
                         ? 'bg-white/20 text-white' 
-                        : 'bg-white text-slate-700 border border-slate-200/60 shadow-2xs'
+                        : 'bg-white/80 dark:bg-[#141820]/80 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60 shadow-2xs'
                     }`}>
                       {dayActivities.length}
                     </span>
 
                     {currentRole !== 'viewer' && (
-                      <button
-                        onClick={() => handleOpenAddForDay(day.dateStr)}
-                        className={`p-1.5 rounded-xl transition-colors ${
-                          day.isToday 
-                            ? 'hover:bg-white/20 text-white' 
-                            : 'hover:bg-slate-100 text-slate-400 hover:text-slate-600'
-                        }`}
-                        title={`Log Activity on ${day.name}`}
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {/* Voice Daily Log Microphone Button */}
+                        <button
+                          onClick={() => handleOpenVoiceForDay(day.dateStr, day.arabic, day.name)}
+                          className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+                            day.isToday 
+                              ? 'hover:bg-white/25 text-white hover:text-[#8FC2F0]' 
+                              : 'hover:bg-[#8FC2F0]/20 text-slate-400 hover:text-[#292D32] dark:hover:text-[#8FC2F0]'
+                          }`}
+                          title={`تسجيل صوتي ذكي لأنشطة يوم ${day.arabic} (${day.name})`}
+                        >
+                          <Mic className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenAddForDay(day.dateStr)}
+                          className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                            day.isToday 
+                              ? 'hover:bg-white/20 text-white' 
+                              : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                          }`}
+                          title={`Log Activity on ${day.name}`}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
 
                 {/* Drop Indicator */}
                 {isDragTarget && (
-                  <div className="mx-3 mt-3 p-3 rounded-2xl border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 text-[#292D32] text-xs font-bold text-center animate-pulse">
+                  <div className="mx-3 mt-3 p-3 rounded-2xl border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] text-xs font-bold text-center animate-pulse">
                     Drop here to move activity to {day.name}
                   </div>
                 )}
@@ -523,13 +571,13 @@ export default function ActivitiesPage() {
                 {/* Cards Container */}
                 <div className="p-3 space-y-3 flex-1 overflow-y-auto font-urbanist">
                   {dayActivities.length === 0 ? (
-                    <div className="p-8 text-center border-2 border-dashed border-slate-200/80 rounded-2xl my-4 text-slate-400 space-y-2">
-                      <Clock className="w-5 h-5 mx-auto text-slate-300" />
+                    <div className="p-8 text-center border-2 border-dashed border-slate-200/80 dark:border-slate-700/60 rounded-2xl my-4 text-slate-400 dark:text-slate-500 space-y-2">
+                      <Clock className="w-5 h-5 mx-auto text-slate-300 dark:text-slate-600" />
                       <p className="text-xs font-medium">No activity logged</p>
                       {currentRole !== 'viewer' && (
                         <button
                           onClick={() => handleOpenAddForDay(day.dateStr)}
-                          className="text-[11px] text-[#292D32] hover:text-[#8FC2F0] hover:underline font-bold transition-colors"
+                          className="text-[11px] text-[#292D32] dark:text-[#8FC2F0] hover:text-[#8FC2F0] hover:underline font-bold transition-colors"
                         >
                           + Log for {day.short}
                         </button>
@@ -573,7 +621,7 @@ export default function ActivitiesPage() {
                           {/* 1. TOP HEADLINE: WHAT WAS DONE (Full Wrap Text) */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-black text-slate-900 text-xs sm:text-sm leading-snug break-words whitespace-normal">
+                              <h4 className="font-black text-slate-900 dark:text-white text-xs sm:text-sm leading-snug break-words whitespace-normal">
                                 {headline}
                               </h4>
                             </div>
@@ -582,14 +630,14 @@ export default function ActivitiesPage() {
                             <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
                               <button
                                 onClick={() => handleOpenEdit(act)}
-                                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                className="p-1 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-[#8FC2F0] hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded transition-colors"
                                 title="Edit Activity"
                               >
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteActivity(act.id)}
-                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                className="p-1 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors"
                                 title="Delete Activity"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -605,7 +653,7 @@ export default function ActivitiesPage() {
                             </span>
 
                             {act.activity_time && (
-                              <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-[#232A38] px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
                                 <Clock className="w-2.5 h-2.5 text-slate-400" />
                                 <span>{act.activity_time}</span>
                               </span>
@@ -616,30 +664,30 @@ export default function ActivitiesPage() {
 
                           {/* 3. Context layer: Project & Company & Contact & Location (Wrap Text) */}
                           {(act.project_name || act.company_name || act.contact_name || act.location_name) && (
-                            <div className="bg-slate-50/80 rounded-xl p-2.5 border border-slate-200/70 space-y-1.5 text-xs">
+                            <div className="bg-slate-50/80 dark:bg-[#141820]/75 rounded-xl p-2.5 border border-slate-200/70 dark:border-slate-800 space-y-1.5 text-xs">
                               {act.project_name && (
-                                <div className="flex items-start gap-1.5 font-black text-blue-700 break-words whitespace-normal leading-snug">
-                                  <Briefcase className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                                <div className="flex items-start gap-1.5 font-black text-blue-700 dark:text-[#8FC2F0] break-words whitespace-normal leading-snug">
+                                  <Briefcase className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0] shrink-0 mt-0.5" />
                                   <span className="break-words">{act.project_name}</span>
                                 </div>
                               )}
 
                               {act.company_name && (
-                                <div className="flex items-start gap-1.5 font-bold text-slate-800 break-words whitespace-normal leading-snug">
+                                <div className="flex items-start gap-1.5 font-bold text-slate-800 dark:text-slate-200 break-words whitespace-normal leading-snug">
                                   <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                                   <span className="break-words">{act.company_name}</span>
                                 </div>
                               )}
 
                               {act.contact_name && (
-                                <div className="flex items-start gap-1.5 text-slate-700 font-medium break-words whitespace-normal leading-snug">
+                                <div className="flex items-start gap-1.5 text-slate-700 dark:text-slate-300 font-medium break-words whitespace-normal leading-snug">
                                   <User className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
                                   <span className="break-words">{act.contact_name}</span>
                                 </div>
                               )}
 
                               {act.location_name && (
-                                <div className="flex items-start gap-1.5 text-slate-500 text-[11px] font-medium break-words whitespace-normal leading-snug">
+                                <div className="flex items-start gap-1.5 text-slate-500 dark:text-slate-400 text-[11px] font-medium break-words whitespace-normal leading-snug">
                                   <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
                                   <span className="break-words">{act.location_name}</span>
                                 </div>
@@ -649,12 +697,12 @@ export default function ActivitiesPage() {
 
                           {/* 4. Complete Execution Notes with FULL WRAP TEXT (No line-clamp) */}
                           {showDedicatedNotes && (
-                            <div className="bg-white border border-slate-200/90 rounded-xl p-2.5 text-xs text-slate-800 leading-relaxed break-words whitespace-pre-wrap shadow-2xs">
+                            <div className="bg-white/80 dark:bg-[#141820]/80 border border-slate-200/90 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 leading-relaxed break-words whitespace-pre-wrap shadow-2xs">
                               <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
                                 <FileText className="w-3 h-3 text-slate-400 shrink-0" />
                                 <span>Execution Notes &bull; بيان ما تم إنجازه</span>
                               </div>
-                              <div className="text-slate-700 font-medium break-words whitespace-pre-wrap leading-relaxed">
+                              <div className="text-slate-700 dark:text-slate-300 font-medium break-words whitespace-pre-wrap leading-relaxed">
                                 {act.notes}
                               </div>
                             </div>
@@ -662,16 +710,16 @@ export default function ActivitiesPage() {
 
                           {/* 5. Next Action Commitment with FULL WRAP TEXT */}
                           {act.next_action && (
-                            <div className="bg-amber-50/90 border border-amber-200/90 p-2.5 rounded-xl text-xs text-amber-950 break-words whitespace-pre-wrap">
-                              <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 mb-1 flex items-center gap-1.5">
-                                <ArrowRight className="w-3 h-3 text-amber-600 shrink-0" />
+                            <div className="bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200/90 dark:border-amber-900/50 p-2.5 rounded-xl text-xs text-amber-950 dark:text-amber-200 break-words whitespace-pre-wrap">
+                              <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 mb-1 flex items-center gap-1.5">
+                                <ArrowRight className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
                                 <span>Next Step Commitment &bull; الإجراء القادم</span>
                               </div>
-                              <div className="font-bold break-words whitespace-pre-wrap leading-relaxed text-amber-950">
+                              <div className="font-bold break-words whitespace-pre-wrap leading-relaxed text-amber-950 dark:text-amber-200">
                                 {act.next_action}
                               </div>
                               {act.next_follow_up_at && (
-                                <div className="text-[10px] font-extrabold text-amber-800 mt-1.5 flex items-center gap-1">
+                                <div className="text-[10px] font-extrabold text-amber-800 dark:text-amber-400 mt-1.5 flex items-center gap-1">
                                   <Calendar className="w-3 h-3 shrink-0" />
                                   <span>Due Date: {formatDateString(act.next_follow_up_at)}</span>
                                 </div>
@@ -680,14 +728,14 @@ export default function ActivitiesPage() {
                           )}
 
                           {/* 6. Quick Action Shortcuts */}
-                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5 text-xs">
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5 text-xs">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {waLink && (
                                 <a
                                   href={waLink}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white font-bold text-[10px] transition-colors"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white font-bold text-[10px] transition-colors"
                                   title="WhatsApp Contact"
                                 >
                                   <MessageCircle className="w-3 h-3" />
@@ -697,7 +745,7 @@ export default function ActivitiesPage() {
                               {cleanPhone && (
                                 <a
                                   href={`tel:${cleanPhone}`}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white font-bold text-[10px] transition-colors"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white font-bold text-[10px] transition-colors"
                                   title="Call Contact"
                                 >
                                   <Phone className="w-3 h-3" />
@@ -709,7 +757,7 @@ export default function ActivitiesPage() {
                                   href={act.google_maps_url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold text-[10px] transition-colors"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-[10px] transition-colors"
                                   title="View Location on Google Maps"
                                 >
                                   <MapPin className="w-3 h-3 text-rose-500" />
@@ -730,7 +778,7 @@ export default function ActivitiesPage() {
                                   contact_name: act.contact_name || undefined,
                                   activity_id: act.id,
                                 })}
-                                className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white font-bold text-[10px] transition-colors"
+                                className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 hover:bg-purple-600 hover:text-white font-bold text-[10px] transition-colors"
                                 title="Set Reminder"
                               >
                                 <Bell className="w-3 h-3" />
@@ -738,7 +786,7 @@ export default function ActivitiesPage() {
                               </button>
                               <button
                                 onClick={() => handleOpenEdit(act)}
-                                className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-0.5"
+                                className="text-[11px] font-bold text-blue-600 dark:text-[#8FC2F0] hover:text-blue-800 dark:hover:text-blue-300 hover:underline flex items-center gap-0.5"
                               >
                                 <Edit className="w-3 h-3" />
                                 <span>Edit</span>
@@ -760,12 +808,12 @@ export default function ActivitiesPage() {
       {/* VIEW 2: AUDIT LIST / TABLE */}
       {/* ========================================================================= */}
       {viewMode === 'list' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-          <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-            <span className="font-bold text-slate-900 text-sm">
+        <div className="glass-card rounded-2xl overflow-hidden shadow-2xs">
+          <div className="p-4 bg-slate-50/50 dark:bg-[#232A38]/50 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+            <span className="font-bold text-slate-900 dark:text-white text-sm">
               All Filtered Activities ({filteredActivities.length})
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               Chronological Audit Trail
             </span>
           </div>
@@ -773,7 +821,7 @@ export default function ActivitiesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
+                <tr className="bg-slate-50/80 dark:bg-[#232A38]/70 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
                   <th className="py-3 px-4">Date & Time</th>
                   <th className="py-3 px-4">Channel</th>
                   <th className="py-3 px-4">What Was Done / Notes</th>
@@ -784,10 +832,10 @@ export default function ActivitiesPage() {
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filteredActivities.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-400">
+                    <td colSpan={8} className="p-12 text-center text-slate-400 dark:text-slate-500">
                       No activities match the filter criteria.
                     </td>
                   </tr>
@@ -795,8 +843,8 @@ export default function ActivitiesPage() {
                   filteredActivities.map(act => {
                     const chConfig = getChannelConfig(act.channel);
                     return (
-                      <tr key={act.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-slate-800 whitespace-nowrap">
+                      <tr key={act.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                           <div>{formatDateString(act.activity_date)}</div>
                           {act.activity_time && (
                             <span className="text-[10px] text-slate-400 font-normal">{act.activity_time}</span>
@@ -810,15 +858,15 @@ export default function ActivitiesPage() {
                         </td>
                         <td className="py-3 px-4 max-w-sm">
                           {act.visit_purpose && (
-                            <div className="font-bold text-slate-900 break-words whitespace-normal">{act.visit_purpose}</div>
+                            <div className="font-bold text-slate-900 dark:text-white break-words whitespace-normal">{act.visit_purpose}</div>
                           )}
-                          <p className="text-slate-600 break-words whitespace-pre-wrap leading-relaxed mt-0.5">{act.notes || '-'}</p>
+                          <p className="text-slate-600 dark:text-slate-300 break-words whitespace-pre-wrap leading-relaxed mt-0.5">{act.notes || '-'}</p>
                         </td>
                         <td className="py-3 px-4 max-w-xs">
-                          <div className="font-bold text-blue-700 break-words whitespace-normal">{act.project_name || '-'}</div>
-                          <div className="text-slate-500 text-[11px] break-words whitespace-normal">{act.company_name || '-'}</div>
+                          <div className="font-bold text-blue-700 dark:text-[#8FC2F0] break-words whitespace-normal">{act.project_name || '-'}</div>
+                          <div className="text-slate-500 dark:text-slate-400 text-[11px] break-words whitespace-normal">{act.company_name || '-'}</div>
                         </td>
-                        <td className="py-3 px-4 font-medium text-slate-700 break-words whitespace-normal">
+                        <td className="py-3 px-4 font-medium text-slate-700 dark:text-slate-300 break-words whitespace-normal">
                           {act.contact_name || '-'}
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
@@ -826,7 +874,7 @@ export default function ActivitiesPage() {
                         </td>
                         <td className="py-3 px-4 max-w-xs">
                           {act.next_action ? (
-                            <div className="text-amber-900 bg-amber-50 px-2 py-1 rounded border border-amber-200 text-[11px] break-words whitespace-pre-wrap leading-relaxed">
+                            <div className="text-amber-900 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded border border-amber-200 dark:border-amber-900/50 text-[11px] break-words whitespace-pre-wrap leading-relaxed">
                               {act.next_action}
                             </div>
                           ) : (
@@ -837,14 +885,14 @@ export default function ActivitiesPage() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => handleOpenEdit(act)}
-                              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-[#8FC2F0] hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors"
                               title="Edit"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteActivity(act.id)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
                               title="Delete"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -873,6 +921,18 @@ export default function ActivitiesPage() {
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         activity={editingActivity}
+      />
+
+      {/* Voice Daily Activity Logger Modal */}
+      <VoiceActivityModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        targetDate={selectedDateForVoice}
+        dayLabel={selectedDayLabelForVoice}
+        onSaveActivities={(savedDrafts) => {
+          setToastMessage(`تم تسجيل وحفظ ${savedDrafts.length} أنشطة بنجاح!`);
+          setTimeout(() => setToastMessage(null), 4000);
+        }}
       />
 
     </div>

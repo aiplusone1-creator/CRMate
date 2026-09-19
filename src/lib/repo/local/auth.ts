@@ -1,6 +1,6 @@
 import { User, AuthSession, AuthError } from '../../types/user';
 import { SEEDED_USERS } from '../../constants/users';
-import { verifyPassword } from '../../utils/hash';
+import { hashPassword, verifyPassword } from '../../utils/hash';
 
 export const STORAGE_KEY_SESSION = 'al_mespar_session';
 export const STORAGE_KEY_USERS = 'al_mespar_users';
@@ -101,16 +101,16 @@ export class LocalAuthRepository {
     const user = this.getUserByEmail(email);
 
     if (!user) {
-      throw new AuthError('INVALID_EMAIL', 'البريد الإلكتروني غير مسجل في النظام / Email not registered');
+      throw new AuthError('INVALID_EMAIL', 'Email not registered in system');
     }
 
     if (!user.is_active) {
-      throw new AuthError('INACTIVE_USER', 'هذا الحساب معطل، يرجى التواصل مع الإدارة / Account is deactivated');
+      throw new AuthError('INACTIVE_USER', 'Account is deactivated, please contact administrator');
     }
 
     const isValid = await verifyPassword(password, user.password_hash);
     if (!isValid) {
-      throw new AuthError('INVALID_PASSWORD', 'كلمة المرور غير صحيحة / Incorrect password');
+      throw new AuthError('INVALID_PASSWORD', 'Incorrect password');
     }
 
     // Generate random token
@@ -205,6 +205,89 @@ export class LocalAuthRepository {
     }
 
     return user;
+  }
+
+  /**
+   * Change user password after verifying old password
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<boolean> {
+    const users = this.getUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex === -1) {
+      throw new AuthError('USER_NOT_FOUND', 'User not found');
+    }
+
+    const user = users[userIndex];
+    const isValid = await verifyPassword(currentPassword, user.password_hash);
+    if (!isValid) {
+      throw new AuthError('INVALID_PASSWORD', 'Current password is incorrect');
+    }
+
+    const newHash = await hashPassword(newPassword);
+    users[userIndex] = {
+      ...user,
+      password_hash: newHash
+    };
+    this.saveUsers(users);
+    return true;
+  }
+
+  /**
+   * Admin-level reset password (does not require old password)
+   */
+  async adminResetPassword(userId: string, newPassword: string): Promise<boolean> {
+    const users = this.getUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex === -1) {
+      throw new AuthError('USER_NOT_FOUND', 'User not found');
+    }
+
+    const newHash = await hashPassword(newPassword);
+    users[userIndex] = {
+      ...users[userIndex],
+      password_hash: newHash
+    };
+    this.saveUsers(users);
+    return true;
+  }
+
+  /**
+   * Update profile fields for a user
+   */
+  updateProfile(userId: string, updates: Partial<Pick<User, 'name' | 'name_ar' | 'phone' | 'title' | 'territory' | 'avatar_url'>>): User {
+    const users = this.getUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex === -1) {
+      throw new AuthError('USER_NOT_FOUND', 'المستخدم غير موجود / User not found');
+    }
+
+    const updatedUser: User = {
+      ...users[userIndex],
+      ...updates
+    };
+    users[userIndex] = updatedUser;
+    this.saveUsers(users);
+
+    // If currently logged in, update session cache as well
+    const session = this.getSession();
+    if (session && session.user_id === userId && typeof window !== 'undefined') {
+      const cached = localStorage.getItem('crmate_auth_user');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          localStorage.setItem('crmate_auth_user', JSON.stringify({
+            ...parsed,
+            full_name: updatedUser.name,
+            name: updatedUser.name,
+            avatar_url: updatedUser.avatar_url
+          }));
+        } catch (e) {
+          // ignore cache sync error
+        }
+      }
+    }
+
+    return updatedUser;
   }
 }
 

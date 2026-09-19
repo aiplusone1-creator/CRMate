@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Bell, 
@@ -25,12 +25,20 @@ import { formatDateString, formatCurrencySAR } from '@/lib/utils';
 import { GlobalSearch } from './global-search';
 import { SEEDED_USERS } from '@/lib/constants/users';
 import { authRepository } from '@/lib/repo/local/auth';
+import { CRMateHorizontalLogo } from '@/components/brand/crmate-logo';
+import { useLanguage } from '@/lib/i18n/language-context';
+import { LanguageToggle } from '@/components/common/language-toggle';
+import { ThemeToggle } from '@/components/common/theme-toggle';
 
 export function Header() {
   const router = useRouter();
+  const { language, t } = useLanguage();
+  const isRTL = language === 'ar';
+
   const { 
     currentUser, 
     teamMembers,
+    projects,
     selectedSalesFilter,
     setSelectedSalesFilter,
     switchUser,
@@ -44,6 +52,11 @@ export function Header() {
     markAllNotificationsRead,
     openRequestDetail
   } = useCRM();
+
+  // Filter strictly to actual sales representatives who own pipeline deals (excludes managers, admins, viewers)
+  const salesReps = useMemo(() => {
+    return teamMembers.filter(m => m.role === 'sales_engineer' || (m.role as string) === 'sales_rep');
+  }, [teamMembers]);
 
   const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -100,11 +113,11 @@ export function Header() {
   const badgeCount = dueReminders.length + unreadNotifs.length;
   const allVisible = [...dueReminders, ...upcomingReminders];
 
-  // Selected filter label
-  const selectedMember = teamMembers.find(m => m.id === selectedSalesFilter);
+  // Selected filter label (resolved from salesReps)
+  const selectedMember = salesReps.find(m => m.id === selectedSalesFilter);
   const filterLabel = selectedSalesFilter === 'all' 
-    ? 'All Sales Team (الجميع)' 
-    : selectedMember ? `${selectedMember.full_name} (${selectedMember.territory || 'مندوب'})` : 'Filter Rep';
+    ? t('allTeam') 
+    : selectedMember ? `${selectedMember.full_name} (${selectedMember.territory || ''})` : t('filterByRep');
 
   const handleLogout = () => {
     logout();
@@ -115,38 +128,38 @@ export function Header() {
     switch (role) {
       case 'admin':
         return {
-          label: 'Admin',
-          labelAr: 'مدير النظام',
-          badgeClass: 'bg-purple-100 text-purple-700 border-purple-200/80',
+          label: isRTL ? 'مدير النظام' : 'Admin',
+          badgeClass: 'bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border-purple-200/80 dark:border-purple-800/50',
           dotColor: 'bg-purple-500'
         };
       case 'sales_manager':
         return {
-          label: 'Sales Manager',
-          labelAr: 'مدير مبيعات',
-          badgeClass: 'bg-amber-100 text-amber-800 border-amber-200/80',
+          label: isRTL ? 'مدير مبيعات' : 'Sales Manager',
+          badgeClass: 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/50',
           dotColor: 'bg-amber-500'
         };
       case 'sales_engineer':
         return {
-          label: 'Sales Engineer',
-          labelAr: 'مهندس مبيعات',
-          badgeClass: 'bg-sky-100 text-sky-800 border-sky-200/80',
-          dotColor: 'bg-[#8FC2F0]'
+          label: isRTL ? 'مهندس مبيعات' : 'Sales Engineer',
+          badgeClass: 'bg-sky-100 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 border-sky-200/80 dark:border-sky-800/50',
+          dotColor: 'bg-sky-500'
         };
       case 'estimator':
         return {
-          label: 'Estimator',
-          labelAr: 'مهندس تسعير',
-          badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200/80',
-          dotColor: 'bg-[#77CE69]'
+          label: isRTL ? 'مهندس تسعير' : 'Estimator',
+          badgeClass: 'bg-teal-100 dark:bg-teal-950/70 text-teal-700 dark:text-teal-300 border-teal-200/80 dark:border-teal-800/50',
+          dotColor: 'bg-teal-500'
         };
       case 'viewer':
+        return {
+          label: isRTL ? 'مشاهد' : 'Viewer',
+          badgeClass: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+          dotColor: 'bg-slate-400'
+        };
       default:
         return {
-          label: 'Viewer',
-          labelAr: 'مشاهد',
-          badgeClass: 'bg-slate-100 text-slate-700 border-slate-200/80',
+          label: role,
+          badgeClass: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700',
           dotColor: 'bg-slate-400'
         };
     }
@@ -155,38 +168,40 @@ export function Header() {
   const roleBadge = getRoleBadge(currentUser.role);
 
   return (
-    <header className="h-16 border-b border-white/60 bg-white/80 backdrop-blur-xl px-6 md:px-8 flex items-center justify-between sticky top-0 z-20 shadow-xs">
-      {/* Left: Official Horizontal Brand Wordmark + Working Global Search */}
-      <div className="flex items-center gap-4 min-w-0">
-        <span className="font-urbanist font-black text-xl tracking-tight text-[#292D32] select-none shrink-0">
-          CRM<span className="text-[#8FC2F0]">ate</span><span className="text-[#77CE69] text-2xl font-black ml-0.5 leading-none">.</span>
-        </span>
+    <header className="h-16 bg-white/80 dark:bg-[#1E2328]/80 backdrop-blur-md border-b border-slate-200/90 dark:border-[#8FC2F0]/10 sticky top-0 z-40 px-4 sm:px-6 flex items-center justify-between transition-colors shadow-2xs font-urbanist">
+      
+      {/* Left: Mobile Menu Toggle / Brand + Search */}
+      <div className="flex items-center gap-3 sm:gap-4 flex-1 max-w-xl">
+        {/* CRMate Compact Horizontal Brand Lockup */}
+        <CRMateHorizontalLogo symbolSize={28} showSubtitle={false} className="shrink-0" />
 
-        {/* Global Interactive Live Search Bar */}
-        <GlobalSearch />
+        {/* Global Instant Search Bar */}
+        <div className="flex-1 max-w-md hidden sm:block">
+          <GlobalSearch />
+        </div>
       </div>
 
-      {/* Right Controls */}
+      {/* Right Controls: Manager Scope Pill, Language, Theme, Notifs, Profile */}
       <div className="flex items-center gap-3 sm:gap-4">
         {/* Sales Manager Filter Pill (Visible to Sales Manager & Admin) */}
         {isManagerOrAdmin && (
           <div className="relative" ref={teamFilterRef}>
             <button
               onClick={() => setIsTeamMenuOpen(!isTeamMenuOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-[#292D32] bg-white hover:bg-slate-50 rounded-2xl border border-slate-200/90 transition-all shadow-xs font-urbanist cursor-pointer"
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-[#292D32] dark:text-slate-200 bg-white dark:bg-[#22272E] hover:bg-slate-50 dark:hover:bg-[#292D32]/70 rounded-2xl border border-slate-200/90 dark:border-[#8FC2F0]/15 transition-all shadow-xs font-urbanist cursor-pointer"
               title="فلترة خط المبيعات حسب المندوب"
             >
               <Users className="w-3.5 h-3.5 text-[#8FC2F0]" />
-              <span className="hidden md:inline text-slate-500 font-medium">Viewing:</span>
+              <span className="hidden md:inline text-slate-500 dark:text-slate-400 font-medium">{isRTL ? 'المعروض:' : 'Viewing:'}</span>
               <span className="max-w-[140px] truncate">{filterLabel}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
             </button>
 
             {isTeamMenuOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider font-urbanist flex items-center justify-between">
-                  <span>Sales Rep Scope (نطاق المبيعات)</span>
-                  <span className="text-purple-600 font-black text-[9px]">MANAGER</span>
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#1E2328] border border-slate-200 dark:border-[#8FC2F0]/12 rounded-2xl shadow-xl dark:shadow-[0_16px_40px_rgba(0,0,0,0.5)] py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-urbanist flex items-center justify-between">
+                  <span>{t('salesRepScope')}</span>
+                  <span className="text-purple-600 dark:text-purple-400 font-black text-[9px]">MANAGER</span>
                 </div>
 
                 <div className="p-1 space-y-0.5">
@@ -196,44 +211,57 @@ export function Header() {
                       setIsTeamMenuOpen(false);
                     }}
                     className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                      selectedSalesFilter === 'all' ? 'bg-[#EFF3F8] text-[#292D32] font-bold' : 'text-slate-600 hover:bg-slate-50'
+                      selectedSalesFilter === 'all'
+                        ? 'bg-[#EFF3F8] dark:bg-[#8FC2F0]/10 text-[#292D32] dark:text-[#8FC2F0] font-bold'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#292D32]/40'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <Users className="w-3.5 h-3.5 text-slate-500" />
+                      <Users className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                       <div>
-                        <div>All Sales Team (الجميع)</div>
-                        <div className="text-[10px] text-slate-400 font-normal">Team Overview &bull; All Deals</div>
+                        <div>{t('allTeam')}</div>
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal">
+                          {isRTL ? `نظرة عامة على الفريق • كافة الصفقات (${projects.length})` : `Team Overview • All Deals (${projects.length})`}
+                        </div>
                       </div>
                     </div>
-                    {selectedSalesFilter === 'all' && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                    {selectedSalesFilter === 'all' && <Check className="w-3.5 h-3.5 text-[#8FC2F0]" />}
                   </button>
 
-                  {teamMembers.map(m => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        setSelectedSalesFilter(m.id);
-                        setIsTeamMenuOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
-                        selectedSalesFilter === m.id ? 'bg-[#EFF3F8] text-[#292D32] font-bold' : 'text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded-md bg-[#292D32] text-white text-[10px] font-bold flex items-center justify-center">
-                          {m.avatar_initials}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate">{m.full_name}</div>
-                          <div className="text-[10px] text-slate-400 font-normal truncate">
-                            {m.territory || 'Sales Territory'} {m.id === 'u1' ? '(34 deals)' : '(0 deals)'}
+                  {salesReps.map(m => {
+                    const repDealCount = projects.filter(p => p.owner_id === m.id).length;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => {
+                          setSelectedSalesFilter(m.id);
+                          setIsTeamMenuOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-colors cursor-pointer ${
+                          selectedSalesFilter === m.id
+                            ? 'bg-[#EFF3F8] dark:bg-[#8FC2F0]/10 text-[#292D32] dark:text-[#8FC2F0] font-bold'
+                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#292D32]/40'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-5 h-5 rounded-md bg-[#292D32] dark:bg-slate-700 text-white text-[10px] font-bold flex items-center justify-center font-urbanist shrink-0 overflow-hidden">
+                            {m.avatar_url ? (
+                              <img src={m.avatar_url} alt={m.full_name} className="w-full h-full object-cover" />
+                            ) : (
+                              m.avatar_initials
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold text-[#292D32] dark:text-slate-100">{m.full_name}</div>
+                            <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal truncate">
+                              {m.territory || (isRTL ? 'منطقة المبيعات' : 'Sales Territory')} &bull; {repDealCount} {isRTL ? 'مشاريع' : 'deals'}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      {selectedSalesFilter === m.id && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                    </button>
-                  ))}
+                        {selectedSalesFilter === m.id && <Check className="w-3.5 h-3.5 text-[#8FC2F0]" />}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -295,11 +323,17 @@ export function Header() {
           </div>
         )}
 
+        {/* Day & Night Mode Switcher */}
+        <ThemeToggle />
+
+        {/* Language Switcher */}
+        <LanguageToggle />
+
         {/* Notification Bell with dynamic badge & popover */}
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => setIsNotifOpen(!isNotifOpen)}
-            className="relative p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+            className="relative p-2 text-slate-500 dark:text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#292D32]/60 rounded-full transition-colors cursor-pointer"
           >
             <Bell className="w-5 h-5" />
             {badgeCount > 0 && (
@@ -310,12 +344,12 @@ export function Header() {
           </button>
 
           {isNotifOpen && (
-            <div className="absolute right-0 mt-2 w-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+            <div className="absolute right-0 mt-2 w-96 bg-white dark:bg-[#1E2328] border border-slate-200 dark:border-[#8FC2F0]/12 rounded-2xl shadow-2xl dark:shadow-[0_20px_50px_rgba(0,0,0,0.55)] z-50 animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
               {/* Popover Header with Tab Switcher */}
-              <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3">
+              <div className="bg-gradient-to-r from-[#292D32] via-[#1E2328] to-[#292D32] text-white p-3">
                 <div className="flex items-center justify-between pb-2.5">
                   <div className="flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-amber-300" />
+                    <Bell className="w-4 h-4 text-[#8FC2F0]" />
                     <span className="font-bold text-sm">Notifications &amp; Alerts</span>
                   </div>
                   {notifTab === 'reminders' && (
@@ -372,12 +406,12 @@ export function Header() {
 
               {/* Tab 1: Approval System Notifications */}
               {notifTab === 'requests' && (
-                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-[#292D32]/60">
                   {myNotifications.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400">
-                      <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
+                    <div className="p-8 text-center text-slate-400 dark:text-slate-500">
+                      <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-[#77CE69]" />
                       <p className="text-xs font-semibold">No notifications right now</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">Approval requests and updates will appear here</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Approval requests and updates will appear here</p>
                     </div>
                   ) : (
                     myNotifications.map(n => (
@@ -391,22 +425,24 @@ export function Header() {
                           }
                         }}
                         className={`p-3 transition-colors cursor-pointer flex items-start gap-3 ${
-                          n.is_read ? 'bg-white hover:bg-slate-50' : 'bg-blue-50/50 hover:bg-blue-50'
+                          n.is_read
+                            ? 'bg-white dark:bg-transparent hover:bg-slate-50 dark:hover:bg-[#292D32]/30'
+                            : 'bg-[#8FC2F0]/06 dark:bg-[#8FC2F0]/05 hover:bg-[#8FC2F0]/12 dark:hover:bg-[#8FC2F0]/08'
                         }`}
                       >
-                        <div className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <div className="w-7 h-7 rounded-lg bg-[#8FC2F0]/15 text-[#8FC2F0] flex items-center justify-center shrink-0 mt-0.5">
                           <Bell className="w-3.5 h-3.5" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-bold text-slate-800 truncate">{n.title}</span>
-                            <span className="text-[9px] text-slate-400 shrink-0 font-mono">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{n.title}</span>
+                            <span className="text-[9px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
                               {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-2">{n.body}</p>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-2">{n.body}</p>
                         </div>
-                        {!n.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-1.5" />}
+                        {!n.is_read && <span className="w-2 h-2 rounded-full bg-[#8FC2F0] shrink-0 mt-1.5" />}
                       </div>
                     ))
                   )}
@@ -415,26 +451,28 @@ export function Header() {
 
               {/* Tab 2: Reminders List */}
               {notifTab === 'reminders' && (
-                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-[#292D32]/60">
                   {allVisible.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400">
-                      <Clock className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                    <div className="p-8 text-center text-slate-400 dark:text-slate-500">
+                      <Clock className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                       <p className="text-xs font-semibold">No pending reminders</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">You are completely caught up!</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">You are completely caught up!</p>
                     </div>
                   ) : (
                     allVisible.map(r => {
                       const isOverdue = dueReminders.some(d => d.id === r.id);
                       return (
-                        <div 
-                          key={r.id} 
+                        <div
+                          key={r.id}
                           className={`p-3 transition-colors flex items-start gap-3 ${
-                            isOverdue ? 'bg-rose-50/50 hover:bg-rose-50' : 'hover:bg-slate-50'
+                            isOverdue
+                              ? 'bg-rose-50/50 dark:bg-rose-900/10 hover:bg-rose-50 dark:hover:bg-rose-900/15'
+                              : 'hover:bg-slate-50 dark:hover:bg-[#292D32]/30'
                           }`}
                         >
                           <button
                             onClick={() => toggleReminderCompleted(r.id)}
-                            className="mt-0.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer shrink-0"
+                            className="mt-0.5 text-slate-400 dark:text-slate-500 hover:text-[#77CE69] transition-colors cursor-pointer shrink-0"
                             title="Mark completed"
                           >
                             <CheckCircle2 className="w-4 h-4" />
@@ -443,19 +481,19 @@ export function Header() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5">
                               {isOverdue && <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />}
-                              <span className="text-xs font-bold text-slate-800 truncate">{r.title}</span>
+                              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{r.title}</span>
                             </div>
-                            <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-2">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
                               <span>{formatDateString(r.reminder_date)} at {r.reminder_time}</span>
                               {r.project_name && (
-                                <span className="text-indigo-600 font-medium truncate">&bull; {r.project_name}</span>
+                                <span className="text-[#8FC2F0] font-medium truncate">&bull; {r.project_name}</span>
                               )}
                             </div>
                           </div>
 
                           <button
                             onClick={() => deleteReminder(r.id)}
-                            className="text-slate-300 hover:text-rose-500 transition-colors cursor-pointer p-1"
+                            className="text-slate-300 dark:text-slate-600 hover:text-rose-500 transition-colors cursor-pointer p-1"
                             title="Delete"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -474,19 +512,23 @@ export function Header() {
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-            className="flex items-center gap-2.5 pl-2 border-l border-slate-200/80 hover:opacity-90 transition-opacity text-left cursor-pointer"
+            className="flex items-center gap-2.5 pl-2 border-l border-slate-200/80 dark:border-[#8FC2F0]/10 hover:opacity-90 transition-opacity text-left cursor-pointer"
           >
             <div className="relative">
-              <div className="w-9 h-9 rounded-xl bg-[#292D32] text-white flex items-center justify-center font-bold text-xs shadow-sm ring-2 ring-white font-urbanist">
-                {currentUser.avatar_initials || 'EM'}
+              <div className="w-9 h-9 rounded-xl bg-[#292D32] text-white flex items-center justify-center font-bold text-xs shadow-sm ring-2 ring-white dark:ring-[#1A1E24] font-urbanist overflow-hidden">
+                {currentUser.avatar_url ? (
+                  <img src={currentUser.avatar_url} alt={currentUser.full_name} className="w-full h-full object-cover" />
+                ) : (
+                  currentUser.avatar_initials || 'EM'
+                )}
               </div>
-              <span className="w-2.5 h-2.5 rounded-full bg-[#77CE69] border-2 border-white absolute -bottom-0.5 -right-0.5" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#77CE69] border-2 border-white dark:border-[#1A1E24] absolute -bottom-0.5 -right-0.5" />
             </div>
 
             <div className="text-left leading-tight hidden lg:block max-w-[170px]">
-              <div className="text-xs font-bold text-[#292D32] flex items-center gap-1.5 font-urbanist truncate">
+              <div className="text-xs font-bold text-[#292D32] dark:text-slate-100 flex items-center gap-1.5 font-urbanist truncate">
                 <span className="truncate">{currentUser.full_name}</span>
-                <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
+                <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className={`px-1.5 py-0.2 text-[9px] font-extrabold rounded-md border ${roleBadge.badgeClass}`}>
@@ -497,18 +539,22 @@ export function Header() {
           </button>
 
           {isProfileMenuOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200/90 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-[#1E2328] border border-slate-200/90 dark:border-[#8FC2F0]/12 rounded-2xl shadow-2xl dark:shadow-[0_20px_50px_rgba(0,0,0,0.55)] py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
               {/* Profile Card Summary */}
-              <div className="px-4 py-3 border-b border-slate-100">
+              <div className="px-4 py-3 border-b border-slate-100 dark:border-[#292D32]/60">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#292D32] text-white flex items-center justify-center font-bold text-sm shadow-xs font-urbanist">
-                    {currentUser.avatar_initials}
+                  <div className="w-10 h-10 rounded-xl bg-[#292D32] text-white flex items-center justify-center font-bold text-sm shadow-xs font-urbanist overflow-hidden">
+                    {currentUser.avatar_url ? (
+                      <img src={currentUser.avatar_url} alt={currentUser.full_name} className="w-full h-full object-cover" />
+                    ) : (
+                      currentUser.avatar_initials
+                    )}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-[#292D32] truncate font-urbanist">
+                    <div className="text-xs font-bold text-[#292D32] dark:text-slate-100 truncate font-urbanist">
                       {currentUser.full_name}
                     </div>
-                    <div className="text-[11px] text-slate-500 truncate">
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                       {currentUser.email}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
@@ -519,18 +565,18 @@ export function Header() {
                   </div>
                 </div>
 
-                <div className="text-[10px] font-semibold text-slate-400 flex items-center gap-1 mt-2.5">
+                <div className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-2.5">
                   <MapPin className="w-2.5 h-2.5 text-[#8FC2F0]" />
                   <span>{currentUser.territory || 'Western Region'}</span>
                 </div>
 
                 {currentUser.monthly_target_sar && (
-                  <div className="mt-3 p-2 bg-[#EFF3F8] rounded-xl flex items-center justify-between text-[11px]">
-                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                  <div className="mt-3 p-2 bg-[#EFF3F8] dark:bg-[#292D32]/40 rounded-xl flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
                       <TrendingUp className="w-3 h-3 text-[#77CE69]" />
-                      Monthly Target
+                      {t('monthlyTarget')}
                     </span>
-                    <span className="font-bold text-[#292D32] font-mono">
+                    <span className="font-bold text-[#292D32] dark:text-slate-100 font-mono">
                       {formatCurrencySAR(currentUser.monthly_target_sar)}
                     </span>
                   </div>
@@ -541,10 +587,10 @@ export function Header() {
               <div className="p-1.5">
                 <button
                   onClick={handleLogout}
-                  className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                  className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/15 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>تسجيل الخروج (Log Out)</span>
+                  <span>{t('logout')}</span>
                 </button>
               </div>
             </div>

@@ -65,20 +65,21 @@ export const OPPORTUNITY_TYPES: { value: OpportunityType; label: string }[] = [
 export const PIPELINE_STAGES: { 
   value: PipelineStage; 
   label: string; 
+  labelAr: string; 
   color: string; 
   badgeClass: string;
 }[] = [
-  { value: 'lead', label: 'Lead', color: '#94a3b8', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200' },
-  { value: 'qualification', label: 'Qualification', color: '#64748b', badgeClass: 'bg-slate-100 text-slate-800 border-slate-200' },
-  { value: 'rfq_processing', label: 'RFQ Processing', color: '#0284c7', badgeClass: 'bg-sky-50 text-sky-700 border-sky-200' },
-  { value: 'pricing', label: 'Pricing', color: '#0d9488', badgeClass: 'bg-teal-50 text-teal-700 border-teal-200' },
-  { value: 'quotation_sent', label: 'Quotation Sent', color: '#2563eb', badgeClass: 'bg-blue-50 text-blue-700 border-blue-200' },
-  { value: 'technical_submission', label: 'Technical Submission', color: '#7c3aed', badgeClass: 'bg-purple-50 text-purple-700 border-purple-200' },
-  { value: 'technically_approved', label: 'Technically Approved', color: '#9333ea', badgeClass: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200' },
-  { value: 'negotiation', label: 'Negotiation', color: '#d97706', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
-  { value: 'won', label: 'Won', color: '#16a34a', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  { value: 'lost', label: 'Lost', color: '#dc2626', badgeClass: 'bg-rose-50 text-rose-700 border-rose-200' },
-  { value: 'hold', label: 'Hold', color: '#6b7280', badgeClass: 'bg-gray-100 text-gray-700 border-gray-200' },
+  { value: 'lead', label: 'Lead', labelAr: 'فرصة جديدة', color: '#94a3b8', badgeClass: 'bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700' },
+  { value: 'qualification', label: 'Qualification', labelAr: 'تأهيل المشروع', color: '#64748b', badgeClass: 'bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700' },
+  { value: 'rfq_processing', label: 'RFQ Processing', labelAr: 'دراسة المواصفات', color: '#0284c7', badgeClass: 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/50' },
+  { value: 'pricing', label: 'Pricing', labelAr: 'التسعير والتكلفة', color: '#0d9488', badgeClass: 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800/50' },
+  { value: 'quotation_sent', label: 'Quotation Sent', labelAr: 'عرض سعر صادر', color: '#2563eb', badgeClass: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/50' },
+  { value: 'technical_submission', label: 'Technical Submission', labelAr: 'تقديم فني', color: '#7c3aed', badgeClass: 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/50' },
+  { value: 'technically_approved', label: 'Technically Approved', labelAr: 'معتمد فنياً', color: '#9333ea', badgeClass: 'bg-fuchsia-50 dark:bg-fuchsia-950/60 text-fuchsia-700 dark:text-fuchsia-300 border-fuchsia-200 dark:border-fuchsia-800/50' },
+  { value: 'negotiation', label: 'Negotiation', labelAr: 'تفاوض تجاري', color: '#d97706', badgeClass: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50' },
+  { value: 'won', label: 'Won', labelAr: 'صفقة رابحة', color: '#16a34a', badgeClass: 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50' },
+  { value: 'lost', label: 'Lost', labelAr: 'صفقة خاسرة', color: '#dc2626', badgeClass: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/50' },
+  { value: 'hold', label: 'Hold', labelAr: 'معلق', color: '#6b7280', badgeClass: 'bg-gray-100 dark:bg-gray-800/80 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700' },
 ];
 
 export const COMMERCIAL_VALUE_STAGES: PipelineStage[] = [
@@ -97,10 +98,10 @@ export function canEditCommercialValue(stage: PipelineStage | string | undefined
 }
 
 export const PROJECT_PRIORITIES: { value: ProjectPriority; label: string; badgeClass: string }[] = [
-  { value: 'low', label: 'Low', badgeClass: 'bg-slate-100 text-slate-700' },
-  { value: 'medium', label: 'Medium', badgeClass: 'bg-blue-50 text-blue-700' },
-  { value: 'high', label: 'High', badgeClass: 'bg-amber-50 text-amber-700' },
-  { value: 'urgent', label: 'Urgent', badgeClass: 'bg-rose-50 text-rose-700 font-semibold' },
+  { value: 'low', label: 'Low', badgeClass: 'bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300' },
+  { value: 'medium', label: 'Medium', badgeClass: 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300' },
+  { value: 'high', label: 'High', badgeClass: 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300' },
+  { value: 'urgent', label: 'Urgent', badgeClass: 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 font-semibold' },
 ];
 
 export const ACTIVITY_CHANNELS: { value: ActivityChannel; label: string }[] = [

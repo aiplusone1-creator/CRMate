@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { authRepository } from '@/lib/repo/local/auth';
-import { WelcomeOverlay } from './welcome-overlay';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -64,7 +63,6 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      {pathname !== '/login' && <WelcomeOverlay />}
     </>
   );
 }

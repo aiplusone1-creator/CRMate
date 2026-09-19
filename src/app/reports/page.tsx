@@ -29,8 +29,10 @@ import { useCRM } from '@/lib/store/crm-context';
 import { formatCurrencySAR, formatDateString } from '@/lib/utils';
 import { PIPELINE_STAGES } from '@/lib/constants';
 import { scopeProjects, scopeActivities, scopePlannedActivities } from '@/lib/logic/scope';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 export default function ReportsPage() {
+  const { t, isRTL } = useLanguage();
   const { 
     projects, 
     activities, 
@@ -223,83 +225,89 @@ export default function ReportsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 glass-card p-6 rounded-3xl font-urbanist">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8FC2F0]/20 text-[#292D32] border border-[#8FC2F0]/30 flex items-center gap-1">
-              <BarChart3 className="w-3 h-3 text-[#292D32]" />
-              <span>Analytical Intelligence</span>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
+              <BarChart3 className="w-3 h-3 text-[#292D32] dark:text-[#8FC2F0]" />
+              <span>{isRTL ? 'التحليلات والذكاء البيعي' : 'Analytical Intelligence'}</span>
             </span>
-            <span className="text-xs text-slate-400 font-bold">Western Region &bull; Saudi Arabia</span>
+            <span className="text-xs text-slate-400 font-bold">
+              {isRTL ? 'المنطقة الغربية • المملكة العربية السعودية' : 'Western Region • Saudi Arabia'}
+            </span>
           </div>
 
-          <h1 className="text-2xl font-black text-[#292D32] tracking-tight">
-            Sales Performance &amp; Pipeline Report
+          <h1 className="text-2xl font-black text-[#292D32] dark:text-white tracking-tight">
+            {isRTL ? 'تقرير الأداء ومسار المبيعات التنفيذي' : 'Sales Performance & Pipeline Report'}
           </h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
-            Executive audit of touchpoints, planned vs actual variance, pipeline distribution, and deals in motion.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+            {isRTL 
+              ? 'مراجعة تنفيذية لنقاط التواصل، التباين بين المخطط والفعلي، توزيع المراحل والصفقات النشطة.' 
+              : 'Executive audit of touchpoints, planned vs actual variance, pipeline distribution, and deals in motion.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 self-start md:self-auto flex-wrap">
           {/* Period selector */}
-          <div className="flex items-center bg-white/60 p-1 rounded-2xl border border-slate-200/80 text-xs">
+          <div className="flex items-center bg-white/60 dark:bg-[#1C2130] p-1 rounded-2xl border border-slate-200/80 dark:border-[#8FC2F0]/15 text-xs">
             <button
               onClick={() => setPeriod('this_week')}
               className={`px-3.5 py-1.5 rounded-xl font-bold transition-all ${
-                period === 'this_week' ? 'bg-[#292D32] text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                period === 'this_week' ? 'bg-[#292D32] dark:bg-[#8FC2F0] text-white dark:text-[#141820] shadow-2xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              This Week
+              {isRTL ? 'هذا الأسبوع' : 'This Week'}
             </button>
             <button
               onClick={() => setPeriod('month')}
               className={`px-3.5 py-1.5 rounded-xl font-bold transition-all ${
-                period === 'month' ? 'bg-[#292D32] text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                period === 'month' ? 'bg-[#292D32] dark:bg-[#8FC2F0] text-white dark:text-[#141820] shadow-2xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              Month to Date
+              {isRTL ? 'هذا الشهر' : 'Month to Date'}
             </button>
             <button
               onClick={() => setPeriod('quarter')}
               className={`px-3.5 py-1.5 rounded-xl font-bold transition-all ${
-                period === 'quarter' ? 'bg-[#292D32] text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                period === 'quarter' ? 'bg-[#292D32] dark:bg-[#8FC2F0] text-white dark:text-[#141820] shadow-2xs' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              Q3 2026
+              {isRTL ? 'الربع الثالث 2026' : 'Q3 2026'}
             </button>
           </div>
 
           <button
             onClick={handlePrint}
-            className="p-2.5 rounded-2xl border border-slate-200/80 bg-white/70 hover:bg-white text-slate-700 transition-colors shadow-2xs"
-            title="Print Report"
+            className="p-2.5 rounded-2xl border border-slate-200/80 dark:border-[#8FC2F0]/15 bg-white/70 dark:bg-[#1C2130] hover:bg-white dark:hover:bg-[#232A38] text-slate-700 dark:text-slate-300 transition-colors shadow-2xs cursor-pointer"
+            title={isRTL ? 'طباعة التقرير' : 'Print Report'}
           >
             <Printer className="w-4 h-4" />
           </button>
 
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#292D32] hover:bg-slate-800 text-white rounded-2xl text-xs font-bold shadow-xs transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#292D32] hover:bg-slate-800 dark:bg-[#8FC2F0] dark:hover:bg-[#7ab2e3] text-white dark:text-[#141820] rounded-2xl text-xs font-bold shadow-xs transition-all cursor-pointer"
           >
-            <Download className="w-4 h-4 text-[#8FC2F0]" />
-            <span>Export to Excel / CSV</span>
+            <Download className="w-4 h-4 text-[#8FC2F0] dark:text-[#141820]" />
+            <span>{isRTL ? 'تصدير إكسل / CSV' : 'Export to Excel / CSV'}</span>
           </button>
         </div>
       </div>
 
       {/* Sales Manager Audit Scope Switcher */}
       {isManager && (
-        <div className="glass-card p-4 rounded-3xl border border-white/80 shadow-xs font-urbanist flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="glass-card p-4 rounded-3xl border border-white/80 dark:border-[#8FC2F0]/15 shadow-xs font-urbanist flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold">
               <Users className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs font-bold text-[#292D32]">
-                Report Audit Scope (نطاق تدقيق التقرير):
+              <div className="text-xs font-bold text-[#292D32] dark:text-white">
+                {t('reportAuditScope')}:
               </div>
-              <div className="text-[11px] text-slate-500 font-medium">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
                 {selectedSalesFilter === 'all' 
-                  ? 'All Sales Engineers Consolidated Report (التقرير المجمع لكافة المناديب)' 
-                  : `Individual Performance Audit: ${teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || 'Sales Engineer'}`}
+                  ? t('consolidatedReport')
+                  : (isRTL 
+                      ? `تدقيق الأداء الفردي: ${teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || 'مهندس مبيعات'}`
+                      : `Individual Performance Audit: ${teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || 'Sales Engineer'}`)}
               </div>
             </div>
           </div>
@@ -309,8 +317,8 @@ export default function ReportsPage() {
               onClick={() => setSelectedSalesFilter('all')}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 selectedSalesFilter === 'all'
-                  ? 'bg-[#292D32] text-white shadow-2xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-[#292D32] dark:bg-[#8FC2F0] text-white dark:text-[#141820] shadow-2xs'
+                  : 'bg-white dark:bg-[#1C2130] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#232A38] border border-slate-200 dark:border-slate-700'
               }`}
             >
               All Sales Team ({projects.length})
@@ -326,7 +334,7 @@ export default function ReportsPage() {
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     isSelected
                       ? 'bg-[#8FC2F0] text-[#292D32] shadow-2xs ring-1 ring-[#8FC2F0]'
-                      : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                      : 'bg-white dark:bg-[#1C2130] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#232A38] border border-slate-200 dark:border-slate-700'
                   }`}
                 >
                   <span className="w-4 h-4 rounded-md bg-[#292D32] text-white text-[9px] flex items-center justify-center font-bold">
@@ -346,60 +354,60 @@ export default function ReportsPage() {
       {/* KPI Cards Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 font-urbanist">
         <div className="glass-card-interactive p-5 rounded-3xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[#8FC2F0]/20 text-[#292D32] flex items-center justify-center font-bold border border-[#8FC2F0]/30">
-            <Briefcase className="w-5 h-5 text-[#292D32]" />
+          <div className="w-12 h-12 rounded-2xl bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center font-bold border border-[#8FC2F0]/30">
+            <Briefcase className="w-5 h-5 text-[#292D32] dark:text-[#8FC2F0]" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block leading-tight">Total Active Pipeline</span>
-            <span className="text-xl font-black text-[#292D32] mt-0.5 block">{formatCurrencySAR(totalPipelineValue)}</span>
-            <span className="text-[10px] text-emerald-600 font-bold">&uarr; +12% vs last month</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block leading-tight">Total Active Pipeline</span>
+            <span className="text-xl font-black text-[#292D32] dark:text-white mt-0.5 block">{formatCurrencySAR(totalPipelineValue)}</span>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">&uarr; +12% vs last month</span>
           </div>
         </div>
 
         <div className="glass-card-interactive p-5 rounded-3xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[#8FC2F0]/15 text-[#292D32] flex items-center justify-center font-bold border border-[#8FC2F0]/30">
-            <FileText className="w-5 h-5 text-[#292D32]" />
+          <div className="w-12 h-12 rounded-2xl bg-[#8FC2F0]/15 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center font-bold border border-[#8FC2F0]/30">
+            <FileText className="w-5 h-5 text-[#292D32] dark:text-[#8FC2F0]" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block leading-tight">Quotations Submitted</span>
-            <span className="text-xl font-black text-[#292D32] mt-0.5 block">{formatCurrencySAR(quotationTotalValue)}</span>
-            <span className="text-[10px] text-blue-600 font-bold">{quotationProjects.length} active quotes</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block leading-tight">Quotations Submitted</span>
+            <span className="text-xl font-black text-[#292D32] dark:text-white mt-0.5 block">{formatCurrencySAR(quotationTotalValue)}</span>
+            <span className="text-[10px] text-blue-600 dark:text-[#8FC2F0] font-bold">{quotationProjects.length} active quotes</span>
           </div>
         </div>
 
         <div className="glass-card-interactive p-5 rounded-3xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[#77CE69]/20 text-[#292D32] flex items-center justify-center font-bold border border-[#77CE69]/30">
-            <Trophy className="w-5 h-5 text-[#292D32]" />
+          <div className="w-12 h-12 rounded-2xl bg-[#77CE69]/20 text-[#292D32] dark:text-[#77CE69] flex items-center justify-center font-bold border border-[#77CE69]/30">
+            <Trophy className="w-5 h-5 text-[#292D32] dark:text-[#77CE69]" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block leading-tight">Won Closed Deals</span>
-            <span className="text-xl font-black text-emerald-700 mt-0.5 block">{formatCurrencySAR(wonTotalValue)}</span>
-            <span className="text-[10px] text-emerald-700 font-bold">{wonProjects.length} deal secured</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block leading-tight">Won Closed Deals</span>
+            <span className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-0.5 block">{formatCurrencySAR(wonTotalValue)}</span>
+            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold">{wonProjects.length} deal secured</span>
           </div>
         </div>
 
         <div className="glass-card-interactive p-5 rounded-3xl flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold border border-rose-200">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold border border-rose-200 dark:border-rose-900/50">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block leading-tight">Overdue Attention</span>
-            <span className="text-xl font-black text-rose-600 mt-0.5 block">{overdueProjects.length} projects</span>
-            <span className="text-[10px] text-rose-600 font-bold">Needs immediate contact</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block leading-tight">Overdue Attention</span>
+            <span className="text-xl font-black text-rose-600 dark:text-rose-400 mt-0.5 block">{overdueProjects.length} projects</span>
+            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">Needs immediate contact</span>
           </div>
         </div>
       </div>
 
       {/* Row 2: Planned vs. Actual Weekly Execution Variance */}
       <div className="glass-card p-6 rounded-3xl font-urbanist">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Planned vs. Actual Sales Activity Variance</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">Planned vs. Actual Sales Activity Variance</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Comparison between sales targets committed in weekly plan and verified logged activities.
             </p>
           </div>
-          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200">
+          <span className="text-xs font-bold text-blue-600 dark:text-[#8FC2F0] bg-blue-50 dark:bg-blue-950/50 px-3 py-1 rounded-lg border border-blue-200 dark:border-blue-800">
             {selectedSalesFilter === 'all' 
               ? 'All Sales Team Scope' 
               : `${teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || currentUser.full_name} (${teamMembers.find(m => m.id === selectedSalesFilter)?.title || 'Sales Engineer'})`}
@@ -408,84 +416,84 @@ export default function ReportsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
           {/* Phone Calls */}
-          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-[#141820]/60">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
               <span className="flex items-center gap-1.5">
-                <Phone className="w-4 h-4 text-blue-600" />
+                <Phone className="w-4 h-4 text-blue-600 dark:text-[#8FC2F0]" />
                 <span>Phone Calls</span>
               </span>
-              <span className="text-blue-600 font-black">{callsPct}%</span>
+              <span className="text-blue-600 dark:text-[#8FC2F0] font-black">{callsPct}%</span>
             </div>
-            <div className="flex items-baseline justify-between text-sm font-black text-slate-900">
+            <div className="flex items-baseline justify-between text-sm font-black text-slate-900 dark:text-white">
               <span>{totalCalls} Logged</span>
               <span className="text-xs text-slate-400 font-medium">Goal: {plannedCalls}</span>
             </div>
-            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
+            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-2">
               <div 
-                className="bg-blue-600 h-2 rounded-full" 
+                className="bg-blue-600 dark:bg-[#8FC2F0] h-2 rounded-full" 
                 style={{ width: `${Math.min(100, callsPct)}%` }} 
               />
             </div>
           </div>
 
           {/* F2F Meetings */}
-          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-[#141820]/60">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
               <span className="flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-purple-600" />
+                <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 <span>F2F Meetings</span>
               </span>
-              <span className="text-purple-600 font-black">{meetingsPct}%</span>
+              <span className="text-purple-600 dark:text-purple-400 font-black">{meetingsPct}%</span>
             </div>
-            <div className="flex items-baseline justify-between text-sm font-black text-slate-900">
+            <div className="flex items-baseline justify-between text-sm font-black text-slate-900 dark:text-white">
               <span>{totalMeetings} Logged</span>
               <span className="text-xs text-slate-400 font-medium">Goal: {plannedMeetings}</span>
             </div>
-            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
+            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-2">
               <div 
-                className="bg-purple-600 h-2 rounded-full" 
+                className="bg-purple-600 dark:bg-purple-400 h-2 rounded-full" 
                 style={{ width: `${Math.min(100, meetingsPct)}%` }} 
               />
             </div>
           </div>
 
           {/* Consultant / Site Visits */}
-          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-[#141820]/60">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
               <span className="flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-emerald-600" />
+                <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Site &amp; Consultant Visits</span>
               </span>
-              <span className="text-emerald-600 font-black">{visitsPct}%</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-black">{visitsPct}%</span>
             </div>
-            <div className="flex items-baseline justify-between text-sm font-black text-slate-900">
+            <div className="flex items-baseline justify-between text-sm font-black text-slate-900 dark:text-white">
               <span>{totalVisits} Logged</span>
               <span className="text-xs text-slate-400 font-medium">Goal: {plannedVisits}</span>
             </div>
-            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
+            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-2">
               <div 
-                className="bg-emerald-600 h-2 rounded-full" 
+                className="bg-emerald-600 dark:bg-emerald-400 h-2 rounded-full" 
                 style={{ width: `${Math.min(100, visitsPct)}%` }} 
               />
             </div>
           </div>
 
           {/* Hunting / Prospecting */}
-          <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-2">
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-[#141820]/60">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200 mb-2">
               <span className="flex items-center gap-1.5">
-                <Target className="w-4 h-4 text-amber-600" />
+                <Target className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 <span>Hunting Touchpoints</span>
               </span>
-              <span className="text-amber-600 font-black">{huntingPct}%</span>
+              <span className="text-amber-600 dark:text-amber-400 font-black">{huntingPct}%</span>
             </div>
-            <div className="flex items-baseline justify-between text-sm font-black text-slate-900">
+            <div className="flex items-baseline justify-between text-sm font-black text-slate-900 dark:text-white">
               <span>{totalHunting} Logged</span>
               <span className="text-xs text-slate-400 font-medium">Goal: {plannedHunting}</span>
             </div>
-            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
+            <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden mt-2">
               <div 
-                className="bg-amber-600 h-2 rounded-full" 
+                className="bg-amber-600 dark:bg-amber-400 h-2 rounded-full" 
                 style={{ width: `${Math.min(100, huntingPct)}%` }} 
               />
             </div>
@@ -495,26 +503,28 @@ export default function ReportsPage() {
 
       {/* Row 3: Approval Requests & Commercial Governance Section */}
       <div className="glass-card p-6 rounded-3xl font-urbanist space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold border border-amber-200 dark:border-amber-900/50">
                 <ShieldCheck className="w-4 h-4" />
               </div>
-              <h2 className="text-base font-black text-[#292D32]">
+              <h2 className="text-base font-black text-[#292D32] dark:text-white">
                 Approval Requests &amp; Commercial Governance
               </h2>
             </div>
-            <p className="text-xs text-slate-500 mt-1 font-medium">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
               Commercial discount oversight, engineering submittals, decision turnaround times, and margin risk analysis.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-500">Scope:</span>
-            <span className="text-xs font-extrabold px-3 py-1 bg-slate-100 text-slate-800 rounded-xl border border-slate-200">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{isRTL ? 'النطاق:' : 'Scope:'}</span>
+            <span className="text-xs font-extrabold px-3 py-1 bg-slate-100 dark:bg-[#232A38] text-slate-800 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-slate-700">
               {isManager 
-                ? (selectedSalesFilter === 'all' ? 'Team Scope (الجميع)' : teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || 'Filtered Rep')
-                : `${currentUser.full_name} (Own Requests)`}
+                ? (selectedSalesFilter === 'all' 
+                    ? (isRTL ? 'كافة أعضاء الفريق' : 'All Sales Team') 
+                    : teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || (isRTL ? 'المندوب المحدد' : 'Filtered Rep'))
+                : `${currentUser.full_name} ${isRTL ? '(مشاريعي)' : '(Own Deals)'}`}
             </span>
           </div>
         </div>
@@ -522,45 +532,45 @@ export default function ReportsPage() {
         {/* 4 Metric Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Total Requests */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+          <div className="glass-card-interactive p-4 rounded-2xl">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
               <span>Total Requests</span>
-              <Percent className="w-4 h-4 text-blue-500" />
+              <Percent className="w-4 h-4 text-blue-500 dark:text-[#8FC2F0]" />
             </div>
-            <div className="text-2xl font-black text-slate-900 tracking-tight">
+            <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
               {scopedRequests.length}
             </div>
-            <div className="text-[11px] font-semibold text-slate-500 mt-1 flex items-center gap-1.5">
-              <span className="text-amber-600 font-bold">{pendingRequests.length} Pending</span>
+            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5">
+              <span className="text-amber-600 dark:text-amber-400 font-bold">{pendingRequests.length} Pending</span>
               <span>&bull;</span>
               <span>{totalPeriodRequests} in active period</span>
             </div>
           </div>
 
           {/* Card 2: Avg Resolution Time */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+          <div className="glass-card-interactive p-4 rounded-2xl">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
               <span>Avg Resolution Time</span>
-              <Clock className="w-4 h-4 text-purple-500" />
+              <Clock className="w-4 h-4 text-purple-500 dark:text-purple-400" />
             </div>
-            <div className="text-2xl font-black text-slate-900 tracking-tight">
+            <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
               {avgResolutionHours} <span className="text-sm font-bold text-slate-400">hours</span>
             </div>
-            <div className="text-[11px] font-semibold text-emerald-600 mt-1">
+            <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
               Under 4h target SLA
             </div>
           </div>
 
           {/* Card 3: Approve vs Reject Ratio */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+          <div className="glass-card-interactive p-4 rounded-2xl">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
               <span>Approval Ratio</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
             </div>
-            <div className="text-2xl font-black text-slate-900 tracking-tight">
+            <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
               {approvePct}% <span className="text-xs font-medium text-slate-400">vs {rejectPct}% reject</span>
             </div>
-            <div className="w-full bg-rose-100 h-1.5 rounded-full overflow-hidden mt-2 flex">
+            <div className="w-full bg-rose-100 dark:bg-rose-950/40 h-1.5 rounded-full overflow-hidden mt-2 flex">
               <div 
                 className="bg-emerald-500 h-full transition-all"
                 style={{ width: `${approvePct}%` }}
@@ -575,15 +585,15 @@ export default function ReportsPage() {
           </div>
 
           {/* Card 4: Top Rejection Driver */}
-          <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-1">
+          <div className="glass-card-interactive p-4 rounded-2xl">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
               <span>Top Rejection Driver</span>
-              <XCircle className="w-4 h-4 text-rose-500" />
+              <XCircle className="w-4 h-4 text-rose-500 dark:text-rose-400" />
             </div>
-            <div className="text-sm font-black text-slate-900 line-clamp-1 leading-snug">
+            <div className="text-sm font-black text-slate-900 dark:text-white line-clamp-1 leading-snug">
               {topRejectionReasons[0]?.reason ? topRejectionReasons[0].reason.slice(0, 32) + '...' : 'None'}
             </div>
-            <div className="text-[11px] font-semibold text-rose-600 mt-1">
+            <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 mt-1">
               {topRejectionReasons[0]?.count || 0} deals affected
             </div>
           </div>
@@ -592,21 +602,21 @@ export default function ReportsPage() {
         {/* Analytics Grid: Bar Chart + Highest Discounts & Rejection Drivers */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
           {/* Chart: Requests Over Time (5 cols) */}
-          <div className="lg:col-span-5 p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div className="lg:col-span-5 p-5 rounded-2xl glass-card flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
                     Requests Volume Over Time
                   </h3>
                   <span className="text-[11px] text-slate-400 font-medium">Daily request throughput</span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] font-bold">
-                  <span className="flex items-center gap-1 text-emerald-700">
+                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
                     Approved
                   </span>
-                  <span className="flex items-center gap-1 text-amber-700">
+                  <span className="flex items-center gap-1 text-amber-700 dark:text-amber-300">
                     <span className="w-2 h-2 rounded-full bg-amber-400" />
                     Pending
                   </span>
@@ -614,7 +624,7 @@ export default function ReportsPage() {
               </div>
 
               {/* Bar Chart Visualization */}
-              <div className="h-44 flex items-end justify-between gap-3 pt-6 pb-2 px-2 border-b border-slate-100">
+              <div className="h-44 flex items-end justify-between gap-3 pt-6 pb-2 px-2 border-b border-slate-100 dark:border-slate-800">
                 {timelineData.map((item, idx) => {
                   const maxH = 5;
                   const hPct = Math.min(100, Math.round((item.total / maxH) * 100));
@@ -639,7 +649,7 @@ export default function ReportsPage() {
                           style={{ height: `${pendingHPct}%` }} 
                         />
                       </div>
-                      <span className="text-[10px] font-bold text-slate-600 mt-1">
+                      <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 mt-1">
                         {item.day}
                       </span>
                     </div>
@@ -648,33 +658,33 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            <div className="pt-3 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+            <div className="pt-3 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 font-medium">
               <span>Weekly Request Flow</span>
-              <span className="font-bold text-slate-900">{scopedRequests.length} Total Submissions</span>
+              <span className="font-bold text-slate-900 dark:text-white">{scopedRequests.length} Total Submissions</span>
             </div>
           </div>
 
           {/* Right Side: Highest Discount Requested & Top Rejections (7 cols) */}
           <div className="lg:col-span-7 space-y-4">
             {/* Highest Discount per Project */}
-            <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
-              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3 flex items-center justify-between">
+            <div className="p-5 rounded-2xl glass-card">
+              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider mb-3 flex items-center justify-between">
                 <span>Highest Discount Requested per Project</span>
                 <span className="text-[10px] text-slate-400 font-medium lowercase">sorted by discount %</span>
               </h3>
 
-              <div className="divide-y divide-slate-100 text-xs">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
                 {highestDiscountsPerProject.length === 0 ? (
                   <div className="py-4 text-center text-slate-400 text-xs">No discount requests recorded in scope.</div>
                 ) : (
                   highestDiscountsPerProject.map((item, idx) => (
                     <div key={idx} className="py-2.5 flex items-center justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-slate-900 truncate">
+                        <div className="font-bold text-slate-900 dark:text-white truncate">
                           {item.projectName}
                         </div>
                         <div className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
-                          {item.prNumber && <span className="font-mono font-bold text-blue-600">{item.prNumber}</span>}
+                          {item.prNumber && <span className="font-mono font-bold text-blue-600 dark:text-[#8FC2F0]">{item.prNumber}</span>}
                           <span>&bull;</span>
                           <span>Requested by {item.requester}</span>
                           {item.amount && (
@@ -688,14 +698,16 @@ export default function ReportsPage() {
 
                       <div className="flex items-center gap-2.5 shrink-0">
                         <span className={`text-xs font-mono font-black px-2 py-1 rounded-lg ${
-                          item.discountPct >= 12 ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          item.discountPct >= 12 
+                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50' 
+                            : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50'
                         }`}>
                           {item.discountPct}% OFF
                         </span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          item.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                          item.status === 'rejected' ? 'bg-rose-100 text-rose-800' :
-                          'bg-amber-100 text-amber-800'
+                          item.status === 'approved' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300' :
+                          item.status === 'rejected' ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300' :
+                          'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300'
                         }`}>
                           {item.status.toUpperCase()}
                         </span>
@@ -707,21 +719,21 @@ export default function ReportsPage() {
             </div>
 
             {/* Top 3 Rejection Reasons */}
-            <div className="p-4 rounded-2xl bg-rose-50/40 border border-rose-200/70 shadow-2xs">
-              <h3 className="text-xs font-black text-rose-900 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+            <div className="p-4 rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200/70 dark:border-rose-900/40 shadow-2xs">
+              <h3 className="text-xs font-black text-rose-900 dark:text-rose-300 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <XCircle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
                 <span>Top Rejection Drivers &amp; Policy Guardrails</span>
               </h3>
               <div className="space-y-2">
                 {topRejectionReasons.length === 0 ? (
-                  <div className="text-xs text-rose-700/70 py-1">No rejected requests logged. 100% compliance.</div>
+                  <div className="text-xs text-rose-700/70 dark:text-rose-400 py-1">No rejected requests logged. 100% compliance.</div>
                 ) : (
                   topRejectionReasons.map((r, i) => (
-                    <div key={i} className="flex items-start justify-between text-xs bg-white/80 p-2.5 rounded-xl border border-rose-100">
-                      <span className="font-semibold text-slate-800 flex-1 min-w-0 pr-2 leading-relaxed">
+                    <div key={i} className="flex items-start justify-between text-xs bg-white/60 dark:bg-white/5 p-2.5 rounded-xl border border-rose-100 dark:border-rose-900/30">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 flex-1 min-w-0 pr-2 leading-relaxed">
                         {r.reason}
                       </span>
-                      <span className="text-[11px] font-mono font-extrabold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md shrink-0">
+                      <span className="text-[11px] font-mono font-extrabold text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-950/60 px-2 py-0.5 rounded-md shrink-0">
                         {r.count} {r.count === 1 ? 'deal' : 'deals'}
                       </span>
                     </div>
@@ -735,14 +747,14 @@ export default function ReportsPage() {
 
       {/* Row 4: Pipeline Stage Distribution Table */}
       <div className="glass-card p-6 rounded-3xl font-urbanist">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div>
-            <h2 className="text-base font-black text-[#292D32]">Active Western Region Pipeline Opportunities</h2>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium">
+            <h2 className="text-base font-black text-[#292D32] dark:text-white">Active Western Region Pipeline Opportunities</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
               Real-time portfolio status with calculated dynamic health and overdue commitment tracking.
             </p>
           </div>
-          <span className="text-xs font-bold text-slate-500 bg-white/70 px-3 py-1 rounded-full border border-slate-200/60 shadow-2xs">
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-white/70 dark:bg-[#1C2130] px-3 py-1 rounded-full border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
             {scopedProjects.length} Projects in Scope
           </span>
         </div>
@@ -750,7 +762,7 @@ export default function ReportsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="pb-3 px-3">PR Code</th>
                 <th className="pb-3 px-3">Project Title</th>
                 <th className="pb-3 px-3">Client / Organization</th>
@@ -762,63 +774,63 @@ export default function ReportsPage() {
                 <th className="pb-3 px-3">Follow-up Date</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {scopedProjects.map(p => {
                 const stage = PIPELINE_STAGES.find(s => s.value === p.pipeline_stage);
 
                 return (
-                  <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-3 font-mono font-bold text-slate-700 whitespace-nowrap">
+                  <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 px-3 font-mono font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                       {p.pr_number}
                     </td>
-                    <td className="py-3 px-3 font-bold text-slate-900">
-                      <Link href={`/projects/${p.id}`} className="hover:text-blue-600 transition-colors">
+                    <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">
+                      <Link href={`/projects/${p.id}`} className="hover:text-blue-600 dark:hover:text-[#8FC2F0] transition-colors">
                         {p.name}
                       </Link>
                     </td>
-                    <td className="py-3 px-3 text-slate-600 font-medium whitespace-nowrap">
+                    <td className="py-3 px-3 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">
                       {p.company_name || 'Organization'}
                     </td>
-                    <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                    <td className="py-3 px-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {p.location}
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${stage?.badgeClass || 'bg-slate-100'}`}>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${stage?.badgeClass || 'bg-slate-100 dark:bg-slate-800'}`}>
                         {stage?.label || p.pipeline_stage}
                       </span>
                     </td>
-                    <td className="py-3 px-3 font-extrabold text-slate-900 whitespace-nowrap">
+                    <td className="py-3 px-3 font-extrabold text-slate-900 dark:text-white whitespace-nowrap">
                       {formatCurrencySAR(p.estimated_value)}
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
                       {p.calculated_health === 'red' && (
-                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 flex items-center gap-1 w-fit">
+                        <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-900/50 flex items-center gap-1 w-fit">
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
                           Needs Action
                         </span>
                       )}
                       {p.calculated_health === 'yellow' && (
-                        <span className="text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1 w-fit">
+                        <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-900/50 flex items-center gap-1 w-fit">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                           Due Soon
                         </span>
                       )}
                       {p.calculated_health === 'green' && (
-                        <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 w-fit">
+                        <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-1 w-fit">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                           Healthy
                         </span>
                       )}
                       {p.calculated_health === 'neutral' && (
-                        <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full w-fit">
+                        <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full w-fit">
                           Closed
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-slate-700 font-medium max-w-xs truncate">
+                    <td className="py-3 px-3 text-slate-700 dark:text-slate-300 font-medium max-w-xs truncate">
                       {p.next_action || '&ndash;'}
                     </td>
-                    <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                    <td className="py-3 px-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">
                       {p.next_follow_up_at ? formatDateString(p.next_follow_up_at) : '&ndash;'}
                     </td>
                   </tr>

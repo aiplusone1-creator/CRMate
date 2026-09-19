@@ -44,6 +44,7 @@ interface CRMContextType {
   login: (emailOrUserId: string, password?: string) => Promise<boolean>;
   logout: () => void;
   switchUser: (userId: string) => void;
+  updateUserProfile: (userId: string, updates: Partial<Profile>) => void;
   addTeamMember: (member: Omit<Profile, 'id' | 'created_at'>) => Promise<Profile>;
   projects: Project[];
   contacts: Contact[];
@@ -262,6 +263,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           phone: authUser.phone || '966500000000',
           territory: authUser.territory,
           title: authUser.title,
+          avatar_url: authUser.avatar_url,
           avatar_initials: authUser.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
           created_at: authUser.created_at
         };
@@ -305,6 +307,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           phone: authUser.phone || '966500000000',
           territory: authUser.territory,
           title: authUser.title,
+          avatar_url: authUser.avatar_url,
           avatar_initials: authUser.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
           created_at: authUser.created_at
         };
@@ -333,6 +336,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           phone: user.phone || '966500000000',
           territory: user.territory,
           title: user.title,
+          avatar_url: user.avatar_url,
           avatar_initials: user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
           created_at: user.created_at
         };
@@ -369,12 +373,44 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         phone: devUser.phone || '966500000000',
         territory: devUser.territory,
         title: devUser.title,
+        avatar_url: devUser.avatar_url,
         avatar_initials: devUser.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
         created_at: devUser.created_at
       };
       setCurrentUser(profile);
       setCurrentRole(profile.role);
       setIsAuthenticated(true);
+    }
+  };
+
+  const updateUserProfile = (userId: string, updates: Partial<Profile>) => {
+    try {
+      authRepository.updateProfile(userId, {
+        ...(updates.full_name ? { name: updates.full_name } : {}),
+        ...(updates.phone ? { phone: updates.phone } : {}),
+        ...(updates.title ? { title: updates.title } : {}),
+        ...(updates.territory ? { territory: updates.territory } : {}),
+        ...(updates.avatar_url !== undefined ? { avatar_url: updates.avatar_url } : {}),
+      });
+    } catch (e) {
+      console.error('Error updating auth profile:', e);
+    }
+
+    const updatedTeam = teamMembers.map(m => m.id === userId ? { ...m, ...updates } : m);
+    setTeamMembers(updatedTeam);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('crmate_team_members', JSON.stringify(updatedTeam));
+    }
+
+    if (currentUser.id === userId) {
+      const updatedUser = { ...currentUser, ...updates };
+      setCurrentUser(updatedUser);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('crmate_auth_user', JSON.stringify({
+          ...updatedUser,
+          name: updatedUser.full_name
+        }));
+      }
     }
   };
 
@@ -480,7 +516,22 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('al_mespar_quotations', JSON.stringify(quotations));
     }
   }, [quotations]);
-  const [salesTargets, setSalesTargets] = useState<SalesTarget[]>(INITIAL_TARGETS);
+  const [salesTargets, setSalesTargets] = useState<SalesTarget[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('al_mespar_sales_targets');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+      }
+    }
+    return INITIAL_TARGETS;
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('al_mespar_sales_targets', JSON.stringify(salesTargets));
+    }
+  }, [salesTargets]);
+
   const [fastLogState, setFastLogState] = useState<FastLogModalState>({ isOpen: false });
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isNewContactModalOpen, setIsNewContactModalOpen] = useState(false);
@@ -1070,6 +1121,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       login,
       logout,
       switchUser,
+      updateUserProfile,
       addTeamMember,
       projects,
       contacts,
