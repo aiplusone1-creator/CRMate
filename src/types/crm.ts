@@ -36,6 +36,14 @@ export type PipelineStage =
   | 'lost'
   | 'hold';
 
+export type RFQPackage = 'lc' | 'bms' | 'both';
+
+export type SubmittalStatus = 
+  | 'approved'
+  | 'approved_with_comments'
+  | 'under_approval'
+  | 'rejected';
+
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export type ProjectHealth = 'green' | 'yellow' | 'red' | 'neutral';
@@ -88,11 +96,14 @@ export type QuotationStatus =
   | 'internal_review'
   | 'under_review'
   | 'sent'
+  | 'submitted'
   | 'revised'
+  | 'negotiation'
   | 'accepted'
   | 'approved'
   | 'rejected'
-  | 'expired';
+  | 'expired'
+  | 'cancelled';
 
 export type TargetMetric = 
   | 'calls'
@@ -178,11 +189,18 @@ export interface Project {
   pipeline_stage: PipelineStage;
   priority: ProjectPriority;
   estimated_value: number;
+  final_won_value?: number;
   probability: number;
   weighted_value: number;
   expected_award_date?: string;
   owner_id?: string;
   owner_name?: string;
+  // Referral & Assignment System (Owner remains creator; referred_to is current assignee)
+  referred_to_id?: string;
+  referred_to_name?: string;
+  referred_at?: string;
+  referred_by_id?: string;
+  referred_by_name?: string;
   members?: ProjectMember[];
   next_action?: string;
   next_follow_up_at?: string;
@@ -190,10 +208,52 @@ export interface Project {
   lost_reason?: string;
   hold_reason?: string;
   internal_notes?: string;
+  card_color?: string;
+  base_card_color?: string;
   calculated_health?: ProjectHealth;
   days_overdue?: number;
+  stage_entered_at?: string;
+  is_archived?: boolean;
+  archived_at?: string;
+  archived_by?: string;
+  archived_by_name?: string;
+  archive_reason?: string;
+  // Purchase Order (PO) & Cash Collection (Won Stage)
+  po_number?: string;
+  po_date?: string;
+  po_amount?: number;
+  po_attachment_name?: string;
+  po_attachment_url?: string;
+  po_attachment_size?: number;
+  po_uploaded_at?: string;
+  po_uploaded_by?: string;
+  po_notes?: string;
+  collected_amount?: number;
+  collected_percentage?: number;
+  collection_status?: 'pending' | 'partially_collected' | 'fully_collected';
+  collection_records?: CollectionRecord[];
+  // Stage Specific Workflow Fields (RFQ Packages, Submittal Status, Negotiation Targets)
+  rfq_packages?: RFQPackage;
+  submittal_status?: SubmittalStatus;
+  client_target_price?: number;
+  last_discount_pct?: number;
+  last_discount_amount?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface CollectionRecord {
+  id: string;
+  amount: number;
+  percentage?: number;
+  payment_date: string;
+  payment_method?: 'bank_transfer' | 'cheque' | 'cash' | 'letter_of_credit' | 'other';
+  reference_number?: string;
+  receipt_attachment_name?: string;
+  receipt_attachment_url?: string;
+  notes?: string;
+  recorded_by?: string;
+  created_at: string;
 }
 
 export interface Activity {
@@ -267,16 +327,31 @@ export interface Quotation {
   project_name?: string;
   quotation_number: string;
   version: number;
-  amount: number;
+  amount: number; // Backwards compatible alias for total_amount
+  total_amount?: number;
+  subtotal?: number;
+  discount_amount?: number;
+  discount_percentage?: number;
+  tax_amount?: number;
   currency: string;
   vendor_brand?: string;
   status: QuotationStatus;
-  sent_date?: string;
+  sent_date?: string; // Backwards compatible alias for quotation_date
+  quotation_date?: string;
   valid_until?: string;
   file_url?: string;
   file_name?: string;
   file_size?: string;
   notes?: string;
+  customer_reference?: string;
+  rfq_number?: string;
+  revision_reason?: string;
+  payment_terms?: string;
+  delivery_terms?: string;
+  warranty_terms?: string;
+  technical_notes?: string;
+  previous_version_id?: string;
+  is_archived?: boolean;
   created_by?: string;
   created_at: string;
   updated_at: string;
@@ -375,18 +450,23 @@ export interface ApprovalRequest {
 
 export type Request = ApprovalRequest;
 
-export type NotificationReferenceType = 'request' | 'reminder';
+export type NotificationCategory = 'approval' | 'reminder' | 'system';
+export type NotificationReferenceType = 'request' | 'reminder' | 'project' | 'general';
 export type NotificationType = 
   | 'request_created' 
   | 'request_approved' 
   | 'request_rejected' 
   | 'request_comment' 
-  | 'reminder_due';
+  | 'reminder_due'
+  | 'project_archived'
+  | 'project_restored'
+  | 'system_alert';
 
 export interface AppNotification {
   id: string;
   user_id: string;
   type: NotificationType;
+  category?: NotificationCategory;
   reference_type: NotificationReferenceType;
   reference_id: string;
   title: string;

@@ -178,6 +178,7 @@ export const INITIAL_NOTIFICATIONS: AppNotification[] = [
     id: 'notif_demo_1',
     user_id: 'u0',
     type: 'request_created',
+    category: 'approval',
     reference_type: 'request',
     reference_id: 'req_demo_001',
     title: 'Urgent Discount Approval Needed',
@@ -234,6 +235,7 @@ export function createApprovalRequest(
     const notif = createNotification({
       user_id: assignedUserId,
       type: 'request_created',
+      category: 'approval',
       reference_type: 'request',
       reference_id: newRequest.id,
       title: `${newRequest.urgency === 'urgent' ? '🔴 URGENT: ' : ''}Approval Request: ${newRequest.type.toUpperCase()}`,
@@ -303,6 +305,7 @@ export function resolveApprovalRequest(
   const notification = createNotification({
     user_id: current.requested_by,
     type: isApproved ? 'request_approved' : 'request_rejected',
+    category: 'approval',
     reference_type: 'request',
     reference_id: current.id,
     title: isApproved ? '✅ Request Approved' : '❌ Request Rejected',
@@ -355,6 +358,7 @@ export function addCommentToRequest(
     createNotification({
       user_id: targetId,
       type: 'request_comment',
+      category: 'approval',
       reference_type: 'request',
       reference_id: current.id,
       title: `💬 New Comment on Approval Request`,

@@ -115,6 +115,60 @@ export interface Translations {
   passwordsDoNotMatch: string;
   passwordUpdateSuccess: string;
   passwordUpdateFailed: string;
+
+  // Quotation Management & Versioning
+  latestQuote: string;
+  quotations: string;
+  newQuotation: string;
+  createRevision: string;
+  priceHistory: string;
+  compareVersions: string;
+  revisionReason: string;
+  subtotal: string;
+  discount: string;
+  total: string;
+  commercialTerms: string;
+  currentQuotation: string;
+
+  // Module Guide & Help System
+  moduleGuide: string;
+  moduleGuideTooltip: string;
+  guideOverview: string;
+  guideKeyFeatures: string;
+  guideDailyWorkflow: string;
+  guideFAQs: string;
+  searchGuide: string;
+  guideProTip: string;
+  exploreFullGuide: string;
+  closeGuide: string;
+  switchModule: string;
+  allModules: string;
+
+  // Purchase Order & Cash Collection
+  purchaseOrder: string;
+  poNumber: string;
+  poDate: string;
+  poAmount: string;
+  uploadPO: string;
+  replacePO: string;
+  downloadPO: string;
+  noPOAttached: string;
+  poAttachedSuccess: string;
+  cashCollection: string;
+  collectedAmount: string;
+  collectedPercentage: string;
+  remainingToCollect: string;
+  totalProjectValue: string;
+  updateCollection: string;
+  collectionProgress: string;
+  addPaymentRecord: string;
+  paymentRecords: string;
+  paymentDate: string;
+  paymentMethod: string;
+  paymentReference: string;
+  fullyCollected: string;
+  partiallyCollected: string;
+  pendingCollection: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -232,15 +286,69 @@ export const translations: Record<Language, Translations> = {
     passwordLengthError: 'Minimum 6 characters required',
     passwordsDoNotMatch: 'Passwords do not match',
     passwordUpdateSuccess: 'Password updated successfully',
-    passwordUpdateFailed: 'Failed to update password'
+    passwordUpdateFailed: 'Failed to update password',
+
+    // Quotation Management & Versioning
+    latestQuote: 'Latest Quote',
+    quotations: 'Quotations',
+    newQuotation: 'New Quotation',
+    createRevision: 'Create Revision',
+    priceHistory: 'Price History',
+    compareVersions: 'Compare Versions',
+    revisionReason: 'Revision Reason',
+    subtotal: 'Subtotal',
+    discount: 'Discount',
+    total: 'Total Amount',
+    commercialTerms: 'Commercial Terms',
+    currentQuotation: 'Current Quotation',
+
+    // Module Guide & Help System
+    moduleGuide: 'Module Guide',
+    moduleGuideTooltip: 'Interactive Guide & Operations Manual for this module',
+    guideOverview: 'Overview & Target Roles',
+    guideKeyFeatures: 'Features & Buttons Breakdown',
+    guideDailyWorkflow: 'Daily New-Hire Workflow',
+    guideFAQs: 'FAQs & Pro Tips',
+    searchGuide: 'Search features, terms, or shortcuts...',
+    guideProTip: 'Pro Tip for Sales Engineers',
+    exploreFullGuide: 'Explore Full Guide',
+    closeGuide: 'Close Guide',
+    switchModule: 'Switch Module',
+    allModules: 'All CRM Modules',
+
+    // Purchase Order & Cash Collection
+    purchaseOrder: 'Purchase Order (PO)',
+    poNumber: 'PO Number',
+    poDate: 'PO Date',
+    poAmount: 'PO Amount',
+    uploadPO: 'Upload Purchase Order',
+    replacePO: 'Replace PO File',
+    downloadPO: 'Download PO Document',
+    noPOAttached: 'No Purchase Order attached yet',
+    poAttachedSuccess: 'Purchase order document successfully attached',
+    cashCollection: 'Cash Collection & Revenue',
+    collectedAmount: 'Collected Amount',
+    collectedPercentage: 'Collection Ratio',
+    remainingToCollect: 'Remaining Balance',
+    totalProjectValue: 'Total Contract Value',
+    updateCollection: 'Update Collection Status',
+    collectionProgress: 'Collection Milestone Progress',
+    addPaymentRecord: 'Record Collection Payment',
+    paymentRecords: 'Collection Payment History',
+    paymentDate: 'Payment Date',
+    paymentMethod: 'Payment Method',
+    paymentReference: 'Cheque / Transfer Ref #',
+    fullyCollected: '100% Fully Collected',
+    partiallyCollected: 'Partially Collected',
+    pendingCollection: 'Pending Initial Collection'
   },
   ar: {
     // Brand & Slogan
     appName: 'CRMate',
     appSubtitle: 'نظام إدارة مبيعات المشاريع',
     appTagline: 'صفقات أكثر، بجهد أقل.',
-    companyName: 'شركة المسفار للتجارة والمقاولات',
-    ksaCloud: 'سحابة المسفار المؤسسية',
+    companyName: 'شركة المسبار العالمي للمقاولات',
+    ksaCloud: 'سحابة المسبار المؤسسية',
 
     // Navigation
     navDashboard: 'لوحة المؤشرات',
@@ -348,6 +456,60 @@ export const translations: Record<Language, Translations> = {
     passwordLengthError: 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل',
     passwordsDoNotMatch: 'كلمتا المرور غير متطابقتين',
     passwordUpdateSuccess: 'تم تحديث كلمة المرور بنجاح',
-    passwordUpdateFailed: 'تعذر تحديث كلمة المرور'
+    passwordUpdateFailed: 'تعذر تحديث كلمة المرور',
+
+    // Quotation Management & Versioning
+    latestQuote: 'أحدث عرض سعر',
+    quotations: 'عروض الأسعار',
+    newQuotation: 'عرض سعر جديد',
+    createRevision: 'إنشاء إصدار معدل',
+    priceHistory: 'تاريخ الأسعار',
+    compareVersions: 'مقارنة الإصدارات',
+    revisionReason: 'سبب التعديل',
+    subtotal: 'المبلغ الأساسي',
+    discount: 'الخصم',
+    total: 'الإجمالي النهائي',
+    commercialTerms: 'الشروط التجارية',
+    currentQuotation: 'عرض السعر الحالي',
+
+    // Module Guide & Help System
+    moduleGuide: 'دليل الموديول',
+    moduleGuideTooltip: 'الدليل التشغيلي والشرح التفاعلي لهذا الموديول',
+    guideOverview: 'نظرة عامة والهدف',
+    guideKeyFeatures: 'شرح العناصر والأزرار',
+    guideDailyWorkflow: 'دليل الموظف الجديد اليومي',
+    guideFAQs: 'الأسئلة الشائعة ونصائح المبيعات',
+    searchGuide: 'ابحث في خصائص الموديول، الأزرار، أو المصطلحات...',
+    guideProTip: 'نصيحة ذهبية لمهندس المبيعات',
+    exploreFullGuide: 'استكشف الدليل الكامل',
+    closeGuide: 'إغلاق الدليل',
+    switchModule: 'تبديل الموديول',
+    allModules: 'كافة موديولات النظام',
+
+    // Purchase Order & Cash Collection
+    purchaseOrder: 'أمر الشراء والتوريد (PO)',
+    poNumber: 'رقم أمر الشراء / التعميد',
+    poDate: 'تاريخ أمر الشراء',
+    poAmount: 'مبلغ التعميد المعتمد',
+    uploadPO: 'رفع ملف أمر الشراء (PO)',
+    replacePO: 'استبدال ملف أمر الشراء',
+    downloadPO: 'تحميل مستند أمر الشراء',
+    noPOAttached: 'لم يتم إرفاق أمر الشراء حتى الآن',
+    poAttachedSuccess: 'تم إرفاق مستند أمر الشراء بنجاح',
+    cashCollection: 'التحصيل المالي والتدفق النقدي',
+    collectedAmount: 'المبلغ المحصل الفعلي',
+    collectedPercentage: 'نسبة التحصيل من المشروع',
+    remainingToCollect: 'المتبقي للتحصيل',
+    totalProjectValue: 'إجمالي قيمة المشروع',
+    updateCollection: 'تحديث حالة ونسبة التحصيل',
+    collectionProgress: 'مؤشر تقدم الدفعات والتحصيل',
+    addPaymentRecord: 'تسجيل دفعة محصلة جديدة',
+    paymentRecords: 'سجل دفعات التحصيل المالي',
+    paymentDate: 'تاريخ استلام الدفعة',
+    paymentMethod: 'طريقة الدفع',
+    paymentReference: 'رقم الشيك أو الحوالة البنكية',
+    fullyCollected: 'تم التحصيل بالكامل 100%',
+    partiallyCollected: 'محصل جزئياً',
+    pendingCollection: 'بانتظار بدء التحصيل'
   }
 };

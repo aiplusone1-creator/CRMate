@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { 
   Mail, 
   Lock, 
@@ -24,9 +24,8 @@ import { ThemeToggle } from '@/components/common/theme-toggle';
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get('redirect') || '/';
-  const isExpired = searchParams.get('expired') === 'true';
+  const [redirectUrl, setRedirectUrl] = useState('/');
+  const [isExpired, setIsExpired] = useState(false);
   const { switchUser } = useCRM();
   const { language, t, isRTL } = useLanguage();
 
@@ -38,13 +37,21 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
 
-  // If already logged in, redirect away from /login
+  // Parse redirect & expired params and check session
   useEffect(() => {
+    let targetRedirect = '/';
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      targetRedirect = params.get('redirect') || '/';
+      setRedirectUrl(targetRedirect);
+      setIsExpired(params.get('expired') === 'true');
+    }
+
     const session = authRepository.getSession();
     if (session) {
-      router.replace(redirectUrl);
+      router.replace(targetRedirect);
     }
-  }, [router, redirectUrl]);
+  }, [router]);
 
   const triggerShake = () => {
     setIsShaking(true);

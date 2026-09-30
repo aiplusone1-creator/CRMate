@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { 
   Folder, 
@@ -34,21 +34,30 @@ import {
   EyeOff,
   LayoutGrid,
   Move,
-  Check
+  Check,
+  Maximize2,
+  Minimize2,
+  Zap,
+  Palette,
+  Lock
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { formatCurrencySAR, formatDateString, formatRelativeTime, cn } from '@/lib/utils';
-import { PIPELINE_STAGES } from '@/lib/constants';
-import { PipelineStage, OpportunityType } from '@/types/crm';
+import { PIPELINE_STAGES, PROJECT_CARD_COLORS } from '@/lib/constants';
+import { PipelineStage, OpportunityType, Project } from '@/types/crm';
 import { ExecutiveManagerCockpit } from '@/components/dashboard/executive-manager-cockpit';
 import { SalesRepCockpit } from '@/components/dashboard/sales-rep-cockpit';
 import { SmartSuggestionsTab } from '@/components/dashboard/smart-suggestions-tab';
-import { scopeProjects, scopeActivities, scopeRequests } from '@/lib/logic/scope';
+import { PriorityActionsWidget } from '@/components/dashboard/priority-actions-widget';
+import { scopeProjects, scopeActivities, scopeRequests, canUserAccessProjectCockpit } from '@/lib/logic/scope';
+import { calculatePipelineForecast } from '@/lib/logic/pipeline-analytics';
+import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 import { useLanguage } from '@/lib/i18n/language-context';
 
 // Dashboard module definitions for customization
-type DashboardModuleId = 
+export type DashboardModuleId = 
   | 'team_performance'
+  | 'priority_actions'
   | 'kpis'
   | 'stage_chart'
   | 'type_donut'
@@ -58,6 +67,8 @@ type DashboardModuleId =
   | 'recent_projects'
   | 'week_activities';
 
+export type ModuleGridSpan = 4 | 6 | 8 | 12;
+
 interface ModuleConfig {
   id: DashboardModuleId;
   labelEn: string;
@@ -66,30 +77,33 @@ interface ModuleConfig {
 }
 
 const ALL_MODULES: ModuleConfig[] = [
-  { id: 'team_performance', labelEn: 'Executive Sales Team Cockpit', labelAr: 'لوحة أداء فريق المبيعات والمناديب', description: 'Leaderboard, sales rep quota attainment, in-hand & won values, and individual audit scope' },
+  { id: 'priority_actions', labelEn: 'What To Do Today (Priority Actions)', labelAr: 'ما يجب فعله اليوم (المهام ذات الأولوية)', description: 'High-impact next best actions, overdue follow-ups, and key closing steps auto-ranked for conversion' },
   { id: 'kpis', labelEn: 'Key Performance Indicators', labelAr: 'مؤشرات الأداء الرئيسية', description: 'Top 6 cards: Active Deals, Pipeline Value, Quotations, Won Deals, Overdue, Leads' },
+  { id: 'team_performance', labelEn: 'Executive Sales Team Cockpit', labelAr: 'لوحة أداء فريق المبيعات والمناديب', description: 'Leaderboard, sales rep quota attainment, in-hand & won values, and individual audit scope' },
+  { id: 'attention_center', labelEn: 'Attention Center', labelAr: 'مركز التنبيهات العاجلة', description: 'Urgent overdue follow-ups, due today, stale deals, and high value risks' },
   { id: 'stage_chart', labelEn: 'Pipeline Value by Stage', labelAr: 'قيمة المشاريع حسب المرحلة', description: 'Interactive bar chart with hover tooltips and project breakdown' },
   { id: 'type_donut', labelEn: 'Projects by Opportunity Type', labelAr: 'المشاريع حسب نوع الفرصة', description: 'Interactive donut chart with sector distribution and hover values' },
   { id: 'locations', labelEn: 'Project Locations Distribution', labelAr: 'توزيع المشاريع جغرافياً', description: 'Breakdown of active opportunities across Western Region and KSA cities' },
-  { id: 'attention_center', labelEn: 'Attention Center', labelAr: 'مركز التنبيهات العاجلة', description: 'Urgent overdue follow-ups, due today, stale deals, and high value risks' },
   { id: 'mini_kanban', labelEn: 'Project Pipeline Preview', labelAr: 'مسار المشاريع المصغر', description: 'Horizontal preview of stages with direct links to project cockpit' },
   { id: 'recent_projects', labelEn: 'Recent Projects Table', labelAr: 'أحدث المشاريع', description: 'Live projects sorted newest to oldest by last activity and updates' },
   { id: 'week_activities', labelEn: 'This Week\'s Activities', labelAr: 'أنشطة الأسبوع الجارية', description: 'Planned and completed client interactions with quick status' },
 ];
 
 const DEFAULT_VISIBLE_MODULES: Record<DashboardModuleId, boolean> = {
-  team_performance: true,
+  priority_actions: true,
   kpis: true,
+  attention_center: true,
+  team_performance: true,
   stage_chart: true,
   type_donut: true,
   locations: true,
-  attention_center: true,
   mini_kanban: true,
   recent_projects: true,
   week_activities: true,
 };
 
 const DEFAULT_MODULE_ORDER: DashboardModuleId[] = [
+  'priority_actions',
   'kpis',
   'attention_center',
   'team_performance',
@@ -101,8 +115,204 @@ const DEFAULT_MODULE_ORDER: DashboardModuleId[] = [
   'week_activities',
 ];
 
+const DEFAULT_MODULE_SIZES: Record<DashboardModuleId, ModuleGridSpan> = {
+  priority_actions: 12,
+  kpis: 12,
+  attention_center: 6,
+  team_performance: 12,
+  stage_chart: 6,
+  type_donut: 6,
+  locations: 6,
+  mini_kanban: 12,
+  recent_projects: 12,
+  week_activities: 6,
+};
+
 const STORAGE_KEY = 'al_mespar_dashboard_visible_modules';
 const ORDER_STORAGE_KEY = 'al_mespar_dashboard_module_order';
+const SIZE_STORAGE_KEY = 'al_mespar_dashboard_module_sizes';
+
+interface MiniKanbanCardProps {
+  project: Project;
+  isRTL: boolean;
+  onUpdateColor: (projectId: string, colorId: string) => Promise<void>;
+}
+
+function MiniKanbanCard({ project, isRTL, onUpdateColor }: MiniKanbanCardProps) {
+  const { currentUser } = useCRM();
+  const canAccess = canUserAccessProjectCockpit(project, currentUser);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isColorPickerOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setIsColorPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isColorPickerOpen]);
+
+  // Dynamic card colors:
+  // - Won stage -> always emerald (Green)
+  // - Lost stage -> always rose (Red)
+  // - Previous / other stages -> custom color or default
+  const effectiveColorId = useMemo(() => {
+    if (project.pipeline_stage === 'won') return 'emerald';
+    if (project.pipeline_stage === 'lost') return 'rose';
+    if (project.card_color === 'emerald' || project.card_color === 'rose') {
+      return project.base_card_color || 'default';
+    }
+    return project.card_color || project.base_card_color || 'default';
+  }, [project.pipeline_stage, project.card_color, project.base_card_color]);
+
+  const colorConfig = PROJECT_CARD_COLORS.find(c => c.id === effectiveColorId) || PROJECT_CARD_COLORS[0];
+
+  const healthColor = 
+    project.calculated_health === 'red' ? 'bg-rose-500' :
+    project.calculated_health === 'yellow' ? 'bg-amber-500' :
+    project.calculated_health === 'green' ? 'bg-[#77CE69]' : 'bg-slate-400';
+
+  const cardClasses = colorConfig.cardClass
+    ? `${colorConfig.cardClass} shadow-sm`
+    : 'bg-white/80 dark:bg-[#1E2536]/85 border border-slate-200/80 dark:border-white/10 hover:border-[#8FC2F0]/50 shadow-2xs';
+
+  return (
+    <div 
+      className={`p-3.5 rounded-2xl group transition-all duration-200 relative ${cardClasses}`}
+    >
+      {/* Top Bar: PR Number, Health Indicator, Palette Button */}
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="font-mono text-[10px] font-bold text-[#292D32] dark:text-[#8FC2F0] bg-[#8FC2F0]/20 dark:bg-[#8FC2F0]/10 px-2 py-0.5 rounded-full border border-[#8FC2F0]/30 dark:border-[#8FC2F0]/20 font-urbanist">
+          {project.pr_number}
+        </span>
+        
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${healthColor}`} title={`Health: ${project.calculated_health}`} />
+          
+          {/* Color Palette Button (Only for authorized users) */}
+          {canAccess && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsColorPickerOpen(!isColorPickerOpen);
+                }}
+                className="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-all opacity-70 group-hover:opacity-100 cursor-pointer"
+                title={isRTL ? "تغيير لون كارت المشروع" : "Change card color"}
+              >
+                <Palette className="w-3 h-3 text-slate-500 hover:text-[#8FC2F0] dark:text-slate-400 transition-colors" />
+              </button>
+
+              {/* Floating Color Palette */}
+              {isColorPickerOpen && (
+                <div 
+                  ref={colorPickerRef}
+                  className={`absolute z-50 top-6 ${isRTL ? 'left-0' : 'right-0'} bg-white dark:bg-[#1E2536] border border-slate-200 dark:border-slate-700 shadow-xl rounded-2xl p-1.5 flex items-center gap-1 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md`}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  {PROJECT_CARD_COLORS.map(c => {
+                    const isSelected = effectiveColorId === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIsColorPickerOpen(false);
+                          await onUpdateColor(project.id, c.id);
+                        }}
+                        className={`w-4.5 h-4.5 rounded-full flex items-center justify-center transition-transform hover:scale-125 cursor-pointer relative border ${c.dotClass} ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-slate-900 scale-110' : 'hover:opacity-90'}`}
+                        title={isRTL ? c.nameAr : c.name}
+                      >
+                        {isSelected && (
+                          <Check className="w-2.5 h-2.5 text-white drop-shadow-xs stroke-[3]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Project Name (Clickable link to Cockpit only if authorized) */}
+      {canAccess ? (
+        <Link 
+          href={`/projects/${project.id}`}
+          className="block font-bold text-[#292D32] dark:text-slate-100 text-xs truncate hover:text-[#8FC2F0] transition-colors font-sans"
+          title={project.name}
+        >
+          {project.name}
+        </Link>
+      ) : (
+        <div className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300 text-xs truncate font-sans" title={project.name}>
+          <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+          <span className="truncate">{project.name}</span>
+        </div>
+      )}
+
+      {/* Company / Client Name */}
+      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5 font-sans">
+        {project.company_name || (isRTL ? 'عميل' : 'Client')}
+      </div>
+
+      {/* Owner & Referred To */}
+      <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5 font-sans space-y-0.5">
+        <div className="truncate">
+          <span className="font-semibold text-slate-600 dark:text-slate-300">{isRTL ? 'المالك:' : 'Owner:'} </span>
+          <span>{project.owner_name || 'Eslam Mohandes'}</span>
+        </div>
+        {project.referred_to_name && (
+          <div className="truncate text-blue-600 dark:text-[#8FC2F0] font-semibold">
+            <span>{isRTL ? 'محال إلى:' : 'Referred to:'} </span>
+            <span>{project.referred_to_name}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Estimated Value (Masked if not authorized) */}
+      <div className="font-black text-[#292D32] dark:text-white text-xs mt-1.5 font-urbanist">
+        {canAccess ? (
+          formatCurrencySAR(project.estimated_value)
+        ) : (
+          <span className="font-bold text-amber-600 dark:text-amber-400 text-[11px] flex items-center gap-1">
+            <Lock className="w-2.5 h-2.5" />
+            <span>{isRTL ? 'القيمة محجوبة' : 'Value locked'}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Location & Open Link */}
+      <div className="mt-2 flex items-center justify-between text-[9px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/50 dark:border-white/10 font-sans">
+        <span className="font-medium flex items-center gap-0.5 truncate max-w-[110px]">
+          <MapPin className="w-2.5 h-2.5 text-[#8FC2F0] shrink-0" />
+          <span className="truncate">{project.location}</span>
+        </span>
+        {canAccess ? (
+          <Link 
+            href={`/projects/${project.id}`}
+            className="text-[#292D32] dark:text-[#8FC2F0] font-bold hover:underline flex items-center gap-0.5 shrink-0"
+          >
+            {isRTL ? 'فتح' : 'Open'} <ExternalLink className="w-2.5 h-2.5" />
+          </Link>
+        ) : (
+          <span className="text-slate-400 dark:text-slate-500 font-semibold flex items-center gap-0.5 shrink-0 cursor-not-allowed">
+            <Lock className="w-2.5 h-2.5 text-amber-500" /> {isRTL ? 'للاطلاع فقط' : 'View only'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { language, t } = useLanguage();
@@ -112,13 +322,15 @@ export default function DashboardPage() {
     projects, 
     contacts, 
     activities,
+    quotations,
     currentUser,
     currentRole,
     teamMembers,
     selectedSalesFilter,
     setSelectedSalesFilter,
     requests,
-    openRequestDetail
+    openRequestDetail,
+    updateProject
   } = useCRM();
 
   const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin';
@@ -133,11 +345,49 @@ export default function DashboardPage() {
     return scopeProjects(projects, currentUser, selectedSalesFilter);
   }, [projects, currentUser, selectedSalesFilter]);
   
-  // Customizer & Widget Order state with local storage persistence
+  // Customizer & Widget Order & Sizes state with local storage persistence
   const [visibleModules, setVisibleModules] = useState<Record<DashboardModuleId, boolean>>(DEFAULT_VISIBLE_MODULES);
   const [moduleOrder, setModuleOrder] = useState<DashboardModuleId[]>(DEFAULT_MODULE_ORDER);
+  const [moduleSizes, setModuleSizes] = useState<Record<DashboardModuleId, ModuleGridSpan>>(DEFAULT_MODULE_SIZES);
   const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [draggedModuleId, setDraggedModuleId] = useState<DashboardModuleId | null>(null);
+  const [dragOverModuleId, setDragOverModuleId] = useState<DashboardModuleId | null>(null);
+
+  // Smart Grid Auto-Fill: Eliminates empty voids by pairing modules and expanding orphans
+  const computedSpans = useMemo(() => {
+    const result: Record<DashboardModuleId, ModuleGridSpan> = { ...moduleSizes };
+    
+    // Process active visible modules in order
+    const active = moduleOrder.filter(id => visibleModules[id] || isEditMode);
+    
+    // Find modules that don't take the full 12 columns
+    const nonFullCards = active.filter(id => (result[id] || DEFAULT_MODULE_SIZES[id] || 12) < 12);
+    
+    // Calculate total columns taken by non-full cards
+    const totalNonFullCols = nonFullCards.reduce((sum, id) => {
+      return sum + (result[id] || DEFAULT_MODULE_SIZES[id] || 12);
+    }, 0);
+
+    const remainder = totalNonFullCols % 12;
+    if (remainder !== 0) {
+      // There is an empty space of (12 - remainder) columns in the grid.
+      // Automatically expand the last non-full card to fill the row gap seamlessly.
+      const lastNonFullId = nonFullCards[nonFullCards.length - 1];
+      if (lastNonFullId) {
+        const current = result[lastNonFullId] || DEFAULT_MODULE_SIZES[lastNonFullId] || 6;
+        const needed = 12 - remainder;
+        const candidate = current + needed;
+        if (candidate === 8) {
+          result[lastNonFullId] = 8;
+        } else {
+          result[lastNonFullId] = 12;
+        }
+      }
+    }
+    
+    return result;
+  }, [moduleOrder, visibleModules, moduleSizes, isEditMode]);
 
   // Active Main Dashboard View Tab: 'overview' | 'suggestions' | 'team'
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'suggestions' | 'team'>('overview');
@@ -146,7 +396,7 @@ export default function DashboardPage() {
   const [hoveredStageIndex, setHoveredStageIndex] = useState<number | null>(null);
   const [hoveredTypeIndex, setHoveredTypeIndex] = useState<number | null>(null);
 
-  // Load saved module preferences & order on mount
+  // Load saved module preferences, order & sizes on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -165,6 +415,11 @@ export default function DashboardPage() {
           setModuleOrder([...validOrder, ...missing]);
         }
       }
+      const savedSizes = localStorage.getItem(SIZE_STORAGE_KEY);
+      if (savedSizes) {
+        const parsedSizes = JSON.parse(savedSizes);
+        setModuleSizes(prev => ({ ...prev, ...parsedSizes }));
+      }
     } catch (e) {
       console.warn('Could not read dashboard preferences', e);
     }
@@ -180,6 +435,33 @@ export default function DashboardPage() {
       }
       return next;
     });
+  };
+
+  const updateModuleSize = (id: DashboardModuleId, span: ModuleGridSpan) => {
+    setModuleSizes(prev => {
+      const next = { ...prev, [id]: span };
+      try {
+        localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.warn('Could not save module sizes', e);
+      }
+      return next;
+    });
+  };
+
+  const cycleModuleSize = (id: DashboardModuleId) => {
+    const current = moduleSizes[id] || DEFAULT_MODULE_SIZES[id] || 12;
+    const next: ModuleGridSpan = current === 4 ? 6 : current === 6 ? 8 : current === 8 ? 12 : 4;
+    updateModuleSize(id, next);
+  };
+
+  const getColSpanClass = (span: ModuleGridSpan) => {
+    switch (span) {
+      case 4: return 'col-span-12 lg:col-span-4';
+      case 6: return 'col-span-12 lg:col-span-6';
+      case 8: return 'col-span-12 lg:col-span-8';
+      case 12: default: return 'col-span-12';
+    }
   };
 
   const saveModuleOrder = (newOrder: DashboardModuleId[]) => {
@@ -221,9 +503,11 @@ export default function DashboardPage() {
   const resetToDefaultLayout = () => {
     setVisibleModules(DEFAULT_VISIBLE_MODULES);
     setModuleOrder(DEFAULT_MODULE_ORDER);
+    setModuleSizes(DEFAULT_MODULE_SIZES);
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(ORDER_STORAGE_KEY);
+      localStorage.removeItem(SIZE_STORAGE_KEY);
     } catch (e) {
       console.warn('Could not reset dashboard layout', e);
     }
@@ -231,12 +515,13 @@ export default function DashboardPage() {
 
   const setAllModules = (visible: boolean) => {
     const updated: Record<DashboardModuleId, boolean> = {
-      team_performance: visible,
+      priority_actions: visible,
       kpis: visible,
+      attention_center: visible,
+      team_performance: visible,
       stage_chart: visible,
       type_donut: visible,
       locations: visible,
-      attention_center: visible,
       mini_kanban: visible,
       recent_projects: visible,
       week_activities: visible,
@@ -464,29 +749,59 @@ export default function DashboardPage() {
   }, [scopedProjects]);
 
   // -------------------------------------------------------------
-  // MINI KANBAN STAGES (Active real projects)
+  // MINI KANBAN STAGES (The 7 Exact Pipeline Stages)
   // -------------------------------------------------------------
+  const SEVEN_STAGES: PipelineStage[] = [
+    'lead',
+    'rfq_processing',
+    'quotation_sent',
+    'technical_submission',
+    'negotiation',
+    'won',
+    'lost',
+  ];
+
   const miniKanbanStages = useMemo(() => {
-    return [
-      { stage: 'lead' as PipelineStage, label: 'Lead' },
-      { stage: 'rfq_processing' as PipelineStage, label: 'RFQ' },
-      { stage: 'pricing' as PipelineStage, label: 'Pricing' },
-      { stage: 'quotation_sent' as PipelineStage, label: 'Quotation' },
-      { stage: 'technical_submission' as PipelineStage, label: 'Technical' },
-      { stage: 'negotiation' as PipelineStage, label: 'Negotiation' },
-      { stage: 'won' as PipelineStage, label: 'Won' },
-      { stage: 'lost' as PipelineStage, label: 'Lost' },
-    ].map(col => {
-      const stageProjects = scopedProjects.filter(p => p.pipeline_stage === col.stage);
+    return SEVEN_STAGES.map(stageKey => {
+      const stageConfig = PIPELINE_STAGES.find(s => s.value === stageKey) || {
+        value: stageKey,
+        label: stageKey,
+        labelAr: stageKey,
+        color: '#94a3b8',
+        badgeClass: 'bg-slate-100 text-slate-700'
+      };
+
+      const stageProjects = scopedProjects
+        .filter(p => p.pipeline_stage === stageKey)
+        .sort((a, b) => {
+          const timeA = new Date(a.stage_entered_at || a.updated_at || a.created_at).getTime();
+          const timeB = new Date(b.stage_entered_at || b.updated_at || b.created_at).getTime();
+          return timeB - timeA; // Most recently moved to this stage first
+        });
+
       const stageVal = stageProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
+
       return {
-        ...col,
+        stage: stageKey,
+        label: isRTL ? stageConfig.labelAr : stageConfig.label,
+        color: stageConfig.color,
+        badgeClass: stageConfig.badgeClass,
         count: stageProjects.length,
         totalValueFormatted: formatCurrencySAR(stageVal),
         projects: stageProjects,
       };
     });
-  }, [scopedProjects]);
+  }, [scopedProjects, isRTL]);
+
+  const handleUpdateProjectColor = async (projectId: string, colorId: string) => {
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return;
+    if (proj.pipeline_stage !== 'won' && proj.pipeline_stage !== 'lost') {
+      await updateProject(projectId, { card_color: colorId, base_card_color: colorId });
+    } else {
+      await updateProject(projectId, { base_card_color: colorId });
+    }
+  };
 
   // -------------------------------------------------------------
   // THIS WEEK'S ACTIVITIES (From Real Database / Migrated Data)
@@ -516,6 +831,10 @@ export default function DashboardPage() {
       };
     });
   }, [scopedActivities, scopedProjects, teamMembers]);
+
+  const pipelineForecast = useMemo(() => {
+    return calculatePipelineForecast(scopedProjects, quotations);
+  }, [scopedProjects, quotations]);
 
   const activeModulesCount = Object.values(visibleModules).filter(Boolean).length;
 
@@ -659,8 +978,8 @@ export default function DashboardPage() {
                   </div>
                   <p className="text-xs text-slate-300 dark:text-slate-400 mt-0.5">
                     {isRTL 
-                      ? 'استخدم الأسهم على رأس كل كارت لتغيير ترتيب ظهوره أو إخفائه فوراً، ويتم حفظ الترتيب تلقائياً' 
-                      : 'Use the arrows on any card header to adjust its position or toggle visibility. Changes save automatically.'}
+                      ? 'اضغط مطولاً واسحب أي كارت (Hold & Drag) لإفلاته في المكان المطلوب، أو استخدم الأسهم، ويتم حفظ الترتيب تلقائياً' 
+                      : 'Hold and drag any card to drop it in your desired position, or use the arrows. Changes save automatically.'}
                   </p>
                 </div>
               </div>
@@ -668,7 +987,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={resetToDefaultLayout}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200 transition-colors"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200 transition-colors cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   <span>{isRTL ? 'الترتيب الافتراضي' : 'Reset'}</span>
@@ -676,7 +995,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsCustomizeModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200 transition-colors"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200 transition-colors cursor-pointer"
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5" />
                   <span>{isRTL ? 'إدارة القائمة' : 'List Manager'}</span>
@@ -684,7 +1003,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditMode(false)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#8FC2F0] hover:bg-[#7AB5E8] text-[#141820] text-xs font-black transition-colors shadow-xs"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#8FC2F0] hover:bg-[#7AB5E8] text-[#141820] text-xs font-black transition-colors shadow-xs cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   <span>{isRTL ? 'حفظ وإنهاء' : 'Done'}</span>
@@ -693,8 +1012,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* DYNAMIC MODULES GRID (ORDERED BY USER PREFERENCE) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* DYNAMIC MODULES GRID (DENSE PACKING + AUTOFILL ELIMINATES EMPTY VOIDS) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:grid-flow-row-dense [grid-auto-flow:row_dense]">
             {moduleOrder.map((modId, index) => {
               const isVisible = visibleModules[modId];
               if (!isVisible && !isEditMode) return null;
@@ -702,25 +1021,91 @@ export default function DashboardPage() {
               const modInfo = ALL_MODULES.find(m => m.id === modId);
               const isFirst = index === 0;
               const isLast = index === moduleOrder.length - 1;
+              const isBeingDragged = isEditMode && draggedModuleId === modId;
+              const isDropTarget = isEditMode && dragOverModuleId === modId && draggedModuleId !== modId;
 
-              // Determine responsive grid col-span
-              const colSpanClass = (modId === 'kpis' || modId === 'team_performance' || modId === 'mini_kanban' || modId === 'recent_projects')
-                ? 'col-span-12'
-                : 'col-span-12 lg:col-span-6';
+              // Determine responsive grid col-span with smart auto-fill
+              const currentSpan = computedSpans[modId] || moduleSizes[modId] || DEFAULT_MODULE_SIZES[modId] || 12;
+              const colSpanClass = getColSpanClass(currentSpan);
 
               return (
                 <div 
                   key={modId} 
+                  draggable={isEditMode}
+                  onDragStart={(e) => {
+                    if (!isEditMode) return;
+                    e.dataTransfer.setData('text/plain', modId);
+                    e.dataTransfer.effectAllowed = 'move';
+                    setDraggedModuleId(modId);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedModuleId(null);
+                    setDragOverModuleId(null);
+                  }}
+                  onDragOver={(e) => {
+                    if (!isEditMode || !draggedModuleId || draggedModuleId === modId) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    if (dragOverModuleId !== modId) {
+                      setDragOverModuleId(modId);
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                    if (dragOverModuleId === modId) {
+                      setDragOverModuleId(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    if (!isEditMode) return;
+                    e.preventDefault();
+                    const sourceId = (e.dataTransfer.getData('text/plain') || draggedModuleId) as DashboardModuleId;
+                    if (sourceId && sourceId !== modId) {
+                      const fromIndex = moduleOrder.indexOf(sourceId);
+                      const toIndex = moduleOrder.indexOf(modId);
+                      if (fromIndex !== -1 && toIndex !== -1) {
+                        const nextOrder = [...moduleOrder];
+                        const [moved] = nextOrder.splice(fromIndex, 1);
+                        nextOrder.splice(toIndex, 0, moved);
+                        saveModuleOrder(nextOrder);
+                      }
+                    }
+                    setDraggedModuleId(null);
+                    setDragOverModuleId(null);
+                  }}
                   className={cn(
                     colSpanClass,
-                    "transition-all duration-200",
-                    isEditMode && "p-2.5 rounded-2xl border-2 border-dashed border-[#8FC2F0]/40 bg-[#8FC2F0]/03"
+                    "transition-all duration-200 relative group/widget",
+                    isEditMode && "p-2.5 rounded-2xl border-2 border-dashed border-[#8FC2F0]/40 bg-[#8FC2F0]/03 cursor-grab active:cursor-grabbing",
+                    isBeingDragged && "opacity-35 scale-[0.98] border-dashed border-[#8FC2F0] shadow-none",
+                    isDropTarget && "ring-4 ring-[#8FC2F0]/50 border-2 border-[#8FC2F0] scale-[1.01] bg-[#8FC2F0]/10 shadow-2xl"
                   )}
                 >
+                  {/* Drop Target Indicator Overlay */}
+                  {isDropTarget && (
+                    <div className="absolute inset-0 z-40 bg-[#8FC2F0]/20 dark:bg-[#8FC2F0]/25 rounded-2xl border-2 border-dashed border-[#8FC2F0] flex items-center justify-center backdrop-blur-2xs pointer-events-none animate-in fade-in duration-100">
+                      <div className="bg-[#292D32] dark:bg-[#141820] text-white px-4 py-2.5 rounded-xl text-xs font-black shadow-xl flex items-center gap-2 border border-[#8FC2F0]/50">
+                        <Move className="w-4 h-4 text-[#8FC2F0] animate-bounce" />
+                        <span>{isRTL ? `إفلات لنقل الكارت إلى هنا (مكان #${index + 1})` : `Drop widget here (position #${index + 1})`}</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Floating Edit Mode Controls */}
                   {isEditMode && (
-                    <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900/90 dark:bg-[#141820] text-white rounded-xl mb-3 border border-white/10 shadow-sm backdrop-blur-xs select-none">
+                    <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900/90 dark:bg-[#141820] text-white rounded-xl mb-3 border border-white/10 shadow-sm backdrop-blur-xs select-none flex-wrap gap-2">
                       <div className="flex items-center gap-2.5">
+                        {/* Drag Handle Grip Pill */}
+                        <div 
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#8FC2F0]/20 dark:bg-[#8FC2F0]/15 text-[#8FC2F0] hover:bg-[#8FC2F0]/30 transition-colors cursor-grab active:cursor-grabbing border border-[#8FC2F0]/30 select-none shadow-2xs"
+                          title={isRTL ? "اضغط واسحب الكارت إلى المكان المطلوب" : "Hold and drag widget to reorder"}
+                        >
+                          <GripVertical className="w-4 h-4 text-[#8FC2F0]" />
+                          <span className="text-[11px] font-black text-white hidden sm:inline">
+                            {isRTL ? "اسحب للترتيب" : "Drag to move"}
+                          </span>
+                        </div>
+
                         <span className="w-6 h-6 rounded-lg bg-[#8FC2F0] text-[#141820] font-black text-xs flex items-center justify-center font-mono shadow-xs">
                           #{index + 1}
                         </span>
@@ -734,14 +1119,43 @@ export default function DashboardPage() {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {/* Size Switcher */}
+                        <div className="flex items-center bg-white/10 dark:bg-black/40 rounded-lg p-0.5 border border-white/10">
+                          <span className="text-[10px] font-bold text-slate-300 px-1.5 hidden sm:inline">
+                            {isRTL ? 'العرض:' : 'Width:'}
+                          </span>
+                          {([4, 6, 8, 12] as ModuleGridSpan[]).map((span) => {
+                            const isCurrent = currentSpan === span;
+                            const label = span === 4 ? '1/3' : span === 6 ? '1/2' : span === 8 ? '2/3' : (isRTL ? 'كامل' : 'Full');
+                            return (
+                              <button
+                                key={span}
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); updateModuleSize(modId, span); }}
+                                className={cn(
+                                  "px-2 py-0.5 text-[10px] font-extrabold rounded-md transition-all cursor-pointer",
+                                  isCurrent 
+                                    ? "bg-[#8FC2F0] text-[#141820] shadow-xs" 
+                                    : "text-slate-300 hover:text-white hover:bg-white/10"
+                                )}
+                                title={isRTL ? `تحديد العرض: ${label}` : `Set width: ${label}`}
+                              >
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="w-[1px] h-4 bg-white/15 mx-0.5" />
+
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); moveModuleToTop(modId); }}
                           disabled={isFirst}
                           title={isRTL ? 'نقل للأعلى تماماً' : 'Move to Top'}
                           className={cn(
-                            "p-1.5 rounded-lg transition-colors",
+                            "p-1.5 rounded-lg transition-colors cursor-pointer",
                             isFirst ? "text-slate-600 cursor-not-allowed" : "text-slate-300 hover:text-white hover:bg-white/10"
                           )}
                         >
@@ -754,7 +1168,7 @@ export default function DashboardPage() {
                           disabled={isFirst}
                           title={isRTL ? 'تحريك لأعلى' : 'Move Up'}
                           className={cn(
-                            "p-1.5 rounded-lg transition-colors",
+                            "p-1.5 rounded-lg transition-colors cursor-pointer",
                             isFirst ? "text-slate-600 cursor-not-allowed" : "text-slate-300 hover:text-white hover:bg-white/10"
                           )}
                         >
@@ -767,14 +1181,14 @@ export default function DashboardPage() {
                           disabled={isLast}
                           title={isRTL ? 'تحريك لأسفل' : 'Move Down'}
                           className={cn(
-                            "p-1.5 rounded-lg transition-colors",
+                            "p-1.5 rounded-lg transition-colors cursor-pointer",
                             isLast ? "text-slate-600 cursor-not-allowed" : "text-slate-300 hover:text-white hover:bg-white/10"
                           )}
                         >
                           <ChevronDown className="w-4 h-4" />
                         </button>
 
-                        <div className="w-[1px] h-4 bg-white/15 mx-1" />
+                        <div className="w-[1px] h-4 bg-white/15 mx-0.5" />
 
                         <button
                           type="button"
@@ -803,14 +1217,24 @@ export default function DashboardPage() {
                     </div>
                   )}
 
+
                   {/* Widget Body */}
                   {isVisible ? (
                     <>
+                      {/* 0. PRIORITY ACTIONS (WHAT TO DO TODAY) */}
+                      {modId === 'priority_actions' && (
+                        <PriorityActionsWidget cardSpan={currentSpan} />
+                      )}
+
                       {/* 1. KPIS */}
                       {modId === 'kpis' && (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 animate-in fade-in duration-200">
                           {/* Active Projects */}
-                          <div className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card transition-all">
+                          <Link 
+                            href="/projects?filter=active"
+                            className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer"
+                            title={isRTL ? "اضغط لعرض كافة الصفقات النشطة" : "Click to view active deals"}
+                          >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-[#77CE69]/15 text-[#216817] dark:text-[#77CE69] flex items-center justify-center shrink-0 border border-[#77CE69]/30 transition-transform group-hover:scale-105">
                                 <Folder className="w-4 h-4" />
@@ -830,10 +1254,14 @@ export default function DashboardPage() {
                                 {isRTL ? 'نشط' : 'Active'}
                               </span>
                             </div>
-                          </div>
+                          </Link>
 
                           {/* Total Pipeline Value */}
-                          <div className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card transition-all">
+                          <Link 
+                            href="/projects?view=table"
+                            className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer"
+                            title={isRTL ? "اضغط لفتح جدول المشاريع والتفاصيل" : "Click to view full projects pipeline table"}
+                          >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shrink-0 border border-[#8FC2F0]/40 transition-transform group-hover:scale-105">
                                 <Briefcase className="w-4 h-4" />
@@ -847,14 +1275,23 @@ export default function DashboardPage() {
                                 </div>
                               </div>
                             </div>
-                            <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                              <span>{isRTL ? 'القيمة الإجمالية' : 'Total Scope'}</span>
-                              <TrendingUp className="w-3.5 h-3.5 text-[#8FC2F0]" />
+                            <div className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                              <span className="flex items-center gap-1 font-bold">
+                                <Sparkles className="w-3 h-3 text-purple-600" />
+                                <span>{isRTL ? 'الموزون:' : 'Weighted:'} {formatCompactSAR(pipelineForecast.totalWeightedPipeline)}</span>
+                              </span>
+                              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-200">
+                                ~{pipelineForecast.weightedProbabilityAvg}%
+                              </span>
                             </div>
-                          </div>
+                          </Link>
 
                           {/* Quotation Value */}
-                          <div className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card transition-all">
+                          <Link 
+                            href="/projects?stage=quotation_sent"
+                            className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer"
+                            title={isRTL ? "اضغط لعرض مشاريع مرحلة عروض الأسعار" : "Click to view quotation stage projects"}
+                          >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-[#8FC2F0]/15 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shrink-0 border border-[#8FC2F0]/30 transition-transform group-hover:scale-105">
                                 <FileText className="w-4 h-4" />
@@ -874,10 +1311,14 @@ export default function DashboardPage() {
                                 {formatCurrencySAR(quotationValue)}
                               </span>
                             </div>
-                          </div>
+                          </Link>
 
                           {/* Won Deals Value */}
-                          <div className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card transition-all bg-gradient-to-b from-white via-white to-[#77CE69]/5 dark:from-[#1C2130] dark:to-[#1C2130]">
+                          <Link 
+                            href="/projects?stage=won"
+                            className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card hover:border-emerald-400 dark:hover:border-emerald-600 transition-all cursor-pointer bg-gradient-to-b from-white via-white to-[#77CE69]/5 dark:from-[#1C2130] dark:to-[#1C2130]"
+                            title={isRTL ? "اضغط لعرض الصفقات الرابحة" : "Click to view won deals"}
+                          >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-[#77CE69] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#77CE69]/30 transition-transform group-hover:scale-105">
                                 <Trophy className="w-4 h-4 text-white" />
@@ -895,10 +1336,14 @@ export default function DashboardPage() {
                               <span>{wonProjects.length} {isRTL ? 'صفقة مغلقة' : 'Won Deal'}</span>
                               <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-0.5 rounded-full font-bold">100%</span>
                             </div>
-                          </div>
+                          </Link>
 
                           {/* Overdue Follow-ups */}
-                          <div className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card transition-all">
+                          <Link 
+                            href="/projects?health=red"
+                            className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card hover:border-rose-300 dark:hover:border-rose-700 transition-all cursor-pointer"
+                            title={isRTL ? "اضغط لعرض الصفقات المتأخرة التي تحتاج متابعة عاجلة" : "Click to view overdue deals needing attention"}
+                          >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-200 dark:border-rose-900/50 transition-transform group-hover:scale-105">
                                 <AlertTriangle className="w-4 h-4" />
@@ -916,10 +1361,14 @@ export default function DashboardPage() {
                               <span>{t('urgentActionRequired')}</span>
                               {overdueCount > 0 && <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />}
                             </div>
-                          </div>
+                          </Link>
 
                           {/* Active Leads & Contacts */}
-                          <div className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card transition-all">
+                          <Link 
+                            href="/projects?stage=lead"
+                            className="crm-card p-5 flex flex-col justify-between group hover:translate-y-[-2px] hover:shadow-card hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer"
+                            title={isRTL ? "اضغط لعرض صفقات مرحلة العملاء المحتملين" : "Click to view lead stage projects"}
+                          >
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shrink-0 border border-[#8FC2F0]/40 transition-transform group-hover:scale-105">
                                 <UserPlus className="w-4 h-4" />
@@ -937,7 +1386,7 @@ export default function DashboardPage() {
                               <span className="text-slate-600 dark:text-slate-300">{leadStageProjects.length} {isRTL ? 'فرص' : 'Leads'}</span>
                               <span className="text-slate-500 dark:text-slate-400 font-mono">{hotContacts.length} {isRTL ? 'جهات' : 'Contacts'}</span>
                             </div>
-                          </div>
+                          </Link>
                         </div>
                       )}
 
@@ -968,8 +1417,9 @@ export default function DashboardPage() {
                             {stageBarData.map((bar, i) => {
                               const isHovered = hoveredStageIndex === i;
                               return (
-                                <div 
+                                <Link 
                                   key={bar.stage} 
+                                  href={`/projects?stage=${bar.stage}`}
                                   className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group cursor-pointer relative"
                                   onMouseEnter={() => setHoveredStageIndex(i)}
                                   onMouseLeave={() => setHoveredStageIndex(null)}
@@ -1030,11 +1480,14 @@ export default function DashboardPage() {
                                         <div className="mt-2 pt-2 border-t border-white/10 text-[10px] font-urbanist">
                                           <div className="text-slate-400 font-medium mb-1">Key Deals:</div>
                                           <div className="space-y-1 max-h-24 overflow-hidden">
-                                            {bar.projects.slice(0, 3).map(p => (
-                                              <div key={p.id} className="truncate text-slate-200">
-                                                • {p.name} <span className="text-slate-400">({formatCurrencySAR(p.estimated_value)})</span>
-                                              </div>
-                                            ))}
+                                            {bar.projects.slice(0, 3).map(p => {
+                                              const canAcc = canUserAccessProjectCockpit(p, currentUser);
+                                              return (
+                                                <div key={p.id} className="truncate text-slate-200">
+                                                  • {p.name} <span className="text-slate-400">({canAcc ? formatCurrencySAR(p.estimated_value) : (isRTL ? 'محجوبة' : 'locked')})</span>
+                                                </div>
+                                              );
+                                            })}
                                             {bar.projects.length > 3 && (
                                               <div className="text-[#8FC2F0] font-semibold italic">
                                                 +{bar.projects.length - 3} more deals
@@ -1043,9 +1496,13 @@ export default function DashboardPage() {
                                           </div>
                                         </div>
                                       )}
+
+                                      <div className="mt-2 pt-1.5 border-t border-white/10 text-center text-[#8FC2F0] font-bold text-[10px]">
+                                        {isRTL ? 'اضغط لعرض مشاريع المرحلة ←' : 'Click to view deals in stage →'}
+                                      </div>
                                     </div>
                                   )}
-                                </div>
+                                </Link>
                               );
                             })}
                           </div>
@@ -1182,11 +1639,14 @@ export default function DashboardPage() {
                                   <div className="mt-2 pt-2 border-t border-slate-800 text-[10px]">
                                     <div className="text-slate-400 font-medium mb-1">Key Projects:</div>
                                     <div className="space-y-1 max-h-20 overflow-hidden">
-                                      {donutTypeData[hoveredTypeIndex].projects.slice(0, 2).map(p => (
-                                        <div key={p.id} className="truncate text-slate-200">
-                                          • {p.name} <span className="text-slate-400">({formatCurrencySAR(p.estimated_value)})</span>
-                                        </div>
-                                      ))}
+                                      {donutTypeData[hoveredTypeIndex].projects.slice(0, 2).map(p => {
+                                        const canAcc = canUserAccessProjectCockpit(p, currentUser);
+                                        return (
+                                          <div key={p.id} className="truncate text-slate-200">
+                                            • {p.name} <span className="text-slate-400">({canAcc ? formatCurrencySAR(p.estimated_value) : (isRTL ? 'محجوبة' : 'locked')})</span>
+                                          </div>
+                                        );
+                                      })}
                                     </div>
                                   </div>
                                 )}
@@ -1397,69 +1857,45 @@ export default function DashboardPage() {
                             </Link>
                           </div>
 
-                          {/* Horizontal Mini-Kanban */}
+                          {/* Horizontal Mini-Kanban: 7 Pipeline Stages */}
                           <div className="overflow-x-auto pb-2">
-                            <div className="flex gap-3.5 min-w-[1300px]">
+                            <div className="flex gap-3.5 min-w-[1400px]">
                               {miniKanbanStages.map((col) => (
                                 <div 
                                   key={col.stage} 
-                                  className="flex-1 min-w-[210px] bg-white/40 dark:bg-[#1C2130]/60 backdrop-blur-md rounded-2xl p-3.5 border border-white/80 dark:border-[#8FC2F0]/08 shadow-2xs flex flex-col justify-between"
+                                  className="flex-1 min-w-[200px] bg-white/40 dark:bg-[#1C2130]/60 backdrop-blur-md rounded-2xl p-3.5 border border-white/80 dark:border-[#8FC2F0]/08 shadow-2xs flex flex-col justify-start"
                                 >
-                                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-[#292D32]/60 mb-2.5 font-urbanist">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-black text-xs text-[#292D32] dark:text-white">{col.label}</span>
-                                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-white dark:bg-[#232A38] px-1.5 py-0.2 rounded-full border border-slate-200/60 dark:border-[#292D32]/60">
+                                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-[#292D32]/60 mb-2.5 font-urbanist shrink-0">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span 
+                                        className="w-2 h-2 rounded-full shrink-0" 
+                                        style={{ backgroundColor: col.color }} 
+                                        title={col.label} 
+                                      />
+                                      <span className="font-black text-xs text-[#292D32] dark:text-white truncate" title={col.label}>
+                                        {col.label}
+                                      </span>
+                                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 bg-white dark:bg-[#232A38] px-1.5 py-0.2 rounded-full border border-slate-200/60 dark:border-[#292D32]/60 shrink-0">
                                         {col.count}
                                       </span>
                                     </div>
-                                    <span className="text-[11px] font-black text-[#292D32] dark:text-white">{col.totalValueFormatted}</span>
+                                    <span className="text-[11px] font-black text-[#292D32] dark:text-white shrink-0 font-urbanist">
+                                      {col.totalValueFormatted}
+                                    </span>
                                   </div>
 
-                                  <div className="space-y-2.5">
-                                    {col.projects.slice(0, 3).map((project) => {
-                                      const healthColor = 
-                                        project.calculated_health === 'red' ? 'bg-rose-500' :
-                                        project.calculated_health === 'yellow' ? 'bg-amber-500' :
-                                        project.calculated_health === 'green' ? 'bg-[#77CE69]' : 'bg-slate-400';
-
-                                      return (
-                                        <Link 
-                                          key={project.id}
-                                          href={`/projects/${project.id}`}
-                                          className="block glass-card-interactive p-3.5 rounded-2xl group cursor-pointer"
-                                        >
-                                          <div className="flex items-center justify-between mb-1.5">
-                                            <span className="font-mono text-[10px] font-bold text-[#292D32] dark:text-[#8FC2F0] bg-[#8FC2F0]/20 dark:bg-[#8FC2F0]/10 px-2 py-0.5 rounded-full border border-[#8FC2F0]/30 dark:border-[#8FC2F0]/20 font-urbanist">
-                                              {project.pr_number}
-                                            </span>
-                                            <span className={`w-2 h-2 rounded-full ${healthColor}`} title={`Health: ${project.calculated_health}`} />
-                                          </div>
-                                          
-                                          <div className="font-bold text-[#292D32] dark:text-slate-100 text-xs truncate group-hover:text-[#8FC2F0] transition-colors font-sans">
-                                            {project.name}
-                                          </div>
-                                          <div className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate mt-0.5 font-sans">
-                                            {project.company_name || 'Client'}
-                                          </div>
-                                          <div className="font-black text-[#292D32] dark:text-white text-xs mt-1.5 font-urbanist">
-                                            {formatCurrencySAR(project.estimated_value)}
-                                          </div>
-                                          
-                                          <div className="mt-2 flex items-center justify-between text-[9px] text-slate-400 dark:text-slate-500 pt-1.5 border-t border-slate-100 dark:border-[#292D32]/60 font-sans">
-                                            <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-0.5">
-                                              <MapPin className="w-2.5 h-2.5 text-[#8FC2F0]" />
-                                              {project.location}
-                                            </span>
-                                            <span className="text-[#292D32] dark:text-[#8FC2F0] font-bold group-hover:underline flex items-center gap-0.5">
-                                              {isRTL ? 'فتح' : 'Open'} <ExternalLink className="w-2.5 h-2.5" />
-                                            </span>
-                                          </div>
-                                        </Link>
-                                      );
-                                    })}
+                                  <div className="space-y-2.5 flex-1 flex flex-col justify-start">
+                                    {col.projects.slice(0, 3).map((project) => (
+                                      <MiniKanbanCard
+                                        key={project.id}
+                                        project={project}
+                                        isRTL={isRTL}
+                                        onUpdateColor={handleUpdateProjectColor}
+                                      />
+                                    ))}
 
                                     {col.projects.length === 0 && (
-                                      <div className="py-8 text-center text-slate-400 text-[11px] italic font-sans">
+                                      <div className="py-8 text-center text-slate-400 text-[11px] italic font-sans my-auto">
                                         {isRTL ? 'لا توجد مشاريع في هذه المرحلة' : 'No projects in this stage'}
                                       </div>
                                     )}
@@ -1467,7 +1903,7 @@ export default function DashboardPage() {
                                     {col.projects.length > 3 && (
                                       <Link 
                                         href="/projects" 
-                                        className="block text-center py-1.5 text-[10px] font-bold text-[#292D32] dark:text-[#8FC2F0] hover:underline bg-white/70 dark:bg-[#232A38]/70 rounded-xl border border-slate-200/60 dark:border-[#292D32]/60 font-sans"
+                                        className="block text-center py-1.5 text-[10px] font-bold text-[#292D32] dark:text-[#8FC2F0] hover:underline bg-white/70 dark:bg-[#232A38]/70 rounded-xl border border-slate-200/60 dark:border-[#292D32]/60 font-sans mt-1"
                                       >
                                         +{col.projects.length - 3} {isRTL ? 'مشاريع إضافية' : 'more in this stage'}
                                       </Link>
@@ -1514,23 +1950,49 @@ export default function DashboardPage() {
                                 <tbody className="divide-y divide-slate-100/60 dark:divide-[#292D32]/50">
                                   {sortedRecentProjects.map((p) => {
                                     const stageConfig = PIPELINE_STAGES.find(s => s.value === p.pipeline_stage);
+                                    const canAcc = canUserAccessProjectCockpit(p, currentUser);
+
                                     return (
                                       <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-[#232A38]/50 transition-colors group">
                                         <td className="py-3 px-2 font-bold text-slate-800 dark:text-slate-200">
-                                          <Link href={`/projects/${p.id}`} className="hover:text-[#8FC2F0] transition-colors flex items-center gap-1.5 font-urbanist">
-                                            <span className="truncate max-w-[170px]">{p.name}</span>
-                                            <span className="text-[10px] font-mono text-slate-400 font-bold">({p.pr_number})</span>
-                                          </Link>
+                                          {canAcc ? (
+                                            <Link href={`/projects/${p.id}`} className="hover:text-[#8FC2F0] transition-colors flex items-center gap-1.5 font-urbanist">
+                                              <span className="truncate max-w-[170px]">{p.name}</span>
+                                              <span className="text-[10px] font-mono text-slate-400 font-bold">({p.pr_number})</span>
+                                            </Link>
+                                          ) : (
+                                            <div className="flex items-center gap-1.5 font-urbanist text-slate-700 dark:text-slate-300">
+                                              <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                                              <span className="truncate max-w-[170px]">{p.name}</span>
+                                              <span className="text-[10px] font-mono text-slate-400 font-bold">({p.pr_number})</span>
+                                            </div>
+                                          )}
                                         </td>
                                         <td className="py-3 px-2 text-slate-600 dark:text-slate-400 truncate max-w-[130px] font-urbanist">{p.company_name}</td>
-                                        <td className="py-3 px-2 font-black text-[#292D32] dark:text-white font-urbanist">{formatCurrencySAR(p.estimated_value)}</td>
-                                        <td className="py-3 px-2">
-                                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${stageConfig?.badgeClass || 'bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>
-                                            {isRTL ? stageConfig?.labelAr || stageConfig?.label : stageConfig?.label || p.pipeline_stage}
-                                          </span>
+                                        <td className="py-3 px-2 font-black text-[#292D32] dark:text-white font-urbanist">
+                                          {canAcc ? (
+                                            formatCurrencySAR(p.estimated_value)
+                                          ) : (
+                                            <span className="font-bold text-amber-600 dark:text-amber-400 text-xs flex items-center gap-1">
+                                              <Lock className="w-2.5 h-2.5" />
+                                              <span>{isRTL ? 'محجوبة' : 'Locked'}</span>
+                                            </span>
+                                          )}
                                         </td>
-                                        <td className="py-3 px-2 text-slate-600 dark:text-slate-400 truncate max-w-[140px]">{p.next_action || '-'}</td>
-                                        <td className="py-3 px-2 text-slate-500 dark:text-slate-400 font-mono text-[11px]">{formatDateString(p.next_follow_up_at)}</td>
+                                        <td className="py-3 px-2">
+                                          {canAcc ? (
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${stageConfig?.badgeClass || 'bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>
+                                              {isRTL ? stageConfig?.labelAr || stageConfig?.label : stageConfig?.label || p.pipeline_stage}
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#232A38] text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1">
+                                              <Lock className="w-2.5 h-2.5 text-amber-500" />
+                                              <span>{isRTL ? 'محجوبة' : 'Locked'}</span>
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="py-3 px-2 text-slate-600 dark:text-slate-400 truncate max-w-[140px]">{canAcc ? (p.next_action || '-') : '-'}</td>
+                                        <td className="py-3 px-2 text-slate-500 dark:text-slate-400 font-mono text-[11px]">{canAcc ? formatDateString(p.next_follow_up_at) : '-'}</td>
                                         <td className="py-3 px-2 text-slate-400 font-mono text-[11px]">{formatRelativeTime(p.updated_at)}</td>
                                       </tr>
                                     );
@@ -1760,7 +2222,32 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Module Size Selector */}
+                      <div className="hidden sm:flex items-center bg-slate-100 dark:bg-[#141820] rounded-lg p-0.5 border border-slate-200/80 dark:border-slate-800 mx-1">
+                        {([4, 6, 8, 12] as ModuleGridSpan[]).map((span) => {
+                          const currentSpan = moduleSizes[modId] || DEFAULT_MODULE_SIZES[modId] || 12;
+                          const isCurrent = currentSpan === span;
+                          const label = span === 4 ? '1/3' : span === 6 ? '1/2' : span === 8 ? '2/3' : (isRTL ? 'كامل' : 'Full');
+                          return (
+                            <button
+                              key={span}
+                              type="button"
+                              onClick={() => updateModuleSize(modId, span)}
+                              className={cn(
+                                "px-2 py-0.5 text-[10px] font-bold rounded transition-colors cursor-pointer",
+                                isCurrent 
+                                  ? "bg-[#8FC2F0] text-[#141820] font-black shadow-2xs" 
+                                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                              )}
+                              title={isRTL ? `عرض الكارت: ${label}` : `Card width: ${label}`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => moveModuleToTop(modId)}

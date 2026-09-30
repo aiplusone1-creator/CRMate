@@ -20,12 +20,14 @@ import {
   TrendingUp, 
   Edit,
   Activity as ActivityIcon,
-  Search
+  Search,
+  Lock
 } from 'lucide-react';
 import { Company } from '@/types/crm';
 import { useCRM } from '@/lib/store/crm-context';
 import { COMPANY_TYPES, PIPELINE_STAGES, PROJECT_PRIORITIES } from '@/lib/constants';
 import { formatCurrencySAR, formatDateString, normalizePhoneNumber } from '@/lib/utils';
+import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
 
 interface CompanyDetailModalProps {
   company: Company | null;
@@ -46,7 +48,7 @@ export function CompanyDetailModal({
   onAddContact,
   initialTab = 'projects'
 }: CompanyDetailModalProps) {
-  const { projects, contacts, activities, openFastLog, currentRole } = useCRM();
+  const { projects, contacts, activities, openFastLog, currentRole, currentUser, teamMembers } = useCRM();
   const [activeTab, setActiveTab] = useState<'projects' | 'contacts' | 'activities' | 'overview'>(initialTab);
   const [contactSearch, setContactSearch] = useState<string>('');
 
@@ -82,9 +84,13 @@ export function CompanyDetailModal({
          (a.project_id && linkedProjectIds.has(a.project_id))
   ).sort((a, b) => new Date(b.activity_date).getTime() - new Date(a.activity_date).getTime());
 
-  // Aggregate metrics
-  const totalPipelineValue = linkedProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
-  const wonProjects = linkedProjects.filter(p => p.pipeline_stage === 'won');
+  // Aggregate metrics: For sales reps, only aggregate projects they have access to so other reps' values cannot be deduced!
+  const isSalesRep = currentUser?.role === 'sales_engineer';
+  const accessibleLinkedProjects = linkedProjects.filter(p => canUserAccessProjectCockpit(p, currentUser));
+  const metricsProjects = isSalesRep ? accessibleLinkedProjects : linkedProjects;
+
+  const totalPipelineValue = metricsProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
+  const wonProjects = metricsProjects.filter(p => p.pipeline_stage === 'won');
   const wonValue = wonProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
   const hotContactsCount = linkedContacts.filter(c => c.is_hot_lead).length;
 
@@ -325,8 +331,79 @@ export function CompanyDetailModal({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {linkedProjects.map(proj => {
+                    const isAccessible = canUserAccessProjectCockpit(proj, currentUser);
                     const stage = PIPELINE_STAGES.find(s => s.value === proj.pipeline_stage);
                     const priority = PROJECT_PRIORITIES.find(p => p.value === proj.priority);
+                    const assignedRep = teamMembers?.find(m => m.id === (proj.referred_to_id || proj.owner_id));
+                    const assignedRepName = assignedRep?.full_name || 'مهندس آخر';
+
+                    // LOCKED CARD FOR UNAUTHORIZED PROJECTS (Protected Sales Visibility)
+                    if (!isAccessible) {
+                      return (
+                        <div
+                          key={proj.id}
+                          className="glass-card bg-slate-50/80 dark:bg-slate-900/40 p-4 rounded-2xl border border-amber-500/20 shadow-2xs flex flex-col justify-between"
+                        >
+                          <div>
+                            {/* Top row: PR Number & Locked Stage */}
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300/70 dark:border-slate-700">
+                                {proj.pr_number}
+                              </span>
+                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                                <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                                <span>المرحلة محجوبة للمالك</span>
+                              </span>
+                            </div>
+
+                            {/* Project Name (Non-clickable, with lock icon) */}
+                            <div className="flex items-start gap-2 mt-1">
+                              <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                              <span className="font-black text-[#292D32] dark:text-slate-100 text-base font-urbanist line-clamp-2">
+                                {proj.name}
+                              </span>
+                            </div>
+
+                            {/* Masked Value and Masked Priority */}
+                            <div className="flex items-center gap-3 mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-800 text-xs flex-wrap">
+                              <div>
+                                <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Estimated Value</span>
+                                <span className="font-bold text-amber-600 dark:text-amber-400 text-xs font-urbanist flex items-center gap-1 mt-0.5">
+                                  <Lock className="w-3 h-3 inline" /> القيمة محجوبة للمالك
+                                </span>
+                              </div>
+
+                              <div className="ml-auto text-right">
+                                <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Priority</span>
+                                <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
+                                  محجوبة
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Location info if available */}
+                            {proj.location && (
+                              <div className="mt-2.5 text-xs text-slate-500 flex items-center gap-1.5">
+                                <MapPin className="w-3 h-3 text-slate-400" />
+                                <span>{proj.location}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Bottom action: Locked info badge */}
+                          <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between">
+                            <span className="text-[11px] text-slate-400 font-medium">
+                              مشروع مسند لزميل
+                            </span>
+
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-200/70 dark:bg-slate-800 border border-slate-300/60 dark:border-slate-700 cursor-not-allowed select-none">
+                              <Lock className="w-3 h-3 text-amber-600" />
+                              <span>مسند إلى: {assignedRepName} (للاطلاع فقط)</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div

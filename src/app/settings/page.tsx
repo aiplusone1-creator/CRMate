@@ -49,6 +49,11 @@ export default function SettingsPage() {
     updateUserProfile
   } = useCRM();
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<'profile' | 'targets' | 'team' | 'backup'>('profile');
 
@@ -356,8 +361,8 @@ export default function SettingsPage() {
           <div className="glass-card p-6 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
             <div className="flex items-center gap-4">
               <div className="relative group/avatar shrink-0">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#292D32] to-slate-700 text-white flex items-center justify-center font-black text-xl shadow-md border-2 border-[#8FC2F0] overflow-hidden">
-                  {currentUser.avatar_url ? (
+                <div suppressHydrationWarning className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#292D32] to-slate-700 text-white flex items-center justify-center font-black text-xl shadow-md border-2 border-[#8FC2F0] overflow-hidden">
+                  {mounted && currentUser.avatar_url ? (
                     <img src={currentUser.avatar_url} alt={currentUser.full_name} className="w-full h-full object-cover" />
                   ) : (
                     currentUser.avatar_initials || 'EM'
@@ -762,10 +767,11 @@ export default function SettingsPage() {
                       <div className="flex items-center gap-3">
                         <div className="relative group/teamavatar shrink-0">
                           <div 
+                            suppressHydrationWarning
                             className="w-11 h-11 rounded-xl text-white font-black flex items-center justify-center text-xs shadow-xs overflow-hidden"
                             style={{ backgroundColor: user.avatar_color || '#292D32' }}
                           >
-                            {user.avatar_url ? (
+                            {mounted && user.avatar_url ? (
                               <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
                             ) : (
                               initials

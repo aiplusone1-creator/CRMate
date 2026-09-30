@@ -1,10 +1,10 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { 
   Project, Contact, Company, Activity, PlannedActivity, 
-  Quotation, SalesTarget, UserRole, Profile, ProjectHealth,
-  Reminder, ReminderUrgency, ApprovalRequest, AppNotification
+  Quotation, QuotationStatus, SalesTarget, UserRole, Profile, ProjectHealth,
+  Reminder, ReminderUrgency, ApprovalRequest, AppNotification, PipelineStage
 } from '@/types/crm';
 import { 
   getAllRequests, 
@@ -72,19 +72,26 @@ interface CRMContextType {
   deleteActivity: (id: string) => Promise<void>;
   addProject: (project: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'>) => Promise<Project>;
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
+  referProject: (projectId: string, targetUserId: string) => Promise<void>;
   addContact: (contact: Omit<Contact, 'id' | 'created_at' | 'updated_at'>) => Promise<Contact>;
   updateContact: (id: string, updates: Partial<Contact>) => Promise<void>;
   deleteContact: (id: string) => Promise<void>;
   addCompany: (company: Omit<Company, 'id' | 'created_at' | 'updated_at'>) => Promise<Company>;
   updateCompany: (id: string, updates: Partial<Company>) => Promise<void>;
   deleteCompany: (id: string) => Promise<void>;
-  deleteProject: (id: string) => Promise<void>;
+  deleteProject: (id: string, reason?: string) => Promise<void>;
+  archiveProject: (id: string, reason?: string) => Promise<void>;
+  restoreProject: (id: string) => Promise<void>;
   addPlannedActivity: (planned: Omit<PlannedActivity, 'id' | 'created_at' | 'updated_at' | 'status'>) => Promise<PlannedActivity>;
   updatePlannedActivity: (id: string, updates: Partial<PlannedActivity>) => Promise<void>;
   deletePlannedActivity: (id: string) => Promise<void>;
   completePlannedActivity: (plannedId: string, activityData: Omit<Activity, 'id' | 'created_at' | 'planned_activity_id'>) => Promise<void>;
   updateSalesTarget: (id: string, newTargetValue: number) => Promise<void>;
   addQuotation: (quotation: Omit<Quotation, 'id' | 'created_at' | 'updated_at'>) => Promise<Quotation>;
+  createQuotationRevision: (parentQuotationId: string, revisionData: Partial<Quotation> & { revision_reason: string }) => Promise<Quotation>;
+  updateQuotation: (id: string, updates: Partial<Quotation>) => Promise<void>;
+  updateQuotationStatus: (id: string, newStatus: QuotationStatus) => Promise<void>;
+  archiveQuotation: (id: string) => Promise<void>;
   deleteQuotation: (id: string) => Promise<void>;
   // Reminder system
   reminders: Reminder[];
@@ -133,9 +140,222 @@ interface CRMContextType {
   notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
+  // Interactive Module Guide System
+  isGuideOpen: boolean;
+  activeGuideModuleId: string | null;
+  openGuide: (moduleId?: string) => void;
+  closeGuide: () => void;
 }
 
 import migratedData from '@/lib/data/migrated_data.json';
+import { quotationsService } from '@/lib/supabase/quotations-service';
+
+// Acceptance Example Project (Section 42): Al Tahlia Business Park
+const SEED_TAHLIA_PROJECT: Project = {
+  id: 'p_tahlia_business_park',
+  pr_number: 'PR-2026-0018',
+  name: 'Al Tahlia Business Park',
+  company_id: 'c_tahlia_group',
+  company_name: 'Al Tahlia Commercial Development',
+  primary_contact_name: 'Eng. Fahad Al-Zahrani',
+  primary_contact_phone: '+966551234567',
+  location: 'Jeddah - Al Tahlia St.',
+  opportunity_type: 'in_hand',
+  pipeline_stage: 'negotiation',
+  priority: 'high',
+  estimated_value: 5000000,
+  probability: 80,
+  weighted_value: 4000000,
+  expected_award_date: '2026-10-15',
+  owner_id: 'u1',
+  owner_name: 'Eslam Mohandes',
+  next_action: 'Negotiate final commercial terms on Quotation V4 with Executive Board',
+  next_follow_up_at: '2026-09-25T10:00:00Z',
+  last_activity_at: '2026-09-19T16:00:00Z',
+  created_at: '2026-08-20T08:00:00Z',
+  stage_entered_at: '2026-09-08T10:00:00Z',
+  updated_at: '2026-09-19T16:00:00Z',
+};
+
+// Example Closed Won Project with Purchase Order (PO) and 50% Cash Collection
+const SEED_WON_PROJECT: Project = {
+  id: 'p_red_sea_mall_expansion',
+  pr_number: 'PR-2026-0009',
+  name: 'Red Sea Mall Expansion — HVAC & Chilled Water Package',
+  company_id: 'c_red_sea_contracting',
+  company_name: 'Red Sea Real Estate Development Co.',
+  primary_contact_name: 'Eng. Tariq Mansour',
+  primary_contact_phone: '+966504443322',
+  location: 'Jeddah - King Abdulaziz Rd',
+  opportunity_type: 'in_hand',
+  pipeline_stage: 'won',
+  priority: 'high',
+  estimated_value: 2400000,
+  final_won_value: 2400000,
+  probability: 100,
+  weighted_value: 2400000,
+  expected_award_date: '2026-08-30',
+  owner_id: 'u1',
+  owner_name: 'Eslam Mohandes',
+  next_action: 'Follow up on second collection milestone (50% equipment delivery)',
+  next_follow_up_at: '2026-10-05T09:00:00Z',
+  last_activity_at: '2026-09-22T14:00:00Z',
+  created_at: '2026-07-15T09:00:00Z',
+  stage_entered_at: '2026-09-01T10:00:00Z',
+  updated_at: '2026-09-22T14:00:00Z',
+  card_color: 'emerald',
+  base_card_color: 'default',
+  // Purchase Order & Collection Data
+  po_number: 'PO-RSM-2026-4401',
+  po_date: '2026-09-02',
+  po_amount: 2400000,
+  po_attachment_name: 'Official_PO_RedSeaMall_Expansion.pdf',
+  po_attachment_url: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+  po_attachment_size: 482910,
+  po_uploaded_at: '2026-09-02T11:30:00Z',
+  po_uploaded_by: 'Eslam Mohandes',
+  po_notes: '10% Advance payment received upon contract signing. 40% on first shipment delivery.',
+  collected_amount: 1200000,
+  collected_percentage: 50,
+  collection_status: 'partially_collected',
+  collection_records: [
+    {
+      id: 'pay_rs_01',
+      amount: 240000,
+      percentage: 10,
+      payment_date: '2026-09-05',
+      payment_method: 'bank_transfer',
+      reference_number: 'TR-SNB-998812',
+      notes: '10% Advance Payment against Bank Guarantee',
+      recorded_by: 'Eslam Mohandes',
+      created_at: '2026-09-05T12:00:00Z',
+    },
+    {
+      id: 'pay_rs_02',
+      amount: 960000,
+      percentage: 40,
+      payment_date: '2026-09-20',
+      payment_method: 'bank_transfer',
+      reference_number: 'TR-SNB-999430',
+      notes: '40% Supply & Delivery Milestone Payment',
+      recorded_by: 'Eslam Mohandes',
+      created_at: '2026-09-20T15:30:00Z',
+    }
+  ]
+};
+
+const SEED_TAHLIA_QUOTATIONS: Quotation[] = [
+  {
+    id: 'q_tahlia_v1',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    quotation_number: 'Q-2026-0018',
+    version: 1,
+    amount: 4250000,
+    subtotal: 4250000,
+    discount_amount: 0,
+    discount_percentage: 0,
+    tax_amount: 0,
+    total_amount: 4250000,
+    currency: 'SAR',
+    vendor_brand: 'Belimo Valves & Actuators Package',
+    status: 'submitted',
+    quotation_date: '2026-09-01',
+    sent_date: '2026-09-01',
+    valid_until: '2026-09-30',
+    notes: 'Initial formal commercial proposal based on tender drawings.',
+    payment_terms: '10% Advance, 90% against delivery',
+    delivery_terms: '4-6 Weeks from Official Purchase Order',
+    warranty_terms: '2 Years Comprehensive Manufacturer Warranty',
+    created_by: 'Eslam Mohandes',
+    created_at: '2026-09-01T10:00:00Z',
+    updated_at: '2026-09-01T10:00:00Z',
+  },
+  {
+    id: 'q_tahlia_v2',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    quotation_number: 'Q-2026-0018',
+    version: 2,
+    amount: 4050000,
+    subtotal: 4250000,
+    discount_amount: 200000,
+    discount_percentage: 4.71,
+    tax_amount: 0,
+    total_amount: 4050000,
+    currency: 'SAR',
+    vendor_brand: 'Belimo Valves & Actuators Package',
+    status: 'revised',
+    quotation_date: '2026-09-07',
+    sent_date: '2026-09-07',
+    valid_until: '2026-09-30',
+    revision_reason: 'Scope reduction / descoped auxiliary sensors',
+    notes: 'Revised BOQ omitting auxiliary room sensor modules as requested.',
+    payment_terms: '10% Advance, 90% against delivery',
+    delivery_terms: '4-6 Weeks from Official Purchase Order',
+    warranty_terms: '2 Years Comprehensive Manufacturer Warranty',
+    previous_version_id: 'q_tahlia_v1',
+    created_by: 'Eslam Mohandes',
+    created_at: '2026-09-07T14:30:00Z',
+    updated_at: '2026-09-07T14:30:00Z',
+  },
+  {
+    id: 'q_tahlia_v3',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    quotation_number: 'Q-2026-0018',
+    version: 3,
+    amount: 3850000,
+    subtotal: 4250000,
+    discount_amount: 400000,
+    discount_percentage: 9.41,
+    tax_amount: 0,
+    total_amount: 3850000,
+    currency: 'SAR',
+    vendor_brand: 'Belimo Valves & Actuators Package',
+    status: 'revised',
+    quotation_date: '2026-09-15',
+    sent_date: '2026-09-15',
+    valid_until: '2026-09-30',
+    revision_reason: 'Competitive market pricing pressure',
+    notes: 'Commercial discount applied to match contractor target pricing.',
+    payment_terms: '10% Advance, 90% against delivery',
+    delivery_terms: '4-6 Weeks from Official Purchase Order',
+    warranty_terms: '2 Years Comprehensive Manufacturer Warranty',
+    previous_version_id: 'q_tahlia_v2',
+    created_by: 'Eslam Mohandes',
+    created_at: '2026-09-15T11:00:00Z',
+    updated_at: '2026-09-15T11:00:00Z',
+  },
+  {
+    id: 'q_tahlia_v4',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    quotation_number: 'Q-2026-0018',
+    version: 4,
+    amount: 3620000,
+    subtotal: 4250000,
+    discount_amount: 630000,
+    discount_percentage: 14.82,
+    tax_amount: 0,
+    total_amount: 3620000,
+    currency: 'SAR',
+    vendor_brand: 'Belimo Valves & Actuators Package',
+    status: 'negotiation',
+    quotation_date: '2026-09-19',
+    sent_date: '2026-09-19',
+    valid_until: '2026-09-30',
+    revision_reason: 'Customer requested commercial reduction.',
+    notes: 'Final revised commercial submittal for client executive board signoff.',
+    payment_terms: '10% Advance, 90% against delivery',
+    delivery_terms: '4-6 Weeks from Official Purchase Order',
+    warranty_terms: '2 Years Comprehensive Manufacturer Warranty',
+    previous_version_id: 'q_tahlia_v3',
+    created_by: 'Eslam Mohandes',
+    created_at: '2026-09-19T16:00:00Z',
+    updated_at: '2026-09-19T16:00:00Z',
+  },
+];
 
 // Authentic Western Region Dataset extracted via Safe Migration Pipeline (Phase 10)
 const INITIAL_COMPANIES: Company[] = (migratedData.companies as unknown as Company[]) || [];
@@ -143,20 +363,65 @@ const INITIAL_CONTACTS: Contact[] = (migratedData.contacts as unknown as Contact
 
 // Tag all existing 34 authentic projects strictly to Eslam Mohandes (Western Region Senior Sales Engineer)
 const RAW_PROJECTS: Project[] = (migratedData.projects as unknown as Project[]) || [];
-const INITIAL_PROJECTS: Project[] = RAW_PROJECTS.map(p => ({
+const MAPPED_PROJECTS: Project[] = RAW_PROJECTS.map(p => ({
   ...p,
   owner_id: p.owner_id || 'u1',
   owner_name: p.owner_name || 'Eslam Mohandes'
 }));
+const INITIAL_PROJECTS: Project[] = [SEED_TAHLIA_PROJECT, SEED_WON_PROJECT, ...MAPPED_PROJECTS];
 
-const INITIAL_QUOTATIONS: Quotation[] = (migratedData.quotations as unknown as Quotation[]) || [];
+const MIGRATED_QUOTATIONS: Quotation[] = (migratedData.quotations as unknown as Quotation[]) || [];
+const INITIAL_QUOTATIONS: Quotation[] = [...SEED_TAHLIA_QUOTATIONS, ...MIGRATED_QUOTATIONS];
 
 const RAW_ACTIVITIES: Activity[] = (migratedData.activities as unknown as Activity[]) || [];
-const INITIAL_ACTIVITIES: Activity[] = RAW_ACTIVITIES.map(a => ({
+const MAPPED_ACTIVITIES: Activity[] = RAW_ACTIVITIES.map(a => ({
   ...a,
   user_id: a.user_id || 'u1',
   user_name: a.user_name || 'Eslam Mohandes'
 }));
+
+const SEED_CURRENT_WEEK_ACTIVITIES: Activity[] = [
+  {
+    id: 'act_tahlia_v4_submittal',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    company_id: 'c_tahlia_group',
+    company_name: 'Al Tahlia Commercial Development',
+    contact_id: 'ct_fahad_zahrani',
+    contact_name: 'Eng. Fahad Al-Zahrani',
+    channel: 'meeting_f2f',
+    visit_purpose: 'quotation_delivery',
+    activity_date: '2026-09-19',
+    activity_time: '16:00',
+    notes: 'Delivered Quotation Revision V4 (SAR 3,620,000) directly to Eng. Fahad and discussed board approval milestones.',
+    outcome: 'quotation_sent',
+    next_action: 'Negotiate final commercial terms on Quotation V4 with Executive Board',
+    user_id: 'u1',
+    user_name: 'Eslam Mohandes',
+    created_at: '2026-09-19T16:00:00Z',
+  },
+  {
+    id: 'act_tahlia_board_followup',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    company_id: 'c_tahlia_group',
+    company_name: 'Al Tahlia Commercial Development',
+    contact_id: 'ct_fahad_zahrani',
+    contact_name: 'Eng. Fahad Al-Zahrani',
+    channel: 'call',
+    visit_purpose: 'follow_up',
+    activity_date: '2026-09-20',
+    activity_time: '11:30',
+    notes: 'Phone call to confirm receipt of submittal package by commercial director. Board review scheduled for Wednesday.',
+    outcome: 'connected',
+    next_action: 'Prepare technical comparison sheet before board meeting',
+    user_id: 'u1',
+    user_name: 'Eslam Mohandes',
+    created_at: '2026-09-20T11:30:00Z',
+  }
+];
+
+const INITIAL_ACTIVITIES: Activity[] = [...SEED_CURRENT_WEEK_ACTIVITIES, ...MAPPED_ACTIVITIES];
 
 const INITIAL_PLANNED_ACTIVITIES: PlannedActivity[] = (migratedData.plannedActivities as unknown as PlannedActivity[]) || [];
 
@@ -251,54 +516,36 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return INITIAL_TEAM_MEMBERS;
   });
 
-  const [currentUser, setCurrentUser] = useState<Profile>(() => {
-    if (typeof window !== 'undefined') {
-      const authUser = authRepository.getCurrentUser();
-      if (authUser) {
-        return {
-          id: authUser.id,
-          email: authUser.email,
-          full_name: authUser.name,
-          role: authUser.role,
-          phone: authUser.phone || '966500000000',
-          territory: authUser.territory,
-          title: authUser.title,
-          avatar_url: authUser.avatar_url,
-          avatar_initials: authUser.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
-          created_at: authUser.created_at
-        };
-      }
-      const saved = localStorage.getItem('crmate_auth_user');
-      if (saved) {
-        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
-      }
-    }
-    return INITIAL_TEAM_MEMBERS[0]; // Defaults to Eslam Al-Mohandes
+  const [currentUser, setCurrentUser] = useState<Profile>(INITIAL_TEAM_MEMBERS[0]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [currentRole, setCurrentRole] = useState<UserRole>(INITIAL_TEAM_MEMBERS[0].role);
+  const [selectedSalesFilter, setSelectedSalesFilter] = useState<string>(() => {
+    return (INITIAL_TEAM_MEMBERS[0].role === 'sales_engineer' || (INITIAL_TEAM_MEMBERS[0].role as string) === 'sales_rep')
+      ? INITIAL_TEAM_MEMBERS[0].id
+      : 'all';
   });
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const session = authRepository.getSession();
-      if (session) return true;
-      const saved = localStorage.getItem('crmate_is_authenticated');
-      if (saved !== null) return saved === 'true';
-    }
-    return false;
-  });
-
-  const [currentRole, setCurrentRole] = useState<UserRole>(currentUser.role);
-  const [selectedSalesFilter, setSelectedSalesFilter] = useState<string>('all');
-
-  // Sync currentRole when user changes
+  // Sync currentRole and default sales filter when user changes
   useEffect(() => {
     setCurrentRole(currentUser.role);
+    if (currentUser.role === 'sales_engineer' || (currentUser.role as string) === 'sales_rep') {
+      setSelectedSalesFilter(currentUser.id);
+    } else {
+      setSelectedSalesFilter('all');
+    }
   }, [currentUser]);
 
-  // Keep currentUser in sync if session changes
+  // Keep currentUser & session in sync on client mount and session change
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const session = authRepository.getSession();
+      const savedAuth = localStorage.getItem('crmate_is_authenticated');
+      if (session || savedAuth === 'true') {
+        setIsAuthenticated(true);
+      }
+
       const authUser = authRepository.getCurrentUser();
-      if (authUser && authUser.id !== currentUser.id) {
+      if (authUser) {
         const profile: Profile = {
           id: authUser.id,
           email: authUser.email,
@@ -308,15 +555,23 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           territory: authUser.territory,
           title: authUser.title,
           avatar_url: authUser.avatar_url,
-          avatar_initials: authUser.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+          avatar_initials: (authUser.name || 'EM').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'EM',
           created_at: authUser.created_at
         };
         setCurrentUser(profile);
         setCurrentRole(authUser.role);
-        setIsAuthenticated(true);
+      } else {
+        const saved = localStorage.getItem('crmate_auth_user');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            setCurrentUser(parsed);
+            if (parsed.role) setCurrentRole(parsed.role);
+          } catch (e) { /* fallback */ }
+        }
       }
     }
-  }, [currentUser.id]);
+  }, []);
 
   const login = async (emailOrUserId: string, password?: string): Promise<boolean> => {
     try {
@@ -337,7 +592,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           territory: user.territory,
           title: user.title,
           avatar_url: user.avatar_url,
-          avatar_initials: user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+          avatar_initials: (user.name || 'EM').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'EM',
           created_at: user.created_at
         };
         setCurrentUser(profile);
@@ -374,7 +629,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         territory: devUser.territory,
         title: devUser.title,
         avatar_url: devUser.avatar_url,
-        avatar_initials: devUser.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
+        avatar_initials: (devUser.name || 'EM').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'EM',
         created_at: devUser.created_at
       };
       setCurrentUser(profile);
@@ -433,15 +688,64 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('al_mespar_projects');
       if (saved) {
-        try { list = JSON.parse(saved); } catch (e) { /* fallback */ }
+        try { 
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            let next = parsed.some((p: any) => p.id === SEED_TAHLIA_PROJECT.id) 
+              ? parsed 
+              : [SEED_TAHLIA_PROJECT, ...parsed];
+            if (!next.some((p: any) => p.id === SEED_WON_PROJECT.id)) {
+              next = [SEED_WON_PROJECT, ...next];
+            }
+            list = next;
+          }
+        } catch (e) { /* fallback */ }
       }
     }
     return list.map(p => {
       const { health, daysOverdue } = computeProjectHealth(p);
+      let card_color = p.card_color;
+      let base_card_color = p.base_card_color;
+
+      // Normalize stages: map pricing -> rfq_processing, technically_approved -> negotiation
+      let pipeline_stage = p.pipeline_stage as string;
+      if (pipeline_stage === 'pricing') pipeline_stage = 'rfq_processing';
+      if (pipeline_stage === 'technically_approved') pipeline_stage = 'negotiation';
+
+      if (pipeline_stage === 'won') {
+        if (!base_card_color && card_color && card_color !== 'emerald' && card_color !== 'rose') {
+          base_card_color = card_color;
+        }
+        card_color = 'emerald';
+      } else if (pipeline_stage === 'lost') {
+        if (!base_card_color && card_color && card_color !== 'emerald' && card_color !== 'rose') {
+          base_card_color = card_color;
+        }
+        card_color = 'rose';
+      } else {
+        if (card_color === 'emerald' || card_color === 'rose') {
+          card_color = base_card_color || 'default';
+        }
+      }
+
+      // Default stage-specific workflow values
+      const rfq_packages = p.rfq_packages || (pipeline_stage === 'rfq_processing' ? 'both' : undefined);
+      const submittal_status = p.submittal_status || (pipeline_stage === 'technical_submission' ? 'under_approval' : pipeline_stage === 'negotiation' ? 'approved' : undefined);
+      const client_target_price = p.client_target_price || (pipeline_stage === 'negotiation' ? Math.round((p.estimated_value || 100000) * 0.92) : undefined);
+      const last_discount_pct = p.last_discount_pct ?? (pipeline_stage === 'negotiation' ? 8 : undefined);
+
       return { 
         ...p, 
+        pipeline_stage: pipeline_stage as PipelineStage,
+        rfq_packages,
+        submittal_status,
+        client_target_price,
+        last_discount_pct,
+        card_color: card_color || 'default',
+        base_card_color: base_card_color || (card_color !== 'emerald' && card_color !== 'rose' ? card_color : 'default'),
         owner_id: p.owner_id || 'u1', 
         owner_name: p.owner_name || 'Eslam Mohandes',
+        stage_entered_at: p.stage_entered_at || p.updated_at || p.created_at,
         calculated_health: health, 
         days_overdue: daysOverdue 
       };
@@ -484,11 +788,23 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('al_mespar_companies', JSON.stringify(companies));
     }
   }, [companies]);
+
+  const sortedCompanies = useMemo(() => {
+    return [...companies].sort((a, b) => 
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true })
+    );
+  }, [companies]);
   const [activities, setActivities] = useState<Activity[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('al_mespar_activities');
       if (saved) {
-        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+        try { 
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const hasTahliaAct = parsed.some((a: any) => a.id === 'act_tahlia_v4_submittal');
+            return hasTahliaAct ? parsed : [...SEED_CURRENT_WEEK_ACTIVITIES, ...parsed];
+          }
+        } catch (e) { /* fallback */ }
       }
     }
     return INITIAL_ACTIVITIES;
@@ -505,7 +821,14 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('al_mespar_quotations');
       if (saved) {
-        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+        try { 
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.some((q: any) => q.id === 'q_tahlia_v1')
+              ? parsed
+              : [...SEED_TAHLIA_QUOTATIONS, ...parsed];
+          }
+        } catch (e) { /* fallback */ }
       }
     }
     return INITIAL_QUOTATIONS;
@@ -599,6 +922,66 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   }, []);
   // --- End Reminder System State ---
 
+  // Automated Follow-up Notifications for Quotation Sent Stage (3, 7, 10 Days)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !projects.length) return;
+
+    const checkQuotationFollowUps = () => {
+      const existingNotifs = getAllNotifications();
+      let hasNewNotif = false;
+      const now = new Date().getTime();
+
+      projects.forEach(p => {
+        if (p.pipeline_stage !== 'quotation_sent' || p.is_archived) return;
+
+        const enteredTime = new Date(p.stage_entered_at || p.updated_at || p.created_at).getTime();
+        const daysElapsed = Math.max(0, Math.floor((now - enteredTime) / (1000 * 60 * 60 * 24)));
+
+        let alertLevel: 3 | 7 | 10 | null = null;
+        if (daysElapsed >= 10) alertLevel = 10;
+        else if (daysElapsed >= 7) alertLevel = 7;
+        else if (daysElapsed >= 3) alertLevel = 3;
+
+        if (alertLevel !== null) {
+          const notifId = `notif_quote_${alertLevel}d_${p.id}`;
+          const alreadyExists = existingNotifs.some(n => n.id === notifId);
+          if (!alreadyExists) {
+            const title = alertLevel === 10
+              ? `🚨 تنبيه حرج (10+ أيام): مشروع ${p.pr_number}`
+              : alertLevel === 7
+              ? `⚡ متابعة هامة (7 أيام): مشروع ${p.pr_number}`
+              : `🔔 تذكير متابعة (3 أيام): مشروع ${p.pr_number}`;
+
+            const body = alertLevel === 10
+              ? `مرت 10 أيام أو أكثر على تقديم عرض السعر لمشروع "${p.name}" دون رد العميل (${p.company_name || ''}). يرجى المتابعة الفورية والتواصل مع ${p.primary_contact_name || 'مسؤول المشتريات'}.`
+              : alertLevel === 7
+              ? `مرت 7 أيام على إرسال عرض السعر لمشروع "${p.name}". ينصح بجدولة اتصال أو زيارة للمتابعة الفنية والتجارية.`
+              : `مرت 3 أيام على إرسال عرض السعر لمشروع "${p.name}". يرجى التحقق من استلام العميل للعرض ومراجعته للشروط.`;
+
+            createNotification({
+              user_id: p.owner_id || 'u1',
+              type: 'reminder_due',
+              category: 'reminder',
+              reference_type: 'reminder',
+              reference_id: p.id,
+              title,
+              body,
+              project_id: p.id,
+              project_name: p.name,
+            });
+            hasNewNotif = true;
+          }
+        }
+      });
+
+      if (hasNewNotif) {
+        setNotifications(getAllNotifications());
+      }
+    };
+
+    checkQuotationFollowUps();
+  }, [projects]);
+
   // --- Approval Requests System State ---
   const [requests, setRequests] = useState<ApprovalRequest[]>(() => getAllRequests());
   const [notifications, setNotifications] = useState<AppNotification[]>(() => getAllNotifications());
@@ -625,6 +1008,21 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
   const closeRequestDetail = () => {
     setSelectedRequestIdForDetail(null);
+  };
+
+  // --- Interactive Module Guide System State ---
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [activeGuideModuleId, setActiveGuideModuleId] = useState<string | null>(null);
+
+  const openGuide = (moduleId?: string) => {
+    if (moduleId) {
+      setActiveGuideModuleId(moduleId);
+    }
+    setIsGuideOpen(true);
+  };
+
+  const closeGuide = () => {
+    setIsGuideOpen(false);
   };
 
   const createRequest = async (data: Omit<ApprovalRequest, 'id' | 'created_at' | 'updated_at' | 'comments' | 'status'>): Promise<ApprovalRequest> => {
@@ -770,10 +1168,25 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
   const addProject = async (projData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'>): Promise<Project> => {
     const weighted = (projData.estimated_value * projData.probability) / 100;
+    const stageColor = projData.pipeline_stage === 'won' ? 'emerald' : projData.pipeline_stage === 'lost' ? 'rose' : (projData.card_color || 'default');
+    
+    // Stage defaults
+    const rfq_packages = projData.rfq_packages || (projData.pipeline_stage === 'rfq_processing' ? 'both' : undefined);
+    const submittal_status = projData.submittal_status || (projData.pipeline_stage === 'technical_submission' ? 'under_approval' : projData.pipeline_stage === 'negotiation' ? 'approved' : undefined);
+    const client_target_price = projData.client_target_price || (projData.pipeline_stage === 'negotiation' ? Math.round((projData.estimated_value || 100000) * 0.92) : undefined);
+    const last_discount_pct = projData.last_discount_pct ?? (projData.pipeline_stage === 'negotiation' ? 8 : undefined);
+
     const newProj: Project = {
       ...projData,
+      rfq_packages,
+      submittal_status,
+      client_target_price,
+      last_discount_pct,
+      card_color: stageColor,
+      base_card_color: projData.base_card_color || (projData.card_color && projData.card_color !== 'emerald' && projData.card_color !== 'rose' ? projData.card_color : 'default'),
       id: 'p_' + Date.now(),
       weighted_value: weighted,
+      stage_entered_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -786,10 +1199,136 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const updateProject = async (id: string, updates: Partial<Project>) => {
     setProjects(prev => prev.map(p => {
       if (p.id !== id) return p;
-      const updated = { ...p, ...updates, updated_at: new Date().toISOString() };
+      const stageChanged = Boolean(updates.pipeline_stage && updates.pipeline_stage !== p.pipeline_stage);
+      const stage_entered_at = stageChanged 
+        ? new Date().toISOString() 
+        : (updates.stage_entered_at || p.stage_entered_at || p.created_at);
+
+      // Handle Automatic Card Color based on Won / Lost / Return:
+      let newCardColor = updates.card_color ?? p.card_color;
+      let newBaseCardColor = updates.base_card_color ?? p.base_card_color;
+      const stageDefaults: Partial<Project> = {};
+
+      if (stageChanged && updates.pipeline_stage) {
+        const targetStage = updates.pipeline_stage;
+        if (targetStage === 'won') {
+          // If entering Won from an active stage, preserve the active stage color as base_card_color
+          if (p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost') {
+            newBaseCardColor = (p.card_color && p.card_color !== 'emerald' && p.card_color !== 'rose') 
+              ? p.card_color 
+              : (p.base_card_color || 'default');
+          }
+          newCardColor = 'emerald';
+        } else if (targetStage === 'lost') {
+          // If entering Lost from an active stage, preserve the active stage color as base_card_color
+          if (p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost') {
+            newBaseCardColor = (p.card_color && p.card_color !== 'emerald' && p.card_color !== 'rose') 
+              ? p.card_color 
+              : (p.base_card_color || 'default');
+          }
+          newCardColor = 'rose';
+        } else {
+          // Returning to any active/previous stage: restore original base card color!
+          newCardColor = newBaseCardColor || 'default';
+        }
+
+        // Stage specific workflow defaults upon stage advancement:
+        if (targetStage === 'rfq_processing') {
+          if (!p.rfq_packages && !updates.rfq_packages) stageDefaults.rfq_packages = 'both';
+        } else if (targetStage === 'technical_submission') {
+          if (!p.submittal_status && !updates.submittal_status) stageDefaults.submittal_status = 'under_approval';
+        } else if (targetStage === 'negotiation') {
+          stageDefaults.submittal_status = 'approved';
+          if (!p.client_target_price && !updates.client_target_price) {
+            stageDefaults.client_target_price = Math.round((updates.estimated_value || p.estimated_value || 100000) * 0.92);
+          }
+          if (p.last_discount_pct === undefined && updates.last_discount_pct === undefined) {
+            stageDefaults.last_discount_pct = 8;
+          }
+        }
+      }
+
+      const updated = { 
+        ...p, 
+        ...stageDefaults,
+        ...updates, 
+        card_color: newCardColor,
+        base_card_color: newBaseCardColor,
+        stage_entered_at,
+        updated_at: new Date().toISOString() 
+      };
       const { health, daysOverdue } = computeProjectHealth(updated);
       return { ...updated, calculated_health: health, days_overdue: daysOverdue };
     }));
+  };
+
+  const referProject = async (projectId: string, targetUserId: string) => {
+    const targetProject = projects.find(p => p.id === projectId);
+    if (!targetProject) return;
+
+    const targetMember = teamMembers.find(m => m.id === targetUserId);
+    if (!targetMember) return;
+
+    const previousAssigneeId = targetProject.referred_to_id || targetProject.owner_id || 'u1';
+    const previousAssignee = teamMembers.find(m => m.id === previousAssigneeId);
+    const previousAssigneeName = targetProject.referred_to_name || targetProject.owner_name || previousAssignee?.full_name || 'مهندس المبيعات';
+
+    const now = new Date().toISOString();
+    const actorName = currentUser.full_name || 'المدير';
+    const actorId = currentUser.id;
+
+    // 1. Update project: CRITICAL - owner_id and owner_name are strictly PRESERVED as original creator!
+    await updateProject(projectId, {
+      referred_to_id: targetUserId,
+      referred_to_name: targetMember.full_name,
+      referred_at: now,
+      referred_by_id: actorId,
+      referred_by_name: actorName,
+    });
+
+    // 2. Notification to previous assignee (if not the target themselves)
+    if (previousAssigneeId && previousAssigneeId !== targetUserId) {
+      createNotification({
+        user_id: previousAssigneeId,
+        type: 'system_alert',
+        category: 'system',
+        reference_type: 'project',
+        reference_id: targetProject.id,
+        project_id: targetProject.id,
+        project_name: targetProject.name,
+        title: `🔄 إحالة مشروع: ${targetProject.name}`,
+        body: `تمت إحالة مشروع "${targetProject.name}" (#${targetProject.pr_number}) منك إلى المهندس ${targetMember.full_name} بواسطة ${actorName}.`
+      });
+    }
+
+    // 3. Notification to new assignee
+    createNotification({
+      user_id: targetUserId,
+      type: 'system_alert',
+      category: 'system',
+      reference_type: 'project',
+      reference_id: targetProject.id,
+      project_id: targetProject.id,
+      project_name: targetProject.name,
+      title: `📥 تمت إحالة مشروع جديد إليك: ${targetProject.name}`,
+      body: `تمت إحالة مشروع "${targetProject.name}" (#${targetProject.pr_number}) إليك من قبل ${actorName} (المشروع كان مع المهندس ${previousAssigneeName}).`
+    });
+
+    // 4. Record internal activity
+    addActivity({
+      project_id: targetProject.id,
+      project_name: targetProject.name,
+      user_id: actorId,
+      user_name: actorName,
+      activity_date: now.split('T')[0],
+      activity_time: new Date().toTimeString().slice(0, 5),
+      channel: 'office_work',
+      visit_purpose: 'follow_up',
+      outcome: 'connected',
+      notes: `تمت إحالة المشروع من ${previousAssigneeName} إلى ${targetMember.full_name} بواسطة ${actorName}. المالك الأصلي: ${targetProject.owner_name || 'Eslam Mohandes'}.`,
+    }).catch(console.warn);
+
+    setNotifications(getAllNotifications());
   };
 
   const addContact = async (contactData: Omit<Contact, 'id' | 'created_at' | 'updated_at'>): Promise<Contact> => {
@@ -864,11 +1403,74 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteCompany = async (id: string) => {
+    const isManagerOrAdmin = currentUser.role === 'admin' || currentUser.role === 'sales_manager';
+    if (!isManagerOrAdmin) {
+      console.warn('Unauthorized: Only sales_manager and admin can delete a company.');
+      return;
+    }
     setCompanies(prev => prev.filter(c => c.id !== id));
   };
 
-  const deleteProject = async (id: string) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
+  const archiveProject = async (id: string, reason?: string) => {
+    const targetProject = projects.find(p => p.id === id);
+    if (!targetProject) return;
+
+    const now = new Date().toISOString();
+    const actorName = currentUser.full_name || 'Sales Engineer';
+    const actorId = currentUser.id || 'u1';
+
+    // Soft delete: Mark project as archived
+    setProjects(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      return {
+        ...p,
+        is_archived: true,
+        archived_at: now,
+        archived_by: actorId,
+        archived_by_name: actorName,
+        archive_reason: reason || '',
+        updated_at: now
+      };
+    }));
+
+    // Trigger in-app notifications for Manager, Admin, and Viewer
+    const targetRoles: UserRole[] = ['sales_manager', 'admin', 'viewer'];
+    const notifyMembers = teamMembers.filter(m => targetRoles.includes(m.role));
+
+    notifyMembers.forEach(member => {
+      createNotification({
+        user_id: member.id,
+        type: 'project_archived',
+        category: 'system',
+        reference_type: 'project',
+        reference_id: targetProject.id,
+        project_id: targetProject.id,
+        project_name: targetProject.name,
+        title: `📁 نقل مشروع للأرشيف: ${targetProject.name}`,
+        body: `قام ${actorName} بنقل مشروع "${targetProject.name}" (#${targetProject.pr_number}) إلى الأرشيف${reason ? ` • السبب: "${reason}"` : ''}`
+      });
+    });
+
+    setNotifications(getAllNotifications());
+  };
+
+  const restoreProject = async (id: string) => {
+    const targetProject = projects.find(p => p.id === id);
+    if (!targetProject) return;
+
+    const now = new Date().toISOString();
+    setProjects(prev => prev.map(p => {
+      if (p.id !== id) return p;
+      return {
+        ...p,
+        is_archived: false,
+        updated_at: now
+      };
+    }));
+  };
+
+  const deleteProject = async (id: string, reason?: string) => {
+    await archiveProject(id, reason);
   };
 
   const updateSalesTarget = async (id: string, newTargetValue: number) => {
@@ -876,18 +1478,155 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addQuotation = async (qData: Omit<Quotation, 'id' | 'created_at' | 'updated_at'>): Promise<Quotation> => {
+    // Determine database-safe next version if not explicitly provided
+    const matchingQuotes = quotations.filter(
+      q => q.project_id === qData.project_id && q.quotation_number === qData.quotation_number
+    );
+    const calculatedVersion = qData.version && qData.version > 0
+      ? qData.version
+      : matchingQuotes.length > 0
+        ? Math.max(...matchingQuotes.map(q => q.version)) + 1
+        : 1;
+
+    const totalAmt = qData.total_amount ?? qData.amount;
     const newQuotation: Quotation = {
       ...qData,
       id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      version: calculatedVersion,
+      amount: totalAmt,
+      total_amount: totalAmt,
+      subtotal: qData.subtotal ?? totalAmt,
+      discount_amount: qData.discount_amount ?? 0,
+      discount_percentage: qData.discount_percentage ?? 0,
+      tax_amount: qData.tax_amount ?? 0,
+      currency: qData.currency || 'SAR',
+      status: qData.status || 'submitted',
+      quotation_date: qData.quotation_date || qData.sent_date || new Date().toISOString().split('T')[0],
+      sent_date: qData.sent_date || qData.quotation_date || new Date().toISOString().split('T')[0],
+      created_by: qData.created_by || currentUser.full_name || 'Eslam Mohandes',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+
     setQuotations(prev => [newQuotation, ...prev]);
+
+    // Background sync to Supabase
+    quotationsService.insertQuotation(newQuotation).catch(console.warn);
+
+    // Auto-log activity into project timeline
+    addActivity({
+      project_id: newQuotation.project_id,
+      project_name: newQuotation.project_name || '',
+      user_id: currentUser.id,
+      user_name: currentUser.full_name,
+      activity_date: new Date().toISOString().split('T')[0],
+      activity_time: new Date().toTimeString().slice(0, 5),
+      channel: 'office_work',
+      visit_purpose: 'quotation_delivery',
+      outcome: 'quotation_sent',
+      notes: `Quotation ${newQuotation.quotation_number} / V${newQuotation.version} recorded: SAR ${newQuotation.amount.toLocaleString()}.`,
+    }).catch(console.warn);
+
     return newQuotation;
+  };
+
+  const createQuotationRevision = async (
+    parentQuotationId: string, 
+    revisionData: Partial<Quotation> & { revision_reason: string }
+  ): Promise<Quotation> => {
+    const parent = quotations.find(q => q.id === parentQuotationId);
+    if (!parent) throw new Error('Parent quotation not found for revision.');
+
+    const sameSeries = quotations.filter(
+      q => q.project_id === parent.project_id && q.quotation_number === parent.quotation_number
+    );
+    const maxVersion = Math.max(...sameSeries.map(q => q.version), parent.version);
+    const nextVersion = maxVersion + 1;
+
+    const targetAmount = revisionData.amount ?? revisionData.total_amount ?? parent.amount;
+    const newQuotation: Quotation = {
+      ...parent,
+      ...revisionData,
+      id: `q_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      version: nextVersion,
+      amount: targetAmount,
+      total_amount: targetAmount,
+      previous_version_id: parentQuotationId,
+      revision_reason: revisionData.revision_reason,
+      status: revisionData.status || 'submitted',
+      quotation_date: revisionData.quotation_date || new Date().toISOString().split('T')[0],
+      sent_date: revisionData.sent_date || revisionData.quotation_date || new Date().toISOString().split('T')[0],
+      created_by: currentUser.full_name || 'Eslam Mohandes',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Mark parent version as 'revised' if it was submitted / sent / under_review
+    setQuotations(prev => {
+      const updated = prev.map(q => {
+        if (q.id === parentQuotationId && (q.status === 'sent' || q.status === 'submitted' || q.status === 'under_review')) {
+          return { ...q, status: 'revised' as QuotationStatus, updated_at: new Date().toISOString() };
+        }
+        return q;
+      });
+      return [newQuotation, ...updated];
+    });
+
+    // Background sync to Supabase
+    quotationsService.insertQuotation(newQuotation).catch(console.warn);
+    quotationsService.updateStatus(parentQuotationId, 'revised').catch(console.warn);
+
+    // Auto-log activity into project's timeline
+    addActivity({
+      project_id: newQuotation.project_id,
+      project_name: newQuotation.project_name || '',
+      user_id: currentUser.id,
+      user_name: currentUser.full_name,
+      activity_date: new Date().toISOString().split('T')[0],
+      activity_time: new Date().toTimeString().slice(0, 5),
+      channel: 'office_work',
+      visit_purpose: 'quotation_delivery',
+      outcome: 'quotation_sent',
+      notes: `Quotation Revision ${newQuotation.quotation_number} / V${newQuotation.version} issued: SAR ${newQuotation.amount.toLocaleString()} (Reason: ${newQuotation.revision_reason})`,
+    }).catch(console.warn);
+
+    return newQuotation;
+  };
+
+  const updateQuotationStatus = async (id: string, newStatus: QuotationStatus) => {
+    const target = quotations.find(q => q.id === id);
+    setQuotations(prev => prev.map(q => q.id === id ? { ...q, status: newStatus, updated_at: new Date().toISOString() } : q));
+    quotationsService.updateStatus(id, newStatus).catch(console.warn);
+
+    if (target) {
+      addActivity({
+        project_id: target.project_id,
+        project_name: target.project_name || '',
+        user_id: currentUser.id,
+        user_name: currentUser.full_name,
+        activity_date: new Date().toISOString().split('T')[0],
+        activity_time: new Date().toTimeString().slice(0, 5),
+        channel: 'office_work',
+        visit_purpose: 'follow_up',
+        outcome: newStatus === 'accepted' || newStatus === 'approved' ? 'won' : 'awaiting_feedback',
+        notes: `Quotation ${target.quotation_number} / V${target.version} status updated to "${newStatus}".`,
+      }).catch(console.warn);
+    }
+  };
+
+  const archiveQuotation = async (id: string) => {
+    setQuotations(prev => prev.map(q => q.id === id ? { ...q, is_archived: true, updated_at: new Date().toISOString() } : q));
+    quotationsService.archiveQuotation(id).catch(console.warn);
+  };
+
+  const updateQuotation = async (id: string, updates: Partial<Quotation>) => {
+    setQuotations(prev => prev.map(q => q.id === id ? { ...q, ...updates, updated_at: new Date().toISOString() } : q));
+    quotationsService.updateQuotation(id, updates).catch(console.warn);
   };
 
   const deleteQuotation = async (id: string) => {
     setQuotations(prev => prev.filter(q => q.id !== id));
+    quotationsService.deleteQuotation(id).catch(console.warn);
   };
 
   // --- Reminder CRUD Methods ---
@@ -899,6 +1638,23 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       created_at: new Date().toISOString(),
     };
     setReminders(prev => [newReminder, ...prev]);
+
+    // If manager/admin assigns a reminder to another user, trigger notification
+    if (newReminder.user_id && newReminder.user_id !== currentUser.id) {
+      createNotification({
+        user_id: newReminder.user_id,
+        type: 'reminder_due',
+        category: 'reminder',
+        reference_type: 'reminder',
+        reference_id: newReminder.id,
+        project_id: newReminder.project_id,
+        project_name: newReminder.project_name,
+        title: `⏰ تذكير جديد مسند إليك: ${newReminder.title}`,
+        body: `قام ${currentUser.full_name} بإسناد تذكير ومتابعة لك بتاريخ ${newReminder.reminder_date} الساعة ${newReminder.reminder_time}.`
+      });
+      setNotifications(getAllNotifications());
+    }
+
     return newReminder;
   };
 
@@ -1125,7 +1881,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       addTeamMember,
       projects,
       contacts,
-      companies,
+      companies: sortedCompanies,
       activities,
       plannedActivities,
       quotations,
@@ -1144,7 +1900,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       deleteActivity,
       addProject,
       updateProject,
+      referProject,
       deleteProject,
+      archiveProject,
+      restoreProject,
       addContact,
       updateContact,
       deleteContact,
@@ -1157,6 +1916,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       completePlannedActivity,
       updateSalesTarget,
       addQuotation,
+      createQuotationRevision,
+      updateQuotation,
+      updateQuotationStatus,
+      archiveQuotation,
       deleteQuotation,
       // Reminder system
       reminders,
@@ -1185,6 +1948,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       notifications,
       markNotificationRead,
       markAllNotificationsRead,
+      // Interactive Module Guide System
+      isGuideOpen,
+      activeGuideModuleId,
+      openGuide,
+      closeGuide,
     }}>
       {children}
     </CRMContext.Provider>

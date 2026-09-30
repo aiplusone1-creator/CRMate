@@ -76,10 +76,10 @@ export function QuotationPrintModal({
           <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
             <div>
               <div className="text-xl font-black text-slate-900 uppercase tracking-tight">
-                شركة المسفار للتجارة والمقاولات
+                شركة المسبار العالمي للمقاولات
               </div>
               <div className="text-xs font-bold text-slate-600 tracking-wider">
-                AL-MESPAR TRADING &amp; CONTRACTING CO.
+                AL-MESPAR GLOBAL CONTRACTING CO.
               </div>
               <div className="text-[11px] text-slate-500 mt-2 space-y-0.5">
                 <p>Commercial Registration: 4030128892 | سجل تجاري</p>
@@ -205,7 +205,7 @@ export function QuotationPrintModal({
             </div>
 
             <div className="space-y-6 text-right">
-              <span className="font-bold text-slate-700 block">شركة المسفار للتجارة والمقاولات / Al-Mespar Co.</span>
+              <span className="font-bold text-slate-700 block">شركة المسبار العالمي للمقاولات / Al-Mespar Co.</span>
               <div className="h-16 flex items-center justify-end">
                 <div className="w-24 h-16 border-2 border-slate-300 rounded-lg flex items-center justify-center text-[10px] font-bold text-slate-400 uppercase">
                   Corporate Seal

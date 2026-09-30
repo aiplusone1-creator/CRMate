@@ -9,11 +9,13 @@ import {
   AlertCircle, 
   Briefcase, 
   User, 
-  Sparkles,
-  Flame
+  Users,
+  Sparkles, 
+  Flame 
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { Reminder, ReminderUrgency } from '@/types/crm';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 interface ReminderModalProps {
   isOpen: boolean;
@@ -22,7 +24,12 @@ interface ReminderModalProps {
 }
 
 export function ReminderModal({ isOpen, onClose, defaultValues }: ReminderModalProps) {
-  const { projects, contacts, addReminder } = useCRM();
+  const { projects, contacts, addReminder, currentUser, teamMembers } = useCRM();
+  const { isRTL } = useLanguage();
+
+  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin';
+  const salesReps = teamMembers.filter(m => m.role === 'sales_engineer' || (m.role as string) === 'sales_rep');
+  const [assignedUserId, setAssignedUserId] = useState<string>(currentUser.id);
 
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
@@ -46,6 +53,7 @@ export function ReminderModal({ isOpen, onClose, defaultValues }: ReminderModalP
       const now = new Date();
       const nextHour = String((now.getHours() + 1) % 24).padStart(2, '0') + ':00';
 
+      setAssignedUserId(defaultValues?.user_id || currentUser.id);
       setTitle(defaultValues?.title || '');
       setNotes(defaultValues?.notes || '');
       setReminderDate(defaultValues?.reminder_date || today);
@@ -54,7 +62,7 @@ export function ReminderModal({ isOpen, onClose, defaultValues }: ReminderModalP
       setProjectId(defaultValues?.project_id || (defaultValues?.entity_type === 'project' ? defaultValues?.entity_id : '') || '');
       setContactId(defaultValues?.contact_id || (defaultValues?.entity_type === 'contact' ? defaultValues?.entity_id : '') || '');
     }
-  }, [isOpen, defaultValues]);
+  }, [isOpen, defaultValues, currentUser.id]);
 
   if (!isOpen) return null;
 
@@ -109,6 +117,7 @@ export function ReminderModal({ isOpen, onClose, defaultValues }: ReminderModalP
       }
 
       await addReminder({
+        user_id: isManager && assignedUserId ? assignedUserId : currentUser.id,
         title: title.trim(),
         notes: notes.trim(),
         reminder_date: reminderDate,
@@ -163,6 +172,35 @@ export function ReminderModal({ isOpen, onClose, defaultValues }: ReminderModalP
 
         {/* Modal Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+          
+          {/* Manager / Admin: Assign Reminder To Specific Sales Account */}
+          {isManager && (
+            <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-1.5">
+              <label className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>{isRTL ? 'إسناد التذكير إلى مهندس مبيعات (Assign Reminder To):' : 'Assign Reminder To:'}</span>
+                </span>
+                <span className="text-[10px] text-amber-700 dark:text-amber-400/90 font-medium">
+                  {currentUser.role === 'admin' ? (isRTL ? 'مدير عام' : 'Admin') : (isRTL ? 'مدير مبيعات' : 'Sales Manager')}
+                </span>
+              </label>
+              <select
+                value={assignedUserId}
+                onChange={e => setAssignedUserId(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs font-bold border border-amber-300/80 dark:border-amber-700/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white shadow-2xs"
+              >
+                <option value={currentUser.id}>
+                  {currentUser.full_name} ({currentUser.role === 'admin' ? (isRTL ? 'المدير العام' : 'Admin') : (isRTL ? 'مدير المبيعات' : 'Sales Manager')})
+                </option>
+                {salesReps.map(rep => (
+                  <option key={rep.id} value={rep.id}>
+                    {rep.full_name} ({isRTL ? 'مهندس مبيعات' : 'Sales Engineer'}{rep.territory ? ` - ${rep.territory}` : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           
           {/* Notification Permission Banner if not enabled */}
           {notificationPermission !== 'granted' && (

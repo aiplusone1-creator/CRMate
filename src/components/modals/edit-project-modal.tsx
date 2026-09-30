@@ -12,8 +12,15 @@ import {
   MapPin, 
   Calendar,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileCheck,
+  Layers,
+  Clock,
+  ShieldCheck,
+  Tag,
+  Target
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { 
@@ -21,9 +28,11 @@ import {
   PIPELINE_STAGES, 
   OPPORTUNITY_TYPES, 
   PROJECT_PRIORITIES,
-  canEditCommercialValue
+  canEditCommercialValue,
+  RFQ_PACKAGES,
+  SUBMITTAL_STATUSES
 } from '@/lib/constants';
-import { Project, PipelineStage, OpportunityType, ProjectPriority } from '@/types/crm';
+import { Project, PipelineStage, OpportunityType, ProjectPriority, RFQPackage, SubmittalStatus } from '@/types/crm';
 import { formatCurrencySAR } from '@/lib/utils';
 
 interface EditProjectModalProps {
@@ -50,6 +59,15 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
   const [nextFollowUpAt, setNextFollowUpAt] = useState('');
   const [coEngineer, setCoEngineer] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
+  const [lostReason, setLostReason] = useState('');
+  const [lostReasonError, setLostReasonError] = useState('');
+  const [poNumber, setPoNumber] = useState('');
+  const [poDate, setPoDate] = useState('');
+  const [collectedPercentage, setCollectedPercentage] = useState<number>(0);
+  const [rfqPackages, setRfqPackages] = useState<RFQPackage>('both');
+  const [submittalStatus, setSubmittalStatus] = useState<SubmittalStatus>('under_approval');
+  const [clientTargetPrice, setClientTargetPrice] = useState<number | ''>('');
+  const [lastDiscountPct, setLastDiscountPct] = useState<number | ''>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Initialize fields when project changes
@@ -69,6 +87,15 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
       setNextFollowUpAt(project.next_follow_up_at ? project.next_follow_up_at.split('T')[0] : '');
       setCoEngineer(project.members?.[0]?.user_name || '');
       setInternalNotes(project.internal_notes || '');
+      setLostReason(project.lost_reason || '');
+      setLostReasonError('');
+      setPoNumber(project.po_number || '');
+      setPoDate(project.po_date || '');
+      setCollectedPercentage(project.collected_percentage || 0);
+      setRfqPackages(project.rfq_packages || 'both');
+      setSubmittalStatus(project.submittal_status || 'under_approval');
+      setClientTargetPrice(project.client_target_price !== undefined ? project.client_target_price : '');
+      setLastDiscountPct(project.last_discount_pct !== undefined ? project.last_discount_pct : '');
     }
   }, [project, isOpen]);
 
@@ -92,6 +119,11 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
     e.preventDefault();
     if (!name.trim() || !prNumber.trim()) return;
 
+    if (pipelineStage === 'lost' && (!lostReason || !lostReason.trim())) {
+      setLostReasonError('سبب الخسارة إجباري عند نقل المشروع لمرحلة صفقة خاسرة (Lost)');
+      return;
+    }
+
     setIsSubmitting(true);
     const matchedComp = companies.find(c => c.id === companyId);
     const matchedContact = contacts.find(c => c.id === primaryContactId);
@@ -111,6 +143,10 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
     const finalProbability = Number(probability) || 0;
     const finalWeightedValue = (finalValue * finalProbability) / 100;
 
+    const calculatedDiscountAmount = (lastDiscountPct !== '' && finalValue > 0)
+      ? Math.round((Number(lastDiscountPct) / 100) * finalValue)
+      : (project.last_discount_amount || undefined);
+
     const updates: Partial<Project> = {
       pr_number: prNumber.trim().toUpperCase(),
       name: name.trim(),
@@ -122,6 +158,12 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
       location,
       opportunity_type: opportunityType,
       pipeline_stage: pipelineStage,
+      rfq_packages: pipelineStage === 'rfq_processing' ? rfqPackages : (project.rfq_packages || rfqPackages),
+      submittal_status: pipelineStage === 'technical_submission' ? submittalStatus : (project.submittal_status || submittalStatus),
+      client_target_price: clientTargetPrice !== '' ? Number(clientTargetPrice) : undefined,
+      last_discount_pct: lastDiscountPct !== '' ? Number(lastDiscountPct) : undefined,
+      last_discount_amount: calculatedDiscountAmount,
+      lost_reason: pipelineStage === 'lost' ? lostReason.trim() : (pipelineStage === project.pipeline_stage ? project.lost_reason : undefined),
       priority,
       estimated_value: finalValue,
       probability: finalProbability,
@@ -130,6 +172,13 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
       next_follow_up_at: nextFollowUpAt || undefined,
       internal_notes: internalNotes.trim() || undefined,
       members,
+      ...(pipelineStage === 'won' ? {
+        po_number: poNumber.trim() || undefined,
+        po_date: poDate || undefined,
+        collected_percentage: Number(collectedPercentage) || 0,
+        collected_amount: Math.round(((Number(collectedPercentage) || 0) / 100) * finalValue),
+        collection_status: (Number(collectedPercentage) || 0) >= 100 ? 'fully_collected' : (Number(collectedPercentage) || 0) > 0 ? 'partially_collected' : 'pending',
+      } : {})
     };
 
     await updateProject(project.id, updates);
@@ -309,6 +358,243 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
                 </option>
               ))}
             </select>
+
+            {/* RFQ Processing Stage Fields: Packages (LC, BMS, Both) */}
+            {(pipelineStage === 'rfq_processing' || (pipelineStage as string) === 'pricing') && (
+              <div className="p-3.5 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50/70 dark:bg-sky-950/20 space-y-2 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-sky-900 dark:text-sky-300 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                    <span>حزم وأنظمة التسعير المطلوبة من الـ Pre-Sales:</span>
+                  </label>
+                  <span className="text-[10px] text-sky-700 dark:text-sky-400 font-bold">RFQ Packages</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'lc', label: '⚡ LC', sub: 'تيارات خفيفة (Light Current)' },
+                    { id: 'bms', label: '🏢 BMS', sub: 'تحكم مباني (Automation)' },
+                    { id: 'both', label: '⚡🏢 LC + BMS', sub: 'كلا النظامين معاً (Both)' },
+                  ].map(pkg => (
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      onClick={() => setRfqPackages(pkg.id as RFQPackage)}
+                      className={`p-2.5 rounded-xl text-xs font-bold border text-center transition-all cursor-pointer ${
+                        rfqPackages === pkg.id
+                          ? 'bg-sky-600 text-white border-sky-600 shadow-xs scale-[1.02]'
+                          : 'bg-white dark:bg-[#141820] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-sky-400'
+                      }`}
+                    >
+                      <div className="font-extrabold">{pkg.label}</div>
+                      <div className={`text-[10px] mt-0.5 truncate ${rfqPackages === pkg.id ? 'text-sky-100 font-semibold' : 'text-slate-400'}`}>
+                        {pkg.sub}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quotation Sent Stage Notice & Tracking */}
+            {pipelineStage === 'quotation_sent' && (
+              <div className="p-3.5 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/20 space-y-1.5 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>مرحلة إرسال عرض السعر للعميل (Quotation Sent)</span>
+                  </label>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200">
+                    تتبع تلقائي للمدد
+                  </span>
+                </div>
+                <p className="text-[11px] text-blue-700 dark:text-blue-300 leading-relaxed">
+                  يتم احتساب عدد الأيام المنقضية من لحظة نقل المشروع إلى هذه المرحلة مع إرسال تنبيهات تلقائية بعد <strong>3 أيام</strong> و <strong>7 أيام</strong> و <strong>10 أيام</strong> للتذكير بمتابعة المشتريات وإغلاق العرض.
+                </p>
+              </div>
+            )}
+
+            {/* Technical Submittal Stage Fields: Submittal Approval Status */}
+            {pipelineStage === 'technical_submission' && (
+              <div className="p-3.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50/70 dark:bg-purple-950/20 space-y-2 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                    <FileCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                    <span>حالة الاعتماد الفني للمواصفات (Technical Submittal):</span>
+                  </label>
+                  <span className="text-[10px] text-purple-700 dark:text-purple-400 font-bold">Approval Status</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {[
+                    { id: 'under_approval', label: 'قيد الاعتماد', sub: 'Under Approval', color: 'bg-amber-500 text-white border-amber-600' },
+                    { id: 'approved', label: 'معتمد', sub: 'Approved', color: 'bg-emerald-600 text-white border-emerald-600' },
+                    { id: 'approved_with_comments', label: 'معتمد بملاحظات', sub: 'Appr. w/ Comments', color: 'bg-blue-600 text-white border-blue-600' },
+                    { id: 'rejected', label: 'مرفوض', sub: 'Rejected', color: 'bg-rose-600 text-white border-rose-600' },
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSubmittalStatus(item.id as SubmittalStatus)}
+                      className={`p-2 rounded-xl text-xs font-bold border text-center transition-all cursor-pointer ${
+                        submittalStatus === item.id
+                          ? `${item.color} shadow-xs font-black ring-2 ring-purple-400/40 scale-[1.02]`
+                          : 'bg-white dark:bg-[#141820] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-purple-400'
+                      }`}
+                    >
+                      <div className="truncate">{item.label}</div>
+                      <div className={`text-[9px] mt-0.5 truncate ${submittalStatus === item.id ? 'opacity-90 font-semibold' : 'text-slate-400'}`}>
+                        {item.sub}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Negotiation Stage Fields: Technical Approved Guarantee + Target Price + Latest Discount */}
+            {(pipelineStage === 'negotiation' || (pipelineStage as string) === 'technically_approved') && (
+              <div className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/20 space-y-3 animate-in fade-in duration-150 font-urbanist">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>مرحلة التفاوض المالي النهائي (Negotiation)</span>
+                  </label>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                    معتمد فنياً ✅
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                      <Target className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Client Target Price (السعر المستهدف للعميل - ر.س)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      value={clientTargetPrice}
+                      onChange={e => setClientTargetPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="e.g. 1840000"
+                      className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Latest Discount Sent (آخر نسبة خصم مرسلة %)</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={lastDiscountPct}
+                        onChange={e => setLastDiscountPct(e.target.value === '' ? '' : Number(e.target.value))}
+                        placeholder="e.g. 8"
+                        className="w-24 px-3 py-2 text-xs font-bold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-mono"
+                      />
+                      <div className="flex-1 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        {lastDiscountPct !== '' && estimatedValue > 0 ? (
+                          <span>قيمة الخصم: <strong className="text-rose-600 dark:text-rose-400 font-mono">{formatCurrencySAR(Math.round((Number(lastDiscountPct) / 100) * Number(estimatedValue)))}</strong></span>
+                        ) : (
+                          <span>ستظهر بوضوح على كارت المشروع</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {pipelineStage === 'lost' && (
+              <div className="p-3.5 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/70 dark:bg-rose-950/20 space-y-2 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-rose-900 dark:text-rose-300 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span>سبب خسارة المشروع (إجباري) *</span>
+                  </label>
+                  <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-rose-200 dark:bg-rose-900/60 text-rose-800 dark:text-rose-300">
+                    Mandatory
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  required
+                  value={lostReason}
+                  onChange={e => {
+                    setLostReason(e.target.value);
+                    if (lostReasonError) setLostReasonError('');
+                  }}
+                  placeholder="حدد سبب خسارة الصفقة بالتفصيل، اسم المنافس، فارق السعر، أو أسباب الاستشاري..."
+                  className={`w-full px-3 py-2 text-xs bg-white dark:bg-[#141820] border rounded-lg focus:outline-none focus:ring-2 text-slate-900 dark:text-white font-medium ${
+                    lostReasonError
+                      ? 'border-rose-500 focus:ring-rose-500/20'
+                      : 'border-rose-300 dark:border-rose-800 focus:ring-rose-500/20 focus:border-rose-500'
+                  }`}
+                />
+                {lostReasonError && (
+                  <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400">
+                    {lostReasonError}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Won Stage Fields: PO & Collection Ratio */}
+            {pipelineStage === 'won' && (
+              <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 space-y-3 font-urbanist">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-black text-emerald-950 dark:text-emerald-200 uppercase tracking-wider">
+                    Purchase Order (PO) &amp; Collection (مرحلة الفوز بالتعميد)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      PO Number (رقم أمر الشراء)
+                    </label>
+                    <input
+                      type="text"
+                      value={poNumber}
+                      onChange={e => setPoNumber(e.target.value)}
+                      placeholder="PO-2026-..."
+                      className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      PO Date (تاريخ التعميد)
+                    </label>
+                    <input
+                      type="date"
+                      value={poDate}
+                      onChange={e => setPoDate(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Collected Ratio (نسبة التحصيل %)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={collectedPercentage}
+                      onChange={e => setCollectedPercentage(Number(e.target.value))}
+                      className="w-full px-3 py-2 text-xs font-bold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Estimated Value Box with Conditional Unlocking */}
             <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">

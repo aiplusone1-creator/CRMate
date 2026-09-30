@@ -48,8 +48,12 @@ export function FastLogModal({
   plannedActivityId,
   defaultGoal
 }: FastLogModalProps) {
-  const { projects, contacts, companies, addActivity, completePlannedActivity, currentUser } = useCRM();
+  const { projects, contacts, companies, addActivity, completePlannedActivity, currentUser, teamMembers } = useCRM();
   const { t, isRTL } = useLanguage();
+
+  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin';
+  const salesReps = teamMembers.filter(m => m.role === 'sales_engineer' || (m.role as string) === 'sales_rep');
+  const [assignedUserId, setAssignedUserId] = useState<string>(currentUser.id);
 
   // Form State
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -131,6 +135,8 @@ export function FastLogModal({
 
     const matchedContact = contacts.find(c => c.id === selectedContactId);
 
+    const assignedUser = teamMembers.find(m => m.id === assignedUserId) || currentUser;
+
     const activityPayload = {
       project_id: selectedProjectId || undefined,
       project_name: currentProject?.name,
@@ -138,8 +144,8 @@ export function FastLogModal({
       company_name: currentProject?.company_name || matchedContact?.company_name || matchedCompany?.name,
       contact_id: selectedContactId || undefined,
       contact_name: matchedContact?.full_name,
-      user_id: currentUser.id,
-      user_name: currentUser.full_name,
+      user_id: isManager && assignedUserId ? assignedUserId : currentUser.id,
+      user_name: isManager && assignedUser ? assignedUser.full_name : currentUser.full_name,
       activity_date: todayStr,
       activity_time: nowTimeStr,
       channel,
@@ -215,6 +221,35 @@ export function FastLogModal({
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
           
+          {/* Manager / Admin: Assign Activity To Specific Sales Account */}
+          {isManager && (
+            <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-1.5">
+              <label className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>تسجيل النشاط باسم مهندس المبيعات (Assign Activity To):</span>
+                </span>
+                <span className="text-[10px] text-amber-700 dark:text-amber-400/90 font-medium">
+                  {currentUser.role === 'admin' ? 'مدير عام' : 'مدير مبيعات'}
+                </span>
+              </label>
+              <select
+                value={assignedUserId}
+                onChange={e => setAssignedUserId(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs font-bold border border-amber-300/80 dark:border-amber-700/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white shadow-2xs"
+              >
+                <option value={currentUser.id}>
+                  {currentUser.full_name} ({currentUser.role === 'admin' ? 'المدير العام' : 'مدير المبيعات'})
+                </option>
+                {salesReps.map(rep => (
+                  <option key={rep.id} value={rep.id}>
+                    {rep.full_name} (مهندس مبيعات - {rep.territory || 'المنطقة الغربية'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* 1. Project & Contact Selector */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>

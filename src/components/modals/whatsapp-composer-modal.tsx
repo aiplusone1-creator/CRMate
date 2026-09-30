@@ -47,13 +47,13 @@ export function WhatsAppComposerModal({
       id: 'quote_followup',
       title: 'متابعة عرض السعر / Quotation Follow-up',
       category: 'quotation',
-      text: `السلام عليكم مهندس {name}، تحية طيبة من شركة المسفار للتجارة والمقاولات. نود المتابعة معكم بخصوص عرض السعر رقم {quote} لمشروع "{project}". هل لديكم أي استفسارات أو ملاحظات فنية بخصوص نطاق التوريد؟ يسعدنا التنسيق معكم دائماً.`
+      text: `السلام عليكم مهندس {name}، تحية طيبة من شركة المسبار العالمي للمقاولات. نود المتابعة معكم بخصوص عرض السعر رقم {quote} لمشروع "{project}". هل لديكم أي استفسارات أو ملاحظات فنية بخصوص نطاق التوريد؟ يسعدنا التنسيق معكم دائماً.`
     },
     {
       id: 'visit_confirm',
       title: 'تأكيد موعد زيارة موقع / Site Visit Confirmation',
       category: 'visit',
-      text: `مرحباً مهندس {name}، تأكيداً لموعد زيارة الموقع لمشروع "{project}" غداً لمراجعة المتطلبات الفنية والمطابقة على أرض الواقع. يسعدني لقاؤكم. - {engineer} | المسفار`
+      text: `مرحباً مهندس {name}، تأكيداً لموعد زيارة الموقع لمشروع "{project}" غداً لمراجعة المتطلبات الفنية والمطابقة على أرض الواقع. يسعدني لقاؤكم. - {engineer} | المسبار`
     },
     {
       id: 'technical_submittal',
@@ -79,7 +79,7 @@ export function WhatsAppComposerModal({
       .replace(/{name}/g, recipientName || 'الكريم')
       .replace(/{project}/g, projectName || 'المشروع')
       .replace(/{quote}/g, quotationNumber || 'المقدم')
-      .replace(/{engineer}/g, engineerName || 'فريق المسفار');
+      .replace(/{engineer}/g, engineerName || 'فريق المسبار');
   };
 
   useEffect(() => {

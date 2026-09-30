@@ -65,7 +65,35 @@ export class LocalAuthRepository {
     try {
       // Check localStorage first (remember me) then sessionStorage (session-only)
       const raw = localStorage.getItem(this.sessionKey) || sessionStorage.getItem(this.sessionKey);
-      if (!raw) return null;
+      if (!raw) {
+        // If the user deliberately clicked logout, respect that state
+        const isExplicitlyLoggedOut = localStorage.getItem('crmate_explicit_logout') === 'true';
+        if (isExplicitlyLoggedOut) {
+          return null;
+        }
+
+        // Auto-seed active session for default user (u1 - Eslam Al-Mohandes) in local environment
+        const defaultUser = SEEDED_USERS[0];
+        const expiresDate = new Date();
+        expiresDate.setDate(expiresDate.getDate() + 30);
+        const autoSession: AuthSession = {
+          user_id: defaultUser.id,
+          token: `auto_session_${Date.now()}`,
+          expires_at: expiresDate.toISOString(),
+          remember_me: true
+        };
+        localStorage.setItem(this.sessionKey, JSON.stringify(autoSession));
+        localStorage.setItem('crmate_is_authenticated', 'true');
+        localStorage.setItem('crmate_auth_user', JSON.stringify({
+          id: defaultUser.id,
+          email: defaultUser.email,
+          full_name: defaultUser.name,
+          name: defaultUser.name,
+          role: defaultUser.role,
+          avatar_initials: 'EM'
+        }));
+        return autoSession;
+      }
 
       const session: AuthSession = JSON.parse(raw);
       const now = new Date();
@@ -146,13 +174,14 @@ export class LocalAuthRepository {
 
       // Maintain legacy sync for any existing component references
       localStorage.setItem('crmate_is_authenticated', 'true');
+      localStorage.removeItem('crmate_explicit_logout');
       localStorage.setItem('crmate_auth_user', JSON.stringify({
         id: user.id,
         email: user.email,
         full_name: user.name,
         name: user.name,
         role: user.role,
-        avatar_initials: user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+        avatar_initials: (user.name || 'User').split(' ').map(w => w[0] || '').join('').slice(0, 2).toUpperCase()
       }));
     }
 
@@ -169,6 +198,7 @@ export class LocalAuthRepository {
       sessionStorage.removeItem(this.sessionKey);
       localStorage.setItem('crmate_is_authenticated', 'false');
       localStorage.removeItem('crmate_auth_user');
+      localStorage.setItem('crmate_explicit_logout', 'true');
     } catch (e) {
       console.error('Failed to clear session on logout', e);
     }
@@ -194,13 +224,14 @@ export class LocalAuthRepository {
     if (typeof window !== 'undefined') {
       localStorage.setItem(this.sessionKey, JSON.stringify(session));
       localStorage.setItem('crmate_is_authenticated', 'true');
+      localStorage.removeItem('crmate_explicit_logout');
       localStorage.setItem('crmate_auth_user', JSON.stringify({
         id: user.id,
         email: user.email,
         full_name: user.name,
         name: user.name,
         role: user.role,
-        avatar_initials: user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+        avatar_initials: (user.name || 'User').split(' ').map(w => w[0] || '').join('').slice(0, 2).toUpperCase()
       }));
     }
 

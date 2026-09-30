@@ -133,6 +133,158 @@ body {
     box-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.50), 0 1px 3px 0 rgba(0, 0, 0, 0.3);
   }
 
+  /* — Kanban Pipeline Column Container (Soft, defined surface that makes cards pop) — */
+  .crm-kanban-column {
+    background: #F1F4F9;
+    border-radius: 1.75rem; /* 28px */
+    border: 1px solid rgba(203, 213, 225, 0.85);
+    box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .dark .crm-kanban-column {
+    background: #141923;
+    border-radius: 1.75rem;
+    border: 1px solid rgba(143, 194, 240, 0.10);
+    box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  /* — Kanban Distinct Card with Visible Crisp Frame (Solves "سايحة على بعض") — */
+  .crm-kanban-card {
+    background: #FFFFFF;
+    border-radius: 1.5rem; /* 24px */
+    border: 1.5px solid #CBD5E1; /* Visible Slate-300 frame */
+    box-shadow: 
+      0 2px 4px 0 rgba(15, 23, 42, 0.04),
+      0 6px 16px -2px rgba(15, 23, 42, 0.08);
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .crm-kanban-card:hover {
+    border-color: #94A3B8; /* Darker Slate-400 on hover */
+    transform: translateY(-2px);
+    box-shadow: 
+      0 4px 6px -1px rgba(15, 23, 42, 0.06),
+      0 12px 24px -4px rgba(15, 23, 42, 0.12);
+  }
+  .dark .crm-kanban-card {
+    background: #1C2232;
+    border-radius: 1.5rem;
+    border: 1.5px solid #334155; /* Visible Slate-700 frame */
+    box-shadow: 
+      0 4px 18px -2px rgba(0, 0, 0, 0.45),
+      0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  }
+  .dark .crm-kanban-card:hover {
+    border-color: #64748B;
+    transform: translateY(-2px);
+    box-shadow: 
+      0 8px 24px -3px rgba(0, 0, 0, 0.60),
+      0 2px 4px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  /* — Project Card Color Variations (Rich, Saturated & Distinct in Day & Night Mode) — */
+  .crm-card.crm-card-blue,
+  .crm-card-blue {
+    background-color: #DBEAFE !important; /* Rich Blue-100 */
+    border: 2px solid #3B82F6 !important;
+    box-shadow: 0 10px 28px -4px rgba(59, 130, 246, 0.22) !important;
+  }
+  .dark .crm-card.crm-card-blue,
+  .dark .crm-card-blue {
+    background-color: #13253D !important;
+    border: 2px solid #2563EB !important;
+    box-shadow: 0 10px 30px -4px rgba(59, 130, 246, 0.35) !important;
+  }
+
+  .crm-card.crm-card-emerald,
+  .crm-card-emerald {
+    background-color: #D1FAE5 !important; /* Rich Emerald-100 */
+    border: 2px solid #10B981 !important;
+    box-shadow: 0 10px 28px -4px rgba(16, 185, 129, 0.22) !important;
+  }
+  .crm-card-emerald:hover {
+    border-color: #059669 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -4px rgba(16, 185, 129, 0.32) !important;
+  }
+  .dark .crm-card.crm-card-emerald,
+  .dark .crm-card-emerald {
+    background-color: #112A1F !important;
+    border: 2px solid #059669 !important;
+    box-shadow: 0 10px 30px -4px rgba(16, 185, 129, 0.35) !important;
+  }
+  .dark .crm-card-emerald:hover {
+    border-color: #34D399 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 14px 34px -4px rgba(16, 185, 129, 0.45) !important;
+  }
+
+  .crm-card.crm-card-purple,
+  .crm-card-purple {
+    background-color: #EDE9FE !important; /* Rich Purple-100 */
+    border: 2px solid #8B5CF6 !important;
+    box-shadow: 0 10px 28px -4px rgba(139, 92, 246, 0.22) !important;
+  }
+  .dark .crm-card.crm-card-purple,
+  .dark .crm-card-purple {
+    background-color: #24163B !important;
+    border: 2px solid #7C3AED !important;
+    box-shadow: 0 10px 30px -4px rgba(168, 85, 247, 0.35) !important;
+  }
+
+  .crm-card.crm-card-amber,
+  .crm-card-amber {
+    background-color: #FEF3C7 !important; /* Rich Amber-100 */
+    border: 2px solid #F59E0B !important;
+    box-shadow: 0 10px 28px -4px rgba(245, 158, 11, 0.22) !important;
+  }
+  .dark .crm-card.crm-card-amber,
+  .dark .crm-card-amber {
+    background-color: #2B1E10 !important;
+    border: 2px solid #D97706 !important;
+    box-shadow: 0 10px 30px -4px rgba(245, 158, 11, 0.35) !important;
+  }
+
+  .crm-card.crm-card-rose,
+  .crm-card-rose {
+    background-color: #FFE4E6 !important; /* Rich Rose-100 */
+    border: 2px solid #F43F5E !important;
+    box-shadow: 0 10px 28px -4px rgba(244, 63, 94, 0.22) !important;
+  }
+  .crm-card-rose:hover {
+    border-color: #E11D48 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -4px rgba(244, 63, 94, 0.32) !important;
+  }
+  .dark .crm-card.crm-card-rose,
+  .dark .crm-card-rose {
+    background-color: #2D131F !important;
+    border: 2px solid #E11D48 !important;
+    box-shadow: 0 10px 30px -4px rgba(244, 63, 94, 0.35) !important;
+  }
+  .dark .crm-card-rose:hover {
+    border-color: #FB7185 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 14px 34px -4px rgba(244, 63, 94, 0.45) !important;
+  }
+
+  /* When card has custom color, adapt nested containers so theme shines through */
+  .crm-card-blue .crm-card-soft,
+  .crm-card-emerald .crm-card-soft,
+  .crm-card-purple .crm-card-soft,
+  .crm-card-amber .crm-card-soft,
+  .crm-card-rose .crm-card-soft {
+    background: rgba(255, 255, 255, 0.65) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  }
+  .dark .crm-card-blue .crm-card-soft,
+  .dark .crm-card-emerald .crm-card-soft,
+  .dark .crm-card-purple .crm-card-soft,
+  .dark .crm-card-amber .crm-card-soft,
+  .dark .crm-card-rose .crm-card-soft {
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  }
+
   .crm-card-interactive {
     transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -151,11 +303,11 @@ body {
   .crm-card-soft {
     background: #F8FAFC;
     border-radius: 1.25rem; /* 20px */
-    border: 1px solid rgba(226, 232, 240, 0.7);
+    border: 1px solid #E2E8F0;
   }
   .dark .crm-card-soft {
     background: #171D28;
-    border: 1px solid rgba(143, 194, 240, 0.08);
+    border: 1px solid rgba(143, 194, 240, 0.12);
   }
 
   /* — Circular Micro Action Buttons (Reference style ... and ↗) — */
@@ -483,7 +635,84 @@ main { animation: fadeIn 0.18s ease-out; }
   background-size: 24px 24px;
 }
 
+/* ═══════════════════════════════════════════════════════════
+   CUSTOM SLEEK SCROLLBAR
+═══════════════════════════════════════════════════════════ */
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 194, 240, 0.45) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(143, 194, 240, 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 194, 240, 0.7);
+}
+.dark .custom-scrollbar {
+  scrollbar-color: rgba(143, 194, 240, 0.3) transparent;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(143, 194, 240, 0.25);
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 194, 240, 0.5);
+}
+
 @media print {
   aside, header, .no-print { display: none !important; }
   main { padding: 0 !important; margin: 0 !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   GLOWING RED NOTIFICATION BELL (DAY & NIGHT THEMES)
+═══════════════════════════════════════════════════════════ */
+
+@keyframes red-bell-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.55), 0 0 20px rgba(244, 63, 94, 0.35);
+    border-color: rgba(239, 68, 68, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 22px rgba(239, 68, 68, 0.95), 0 0 34px rgba(244, 63, 94, 0.65), inset 0 0 10px rgba(244, 63, 94, 0.35);
+    border-color: rgba(239, 68, 68, 1);
+    transform: scale(1.05);
+  }
+}
+
+.bell-glow-red {
+  animation: red-bell-glow 1.8s infinite ease-in-out;
+  background-color: #FEF2F2 !important;
+  border: 1.5px solid #EF4444 !important;
+  color: #DC2626 !important;
+}
+
+.dark .bell-glow-red {
+  background-color: #2E121B !important;
+  border: 1.5px solid #F43F5E !important;
+  color: #FB7185 !important;
+}
+
+@keyframes red-bell-icon-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.7));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(244, 63, 94, 1)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.8));
+  }
+}
+
+.bell-icon-glow {
+  animation: red-bell-icon-pulse 1.8s infinite ease-in-out;
+}
+
+

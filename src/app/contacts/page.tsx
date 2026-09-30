@@ -23,12 +23,9 @@ import { Contact } from '@/types/crm';
 import { formatDateString, normalizePhoneNumber, formatDisplayPhone } from '@/lib/utils';
 import { WhatsAppComposerModal } from '@/components/modals/whatsapp-composer-modal';
 import { useLanguage } from '@/lib/i18n/language-context';
-import { useSearchParams } from 'next/navigation';
-
 export default function ContactsPage() {
   const { contacts, companies, projects, addContact, updateContact, deleteContact, currentRole, openFastLog, openReminder, currentUser } = useCRM();
   const { t, isRTL } = useLanguage();
-  const searchParams = useSearchParams();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [onlyHotLeads, setOnlyHotLeads] = useState(false);
@@ -72,14 +69,17 @@ export default function ContactsPage() {
 
   // Auto-sync search term from global search navigation or direct ?id=
   React.useEffect(() => {
-    const targetId = searchParams.get('id');
-    if (targetId) {
-      openContactById(targetId);
-      return;
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const targetId = searchParams.get('id');
+      if (targetId) {
+        openContactById(targetId);
+        return;
+      }
+      const q = searchParams.get('search');
+      if (q) setSearchTerm(q);
     }
-    const q = searchParams.get('search');
-    if (q) setSearchTerm(q);
-  }, [searchParams, openContactById]);
+  }, [openContactById]);
 
   // Listen to instantaneous custom open event from global search
   React.useEffect(() => {

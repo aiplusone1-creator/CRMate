@@ -1,17 +1,17 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { authRepository } from '@/lib/repo/local/auth';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [isChecking, setIsChecking] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     // Client-side session verification
     const session = authRepository.getSession();
     const isLoginPage = pathname === '/login';
@@ -30,7 +30,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       // Active valid session exists
       if (isLoginPage) {
         // Authenticated user visits login page -> redirect to target or home
-        const redirectTarget = searchParams.get('redirect') || '/';
+        const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const redirectTarget = searchParams?.get('redirect') || '/';
         router.replace(redirectTarget);
         setIsAuthorized(false);
       } else {
@@ -38,26 +39,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         setIsAuthorized(true);
       }
     }
+  }, [pathname, router]);
 
-    setIsChecking(false);
-  }, [pathname, router, searchParams]);
-
-  if (isChecking) {
+  if (!mounted || (!isAuthorized && pathname !== '/login')) {
     return (
-      <div className="min-h-screen bg-[#EFF3F8] flex items-center justify-center font-sans">
+      <div className="min-h-screen bg-[#EFF3F8] dark:bg-[#141820] flex items-center justify-center font-sans">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-full border-3 border-[#8FC2F0] border-t-[#292D32] animate-spin" />
-          <div className="flex items-center gap-1.5 font-urbanist font-black text-sm text-[#292D32]">
-            <span>CRM<span className="text-[#8FC2F0]">ate</span></span>
-            <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">&bull; Verifying Session</span>
-          </div>
+          <div className="w-8 h-8 rounded-full border-2 border-[#8FC2F0] border-t-[#292D32] animate-spin" />
         </div>
       </div>
     );
-  }
-
-  if (!isAuthorized && pathname !== '/login') {
-    return null; // Redirect in flight
   }
 
   return (

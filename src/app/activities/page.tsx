@@ -49,7 +49,7 @@ import {
   Activity,
   VisitPurpose 
 } from '@/types/crm';
-import { formatDateString, normalizePhoneNumber } from '@/lib/utils';
+import { formatDateString, normalizePhoneNumber, getSaturdayOfWeek, getTodayDateStr } from '@/lib/utils';
 import { AddActivityModal } from '@/components/modals/add-activity-modal';
 import { EditActivityModal } from '@/components/modals/edit-activity-modal';
 import { VoiceActivityModal } from '@/components/activities/voice-activity-modal';
@@ -104,13 +104,13 @@ export default function ActivitiesPage() {
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [selectedDateForAdd, setSelectedDateForAdd] = useState<string>('2026-09-17');
+  const [selectedDateForAdd, setSelectedDateForAdd] = useState<string>(() => getTodayDateStr());
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Voice Daily Activity Logger state
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
-  const [selectedDateForVoice, setSelectedDateForVoice] = useState<string>('2026-09-17');
+  const [selectedDateForVoice, setSelectedDateForVoice] = useState<string>(() => getTodayDateStr());
   const [selectedDayLabelForVoice, setSelectedDayLabelForVoice] = useState<string>('');
 
   const handleOpenVoiceForDay = (dateStr: string, dayArabic?: string, dayName?: string) => {
@@ -119,11 +119,10 @@ export default function ActivitiesPage() {
     setIsVoiceModalOpen(true);
   };
 
-  // Saudi Workdays (Sat-Thu 6 days, or full 7 days)
+  // Saudi Workdays (Sat-Thu 6 days, or full 7 days) starting from Saturday of the active week
   const workDays: DayConfig[] = useMemo(() => {
-    // Reference Saturday: Sep 12, 2026
-    const baseSaturday = new Date(2026, 8, 12);
-    baseSaturday.setDate(baseSaturday.getDate() + (weekOffset * 7));
+    // Computes Saturday of the current week (or offset week)
+    const baseSaturday = getSaturdayOfWeek(new Date(), weekOffset);
 
     const dayNames = showWeekend
       ? ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
@@ -135,7 +134,7 @@ export default function ActivitiesPage() {
       ? ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة']
       : ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 
-    const todayStr = '2026-09-17';
+    const todayStr = getTodayDateStr();
 
     return dayNames.map((name, idx) => {
       const d = new Date(baseSaturday);
@@ -155,12 +154,54 @@ export default function ActivitiesPage() {
     });
   }, [weekOffset, showWeekend]);
 
-  // Current week display string
+  // Current week display string formatted clearly in Arabic & English
   const currentWeekLabel = useMemo(() => {
     if (workDays.length === 0) return '';
     const start = workDays[0];
     const end = workDays[workDays.length - 1];
-    return `${start.short}, ${start.dateStr.slice(5)} – ${end.short}, ${end.dateStr.slice(5)}, 2026`;
+
+    const ARABIC_MONTHS = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+    const ENGLISH_MONTHS = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+
+    const startD = new Date(start.dateStr);
+    const endD = new Date(end.dateStr);
+    const startMonthAr = ARABIC_MONTHS[startD.getMonth()];
+    const endMonthAr = ARABIC_MONTHS[endD.getMonth()];
+    const startMonthEn = ENGLISH_MONTHS[startD.getMonth()];
+    const endMonthEn = ENGLISH_MONTHS[endD.getMonth()];
+    const year = endD.getFullYear();
+
+    if (isRTL) {
+      if (startD.getMonth() === endD.getMonth()) {
+        return `من ${start.arabic} ${start.dayNum} إلى ${end.arabic} ${end.dayNum} ${startMonthAr} ${year}`;
+      }
+      return `من ${start.arabic} ${start.dayNum} ${startMonthAr} إلى ${end.arabic} ${end.dayNum} ${endMonthAr} ${year}`;
+    }
+
+    if (startD.getMonth() === endD.getMonth()) {
+      return `${start.short}, ${startMonthEn} ${start.dayNum} – ${end.short}, ${endMonthEn} ${end.dayNum}, ${year}`;
+    }
+    return `${start.short}, ${startMonthEn} ${start.dayNum} – ${end.short}, ${endMonthEn} ${end.dayNum}, ${year}`;
+  }, [workDays, isRTL]);
+
+  const weekNumber = useMemo(() => {
+    if (workDays.length === 0) return 38;
+    const d = new Date(workDays[0].dateStr);
+    const target = new Date(d.valueOf());
+    const dayNr = (d.getDay() + 6) % 7;
+    target.setDate(target.getDate() - dayNr + 3);
+    const firstThursday = target.valueOf();
+    target.setMonth(0, 1);
+    if (target.getDay() !== 4) {
+      target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+    }
+    return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
   }, [workDays]);
 
   // Channel UI helper
@@ -371,12 +412,16 @@ export default function ActivitiesPage() {
           {currentRole !== 'viewer' && (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleOpenVoiceForDay('2026-09-17', 'الخميس', 'Thursday')}
+                onClick={() => {
+                  const todayDate = getTodayDateStr();
+                  const currentDayConfig = workDays.find(d => d.dateStr === todayDate) || workDays[0];
+                  handleOpenVoiceForDay(currentDayConfig.dateStr, currentDayConfig.arabic, currentDayConfig.name);
+                }}
                 className="crm-pill-dark flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-xs transition-all font-cairo cursor-pointer"
                 title="تسجيل صوتي ذكي لأنشطة اليوم"
               >
                 <Mic className="w-4 h-4 text-[#8FC2F0]" />
-                <span>تسجيل صوتي لليوم</span>
+                <span>{isRTL ? 'تسجيل صوتي لليوم' : 'Voice Log Today'}</span>
               </button>
 
               <button
@@ -395,7 +440,7 @@ export default function ActivitiesPage() {
       <div className="crm-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-urbanist">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-full bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center font-extrabold text-sm">
-            W{38 + weekOffset}
+            W{weekNumber}
           </div>
           <div>
             <div className="text-sm font-extrabold tracking-tight text-[#292D32] dark:text-white flex items-center gap-2">
@@ -495,12 +540,12 @@ export default function ActivitiesPage() {
                   const actId = e.dataTransfer.getData('text/plain') || draggedActivityId;
                   if (actId) handleMoveDay(actId, day.dateStr);
                 }}
-                className={`rounded-[28px] border transition-all flex flex-col min-h-[480px] min-w-0 ${
+                className={`flex flex-col min-h-[480px] min-w-0 transition-all duration-150 ${
                   isDragTarget 
-                    ? 'border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 ring-4 ring-[#8FC2F0]/20 scale-[1.01]' 
+                    ? 'border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 ring-4 ring-[#8FC2F0]/20 scale-[1.01] rounded-[28px]' 
                     : day.isToday
-                      ? 'crm-card ring-2 ring-[#8FC2F0]/60'
-                      : 'crm-card'
+                      ? 'crm-kanban-column ring-2 ring-[#8FC2F0]/60'
+                      : 'crm-kanban-column'
                 }`}
               >
                 {/* Column Header */}
@@ -614,7 +659,7 @@ export default function ActivitiesPage() {
                             setDraggedActivityId(act.id);
                           }}
                           onDragEnd={() => setDraggedActivityId(null)}
-                          className={`glass-card-interactive p-4 rounded-2xl transition-all duration-200 cursor-grab active:cursor-grabbing group relative flex flex-col gap-2.5 font-urbanist ${
+                          className={`crm-kanban-card p-4 transition-all duration-200 cursor-grab active:cursor-grabbing group relative flex flex-col gap-2.5 font-urbanist ${
                             draggedActivityId === act.id ? 'opacity-40 scale-95 border-dashed border-[#8FC2F0]' : ''
                           }`}
                         >
@@ -647,13 +692,13 @@ export default function ActivitiesPage() {
 
                           {/* 2. Channel & Time Slot & Outcome */}
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border ${chConfig.color} shrink-0`}>
+                            <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${chConfig.color} shrink-0`}>
                               {chConfig.icon}
                               <span>{chConfig.label}</span>
                             </span>
 
                             {act.activity_time && (
-                              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-[#232A38] px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-[#232A38] px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0">
                                 <Clock className="w-2.5 h-2.5 text-slate-400" />
                                 <span>{act.activity_time}</span>
                               </span>
@@ -662,9 +707,9 @@ export default function ActivitiesPage() {
                             {getOutcomeBadge(act.outcome)}
                           </div>
 
-                          {/* 3. Context layer: Project & Company & Contact & Location (Wrap Text) */}
+                          {/* 3. Context layer: Project & Company & Contact & Location (Clean crm-card-soft container) */}
                           {(act.project_name || act.company_name || act.contact_name || act.location_name) && (
-                            <div className="bg-slate-50/80 dark:bg-[#141820]/75 rounded-xl p-2.5 border border-slate-200/70 dark:border-slate-800 space-y-1.5 text-xs">
+                            <div className="crm-card-soft p-2.5 space-y-1.5 text-xs">
                               {act.project_name && (
                                 <div className="flex items-start gap-1.5 font-black text-blue-700 dark:text-[#8FC2F0] break-words whitespace-normal leading-snug">
                                   <Briefcase className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0] shrink-0 mt-0.5" />
@@ -695,12 +740,12 @@ export default function ActivitiesPage() {
                             </div>
                           )}
 
-                          {/* 4. Complete Execution Notes with FULL WRAP TEXT (No line-clamp) */}
+                          {/* 4. Complete Execution Notes with Clean crm-card-soft */}
                           {showDedicatedNotes && (
-                            <div className="bg-white/80 dark:bg-[#141820]/80 border border-slate-200/90 dark:border-slate-800 rounded-xl p-2.5 text-xs text-slate-800 dark:text-slate-200 leading-relaxed break-words whitespace-pre-wrap shadow-2xs">
-                              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                            <div className="crm-card-soft p-2.5 text-xs text-slate-800 dark:text-slate-200 leading-relaxed break-words whitespace-pre-wrap">
+                              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1 flex items-center gap-1.5">
                                 <FileText className="w-3 h-3 text-slate-400 shrink-0" />
-                                <span>Execution Notes &bull; بيان ما تم إنجازه</span>
+                                <span>{isRTL ? 'بيان ما تم إنجازه' : 'Execution Notes'}</span>
                               </div>
                               <div className="text-slate-700 dark:text-slate-300 font-medium break-words whitespace-pre-wrap leading-relaxed">
                                 {act.notes}
@@ -708,48 +753,46 @@ export default function ActivitiesPage() {
                             </div>
                           )}
 
-                          {/* 5. Next Action Commitment with FULL WRAP TEXT */}
+                          {/* 5. Next Action Commitment */}
                           {act.next_action && (
-                            <div className="bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200/90 dark:border-amber-900/50 p-2.5 rounded-xl text-xs text-amber-950 dark:text-amber-200 break-words whitespace-pre-wrap">
-                              <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 mb-1 flex items-center gap-1.5">
+                            <div className="bg-amber-500/10 border border-amber-500/25 dark:bg-amber-950/20 dark:border-amber-500/30 p-2.5 rounded-xl text-xs text-amber-950 dark:text-amber-200 break-words whitespace-pre-wrap">
+                              <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1.5">
                                 <ArrowRight className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
-                                <span>Next Step Commitment &bull; الإجراء القادم</span>
+                                <span>{isRTL ? 'الإجراء القادم' : 'Next Step Commitment'}</span>
                               </div>
                               <div className="font-bold break-words whitespace-pre-wrap leading-relaxed text-amber-950 dark:text-amber-200">
                                 {act.next_action}
                               </div>
                               {act.next_follow_up_at && (
-                                <div className="text-[10px] font-extrabold text-amber-800 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+                                <div className="text-[10px] font-extrabold text-amber-700 dark:text-amber-400 mt-1.5 flex items-center gap-1">
                                   <Calendar className="w-3 h-3 shrink-0" />
-                                  <span>Due Date: {formatDateString(act.next_follow_up_at)}</span>
+                                  <span>{isRTL ? 'الموعد:' : 'Due:'} {formatDateString(act.next_follow_up_at)}</span>
                                 </div>
                               )}
                             </div>
                           )}
 
-                          {/* 6. Quick Action Shortcuts */}
-                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5 text-xs">
+                          {/* 6. Quick Action Shortcuts (Clean Circular Buttons) */}
+                          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-1.5 text-xs">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               {waLink && (
                                 <a
                                   href={waLink}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-600 hover:text-white font-bold text-[10px] transition-colors"
+                                  className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center shadow-2xs"
                                   title="WhatsApp Contact"
                                 >
-                                  <MessageCircle className="w-3 h-3" />
-                                  <span>WhatsApp</span>
+                                  <MessageCircle className="w-3.5 h-3.5" />
                                 </a>
                               )}
                               {cleanPhone && (
                                 <a
                                   href={`tel:${cleanPhone}`}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-600 hover:text-white font-bold text-[10px] transition-colors"
+                                  className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-2xs"
                                   title="Call Contact"
                                 >
-                                  <Phone className="w-3 h-3" />
-                                  <span>Call</span>
+                                  <Phone className="w-3.5 h-3.5" />
                                 </a>
                               )}
                               {act.google_maps_url && (
@@ -757,11 +800,10 @@ export default function ActivitiesPage() {
                                   href={act.google_maps_url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-[#232A38] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 font-bold text-[10px] transition-colors"
+                                  className="w-8 h-8 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white transition-all flex items-center justify-center shadow-2xs"
                                   title="View Location on Google Maps"
                                 >
-                                  <MapPin className="w-3 h-3 text-rose-500" />
-                                  <span>Map</span>
+                                  <MapPin className="w-3.5 h-3.5" />
                                 </a>
                               )}
                             </div>
@@ -778,18 +820,17 @@ export default function ActivitiesPage() {
                                   contact_name: act.contact_name || undefined,
                                   activity_id: act.id,
                                 })}
-                                className="inline-flex items-center gap-0.5 px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 hover:bg-purple-600 hover:text-white font-bold text-[10px] transition-colors"
+                                className="w-8 h-8 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white transition-all flex items-center justify-center shadow-2xs cursor-pointer"
                                 title="Set Reminder"
                               >
-                                <Bell className="w-3 h-3" />
-                                <span>Remind</span>
+                                <Bell className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleOpenEdit(act)}
-                                className="text-[11px] font-bold text-blue-600 dark:text-[#8FC2F0] hover:text-blue-800 dark:hover:text-blue-300 hover:underline flex items-center gap-0.5"
+                                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-[#292D32] hover:text-white dark:hover:bg-white dark:hover:text-[#292D32] transition-all flex items-center justify-center shadow-2xs cursor-pointer"
+                                title="Edit Activity"
                               >
-                                <Edit className="w-3 h-3" />
-                                <span>Edit</span>
+                                <Edit className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>

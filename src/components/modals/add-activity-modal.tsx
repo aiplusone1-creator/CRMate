@@ -35,8 +35,12 @@ interface AddActivityModalProps {
 }
 
 export function AddActivityModal({ isOpen, onClose, defaultDate }: AddActivityModalProps) {
-  const { projects, companies, contacts, addActivity, currentUser } = useCRM();
+  const { projects, companies, contacts, addActivity, currentUser, teamMembers } = useCRM();
   const { t, isRTL } = useLanguage();
+
+  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin';
+  const salesReps = teamMembers.filter(m => m.role === 'sales_engineer' || (m.role as string) === 'sales_rep');
+  const [assignedUserId, setAssignedUserId] = useState<string>(currentUser.id);
 
   const [channel, setChannel] = useState<ActivityChannel>('meeting_f2f');
   const [purpose, setPurpose] = useState<VisitPurpose>('follow_up');
@@ -55,6 +59,7 @@ export function AddActivityModal({ isOpen, onClose, defaultDate }: AddActivityMo
 
   useEffect(() => {
     if (isOpen) {
+      setAssignedUserId(currentUser.id);
       setActivityDate(defaultDate || new Date().toISOString().split('T')[0]);
       setActivityTime('10:00 AM');
       setChannel('meeting_f2f');
@@ -69,7 +74,7 @@ export function AddActivityModal({ isOpen, onClose, defaultDate }: AddActivityMo
       setLocationName('');
       setGoogleMapsUrl('');
     }
-  }, [isOpen, defaultDate]);
+  }, [isOpen, defaultDate, currentUser.id]);
 
   if (!isOpen) return null;
 
@@ -81,10 +86,11 @@ export function AddActivityModal({ isOpen, onClose, defaultDate }: AddActivityMo
     const matchedProject = projects.find(p => p.id === projectId);
     const matchedCompany = companies.find(c => c.id === companyId);
     const matchedContact = contacts.find(c => c.id === contactId);
+    const assignedUser = teamMembers.find(m => m.id === assignedUserId) || currentUser;
 
     await addActivity({
-      user_id: currentUser.id || 'u1',
-      user_name: currentUser.full_name || 'Eslam Mohandes',
+      user_id: isManager && assignedUserId ? assignedUserId : (currentUser.id || 'u1'),
+      user_name: isManager && assignedUser ? assignedUser.full_name : (currentUser.full_name || 'Eslam Mohandes'),
       channel,
       visit_purpose: purpose,
       activity_date: activityDate,
@@ -133,6 +139,35 @@ export function AddActivityModal({ isOpen, onClose, defaultDate }: AddActivityMo
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1">
+          {/* Manager / Admin: Assign Activity To Specific Sales Account */}
+          {isManager && (
+            <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-1.5">
+              <label className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                  <span>{isRTL ? 'تسجيل النشاط باسم مهندس المبيعات (Assign Activity To):' : 'Assign Activity To:'}</span>
+                </span>
+                <span className="text-[10px] text-amber-700 dark:text-amber-400/90 font-medium">
+                  {currentUser.role === 'admin' ? (isRTL ? 'مدير عام' : 'Admin') : (isRTL ? 'مدير مبيعات' : 'Sales Manager')}
+                </span>
+              </label>
+              <select
+                value={assignedUserId}
+                onChange={e => setAssignedUserId(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs font-bold border border-amber-300/80 dark:border-amber-700/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white shadow-2xs"
+              >
+                <option value={currentUser.id}>
+                  {currentUser.full_name} ({currentUser.role === 'admin' ? (isRTL ? 'المدير العام' : 'Admin') : (isRTL ? 'مدير المبيعات' : 'Sales Manager')})
+                </option>
+                {salesReps.map(rep => (
+                  <option key={rep.id} value={rep.id}>
+                    {rep.full_name} ({isRTL ? 'مهندس مبيعات' : 'Sales Engineer'}{rep.territory ? ` - ${rep.territory}` : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Row 1: Channel & Purpose */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>

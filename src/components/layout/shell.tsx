@@ -10,16 +10,12 @@ import { ReminderModal } from '@/components/modals/reminder-modal';
 import { RequestApprovalModal } from '@/components/requests/request-approval-modal';
 import { RequestDetailModal } from '@/components/requests/request-detail-modal';
 import { SpeedDialFAB } from '@/components/layout/speed-dial-fab';
+import { ModuleGuideDrawer } from '@/components/guide/module-guide-drawer';
 import { useCRM } from '@/lib/store/crm-context';
 import { AuthGuard } from '@/components/auth/auth-guard';
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [isMounted, setIsMounted] = React.useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   const { 
     fastLogState, 
@@ -37,17 +33,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
     selectedRequestIdForDetail,
     closeRequestDetail
   } = useCRM();
-
-  if (!isMounted) {
-    return (
-      <div className="min-h-screen bg-[#EFF3F8] dark:bg-[#141820] flex items-center justify-center font-sans transition-colors duration-300">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-9 h-9 rounded-full border-[3px] border-[#8FC2F0] border-t-transparent animate-spin" />
-          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 font-urbanist">CRMate Loading...</span>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <AuthGuard>
@@ -124,6 +109,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
           {/* Global Speed Dial FAB Button */}
           <SpeedDialFAB />
+
+          {/* Interactive Bilingual Module Guide Drawer */}
+          <ModuleGuideDrawer />
         </div>
       )}
     </AuthGuard>

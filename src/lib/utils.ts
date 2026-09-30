@@ -114,4 +114,32 @@ export function computeProjectHealth(project: Project): { health: ProjectHealth;
   return { health: 'green', daysOverdue: 0 };
 }
 
+/**
+ * Calculates the Saturday that starts the week for any given date.
+ * In the Saudi/Gulf business week, weeks start on Saturday and run through Thursday/Friday.
+ * @param referenceDate Base date (defaults to current date)
+ * @param weekOffset Number of weeks offset (+1 for next week, -1 for previous week, 0 for this week)
+ * @returns Date object representing the Saturday (at midnight) of that week
+ */
+export function getSaturdayOfWeek(referenceDate: Date = new Date(), weekOffset: number = 0): Date {
+  const d = new Date(referenceDate);
+  d.setHours(0, 0, 0, 0);
+  const dayOfWeek = d.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  const daysSinceSaturday = (dayOfWeek + 1) % 7;
+  d.setDate(d.getDate() - daysSinceSaturday + (weekOffset * 7));
+  return d;
+}
+
+/**
+ * Returns today's date formatted as YYYY-MM-DD
+ */
+export function getTodayDateStr(): string {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const d = String(today.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+
 

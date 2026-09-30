@@ -16,7 +16,8 @@ import {
   MessageCircle,
   ArrowUpRight,
   TrendingUp,
-  UserCheck
+  UserCheck,
+  Lock
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { COMPANY_TYPES, SAUDI_LOCATIONS } from '@/lib/constants';
@@ -26,13 +27,11 @@ import { AddProjectModal } from '@/components/modals/add-project-modal';
 import { AddContactModal } from '@/components/modals/add-contact-modal';
 import { formatCurrencySAR, normalizePhoneNumber } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/language-context';
-
-import { useSearchParams } from 'next/navigation';
+import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
 
 export default function CompaniesPage() {
-  const { companies, projects, contacts, addCompany, updateCompany, deleteCompany, currentRole } = useCRM();
+  const { companies, projects, contacts, addCompany, updateCompany, deleteCompany, currentRole, currentUser } = useCRM();
   const { t, isRTL } = useLanguage();
-  const searchParams = useSearchParams();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -56,14 +55,17 @@ export default function CompaniesPage() {
 
   // Auto-open company detail cockpit when navigated with ?id= or ?search=
   React.useEffect(() => {
-    const targetId = searchParams.get('id');
-    if (targetId) {
-      openCompanyById(targetId);
-      return;
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const targetId = searchParams.get('id');
+      if (targetId) {
+        openCompanyById(targetId);
+        return;
+      }
+      const q = searchParams.get('search');
+      if (q) setSearchTerm(q);
     }
-    const q = searchParams.get('search');
-    if (q) setSearchTerm(q);
-  }, [searchParams, openCompanyById]);
+  }, [openCompanyById]);
 
   // Listen to instantaneous custom open event from global search
   React.useEffect(() => {
@@ -170,7 +172,13 @@ export default function CompaniesPage() {
     setIsModalOpen(false);
   };
 
+  const isManagerOrAdmin = currentUser?.role === 'admin' || currentUser?.role === 'sales_manager';
+
   const handleDelete = async (id: string, name: string) => {
+    if (!isManagerOrAdmin) {
+      alert(isRTL ? 'عفواً، لا يملك صلاحية حذف الشركات سوى مدير المبيعات والمسؤول (Admin).' : 'Unauthorized: Only Sales Managers and Admins can delete companies.');
+      return;
+    }
     if (confirm(`Are you sure you want to delete company "${name}"?`)) {
       if (selectedCompanyForDetail?.id === id) {
         setIsDetailModalOpen(false);
@@ -343,7 +351,13 @@ export default function CompaniesPage() {
             const linkedProjects = projects.filter(p => p.company_id === c.id);
             const linkedContacts = contacts.filter(cnt => cnt.company_id === c.id);
             const typeConfig = COMPANY_TYPES.find(t => t.value === c.company_type);
-            const totalValue = linkedProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
+
+            const isSalesRep = currentUser?.role === 'sales_engineer';
+            const accessibleProjects = isSalesRep 
+              ? linkedProjects.filter(p => canUserAccessProjectCockpit(p, currentUser)) 
+              : linkedProjects;
+            const lockedProjectsCount = isSalesRep ? (linkedProjects.length - accessibleProjects.length) : 0;
+            const totalValue = accessibleProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
 
             // Primary Contact identification (Hot lead priority or first contact)
             const primaryContact = linkedContacts.find(cnt => cnt.is_hot_lead) || linkedContacts[0];
@@ -384,28 +398,41 @@ export default function CompaniesPage() {
                         <button
                           onClick={() => openEditModal(c)}
                           className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                          title="Edit Company"
+                          title={isRTL ? "تعديل بيانات الشركة" : "Edit Company"}
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(c.id, c.name)}
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                          title="Delete Company"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {isManagerOrAdmin && (
+                          <button
+                            onClick={() => handleDelete(c.id, c.name)}
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            title={isRTL ? "حذف الشركة (خاص بالمدير والمسؤول)" : "Delete Company (Manager & Admin only)"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  {/* Portfolio Value Chip if has projects */}
-                  {totalValue > 0 && (
-                    <div className="mt-3.5 flex items-center gap-1.5 text-xs text-[#77CE69] bg-[#77CE69]/10 px-3 py-1 rounded-full border border-[#77CE69]/20 font-bold w-fit font-urbanist">
-                      <TrendingUp className="w-3.5 h-3.5 text-[#77CE69]" />
-                      <span>{isRTL ? 'قيمة الصفقات:' : 'Pipeline Value:'} {formatCurrencySAR(totalValue)}</span>
-                    </div>
-                  )}
+                  {/* Portfolio Value & Locked Indicators */}
+                  <div className="mt-3.5 flex items-center gap-2 flex-wrap font-urbanist">
+                    {totalValue > 0 && (
+                      <div className="flex items-center gap-1.5 text-xs text-[#77CE69] bg-[#77CE69]/10 px-3 py-1 rounded-full border border-[#77CE69]/20 font-bold w-fit">
+                        <TrendingUp className="w-3.5 h-3.5 text-[#77CE69]" />
+                        <span>{isRTL ? 'قيمة الصفقات:' : 'Pipeline Value:'} {formatCurrencySAR(totalValue)}</span>
+                      </div>
+                    )}
+                    {lockedProjectsCount > 0 && (
+                      <div 
+                        className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20 font-bold w-fit" 
+                        title={isRTL ? 'توجد مشاريع أخرى لهذه الشركة مسندة لمهندسين آخرين بالفريق' : 'Other projects for this client assigned to team members'}
+                      >
+                        <Lock className="w-3 h-3 text-amber-600" />
+                        <span>{isRTL ? `${lockedProjectsCount} مشاريع لفريق المبيعات` : `${lockedProjectsCount} team deals`}</span>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Notes / Details */}
                   {c.notes && (

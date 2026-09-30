@@ -40,6 +40,7 @@ import {
   formatDateString, 
   normalizePhoneNumber,
   formatDisplayPhone,
+  getSaturdayOfWeek,
   cn
 } from '@/lib/utils';
 import { SAUDI_LOCATIONS, ACTIVITY_CHANNELS, VISIT_PURPOSES } from '@/lib/constants';
@@ -142,9 +143,8 @@ export default function MyWeekPage() {
 
   // Compute 6 Saudi work days: Saturday through Thursday
   const workDays: DayConfig[] = useMemo(() => {
-    // Reference Saturday: Sep 12, 2026
-    const baseSaturday = new Date(2026, 8, 12);
-    baseSaturday.setDate(baseSaturday.getDate() + (weekOffset * 7));
+    // Computes Saturday of the current week (or offset week)
+    const baseSaturday = getSaturdayOfWeek(new Date(), weekOffset);
 
     const dayNames = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
     const dayShorts = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
@@ -574,12 +574,12 @@ export default function MyWeekPage() {
                   setDragOverDayDate(null);
                   setDraggedActivityId(null);
                 }}
-                className={`rounded-[28px] border flex flex-col min-h-[500px] min-w-0 transition-all duration-150 ${
+                className={`flex flex-col min-h-[500px] min-w-0 transition-all duration-150 ${
                   isColumnTargeted
-                    ? 'border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 ring-4 ring-[#8FC2F0]/20 shadow-md scale-[1.01]'
+                    ? 'border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 ring-4 ring-[#8FC2F0]/20 shadow-md scale-[1.01] rounded-[28px]'
                     : isToday 
-                      ? 'crm-card ring-2 ring-[#8FC2F0]/50' 
-                      : 'crm-card'
+                      ? 'crm-kanban-column ring-2 ring-[#8FC2F0]/60' 
+                      : 'crm-kanban-column'
                 }`}
               >
                 {/* Day Column Header */}
@@ -668,12 +668,12 @@ export default function MyWeekPage() {
                             setDraggedActivityId(null);
                             setDragOverDayDate(null);
                           }}
-                          className={`p-3.5 rounded-2xl transition-all duration-200 flex flex-col justify-between group relative select-none font-urbanist ${
+                          className={`p-4 transition-all duration-200 flex flex-col justify-between group relative select-none font-urbanist ${
                             isBeingDragged
-                              ? 'opacity-35 border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 shadow-none scale-[0.98]'
+                              ? 'opacity-35 border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 shadow-none scale-[0.98] rounded-[24px]'
                               : isDone 
-                                ? 'glass-card border-[#77CE69]/40 bg-gradient-to-b from-white/90 dark:from-[#1C2130]/90 to-[#77CE69]/10 dark:to-[#77CE69]/15' 
-                                : 'glass-card-interactive'
+                                ? 'crm-kanban-card border-[#77CE69]/60 dark:border-[#77CE69]/40 bg-gradient-to-b from-white dark:from-[#1C2232] to-emerald-50/40 dark:to-emerald-950/20' 
+                                : 'crm-kanban-card'
                           } ${currentRole !== 'viewer' ? 'cursor-grab active:cursor-grabbing' : ''}`}
                         >
                           <div>
@@ -773,9 +773,9 @@ export default function MyWeekPage() {
                               )}
                             </div>
 
-                            {/* 4. GOAL / ACTION DESCRIPTION */}
-                            <div className="text-xs text-slate-700 dark:text-slate-300 bg-slate-50/90 dark:bg-[#141820]/75 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 font-normal leading-relaxed break-words">
-                              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-0.5">
+                            {/* 4. GOAL / ACTION DESCRIPTION (Clean crm-card-soft container) */}
+                            <div className="crm-card-soft p-2.5 text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed break-words">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
                                 Activity Goal:
                               </span>
                               {item.goal}
@@ -846,13 +846,13 @@ export default function MyWeekPage() {
                                   plannedActivityId: item.id,
                                   defaultGoal: item.goal
                                 })}
-                                className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1 ${
+                                className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                                   isDone 
-                                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400' 
-                                    : 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-300 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white shadow-2xs'
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
+                                    : 'bg-[#8FC2F0]/20 dark:bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] hover:bg-[#8FC2F0] hover:text-[#292D32] border border-[#8FC2F0]/40 shadow-2xs font-urbanist'
                                 }`}
                               >
-                                <Check className="w-3 h-3" />
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                                 <span>{isDone ? 'Logged' : 'Log Activity'}</span>
                               </button>
                             )}
