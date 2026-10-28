@@ -113,18 +113,18 @@ export function RequestApprovalModal({
   const quickDiscountPills = [5, 8, 10, 12, 15, 20];
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="glass-card rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150 font-urbanist">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="glass-card rounded-2xl sm:rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150 font-urbanist">
         
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100/80 dark:border-slate-800/80 bg-white/80 dark:bg-[#141820]/80 flex items-center justify-between shrink-0">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100/80 dark:border-slate-800/80 bg-white/80 dark:bg-[#141820]/80 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-2xs">
-              <ShieldCheck className="w-5 h-5" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center shadow-2xs">
+              <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-base text-[#292D32] dark:text-white leading-tight">Request Approval</h3>
+                <h3 className="font-extrabold text-sm sm:text-base text-[#292D32] dark:text-white leading-tight">Request Approval</h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
                   Fast Flow &bull; فوري
                 </span>
@@ -143,7 +143,7 @@ export function RequestApprovalModal({
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 text-xs">
           
           {/* Target Project Overview */}
           <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#141820]/60 border border-slate-200/70 dark:border-slate-800 flex items-center justify-between gap-3">

@@ -114,6 +114,62 @@ export function downloadBackupFile(exporterName?: string): void {
 }
 
 /**
+ * Trigger client-side browser file download for the live updated Excel backup
+ */
+export async function downloadExcelBackupFile(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const bundle = generateBackupBundle();
+    const rawSession = localStorage.getItem('al_mespar_session');
+    let token = '';
+    if (rawSession) {
+      try {
+        token = JSON.parse(rawSession).token || '';
+      } catch {}
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch('/api/export-excel', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        projects: bundle.data.projects,
+        contacts: bundle.data.contacts,
+        companies: bundle.data.companies,
+        activities: bundle.data.activities,
+        quotations: bundle.data.quotations
+      })
+    });
+
+    if (!res.ok) {
+      throw new Error(`Server returned status ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const fileName = `Saudi_Projects_Follow_UP_Live_Updated_${dateStr}.xlsx`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    return true;
+  } catch (err) {
+    console.error('Failed to download Excel backup:', err);
+    return false;
+  }
+}
+
+/**
  * Restore CRMate database from a JSON backup file content
  */
 export function restoreBackupFile(jsonString: string): {

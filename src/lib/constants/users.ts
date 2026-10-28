@@ -11,7 +11,7 @@ export const SEEDED_USERS: User[] = [
     avatar_color: '#8FC2F0',
     is_active: true,
     created_at: '2026-01-01T00:00:00.000Z',
-    title: 'Senior Sales Engineer',
+    title: 'Sales Engineer',
     territory: 'Western Region (Jeddah, Makkah, Medina)'
   },
   {
@@ -29,15 +29,15 @@ export const SEEDED_USERS: User[] = [
   },
   {
     id: 'u3',
-    name: 'Abdurahman Al-Kaffas',
-    name_ar: 'عبدالرحمن الكفاص',
+    name: 'Abdelrahman El-Qaffas',
+    name_ar: 'عبدالرحمن القفاص',
     email: 'ar.alkaffas@almespar.com',
     password_hash: '7a7b269c9c92cc84f1f05a4248914034999e127917aac213e1471ef108b25100', // Kaffas1234
-    role: 'sales_manager',
+    role: 'admin',
     avatar_color: '#F59E0B',
     is_active: true,
     created_at: '2026-01-01T00:00:00.000Z',
-    title: 'Regional Sales Manager',
+    title: 'Commercial Director & Managing Partner',
     territory: 'Kingdom-Wide (KSA)'
   },
   {

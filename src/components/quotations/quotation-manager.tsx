@@ -40,12 +40,14 @@ import { QuotationPrintModal } from '@/components/modals/quotation-print-modal';
 
 interface QuotationManagerProps {
   project: Project;
+  readOnly?: boolean;
 }
 
-export function QuotationManager({ project }: QuotationManagerProps) {
+export function QuotationManager({ project, readOnly = false }: QuotationManagerProps) {
   const { quotations, currentRole, deleteQuotation, archiveQuotation, openRequestModal } = useCRM();
   const { language } = useLanguage();
   const isRTL = language === 'ar';
+  const canEditQuotes = currentRole !== 'viewer' && !readOnly;
 
   // Filter project's quotations
   const projectQuotations = quotations
@@ -151,7 +153,7 @@ export function QuotationManager({ project }: QuotationManagerProps) {
             </button>
           )}
 
-          {currentRole !== 'viewer' && (
+          {canEditQuotes && (
             <button
               onClick={() => setIsNewQuoteModalOpen(true)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
@@ -177,7 +179,7 @@ export function QuotationManager({ project }: QuotationManagerProps) {
               ? 'ابدأ بتسجيل عروض أسعارك الرسمية ومرفقات الـ PDF لتتبع إصدارات وتخفيضات الأسعار تلقائياً.'
               : 'Start tracking your commercial submissions and revisions for this project.'}
           </p>
-          {currentRole !== 'viewer' && (
+          {canEditQuotes && (
             <button
               onClick={() => setIsNewQuoteModalOpen(true)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
@@ -240,7 +242,7 @@ export function QuotationManager({ project }: QuotationManagerProps) {
                     <span>{isRTL ? 'عرض التفاصيل' : 'View Details'}</span>
                   </button>
 
-                  {currentRole !== 'viewer' && (
+                  {canEditQuotes && (
                     <>
                       <button
                         onClick={() => setSelectedQuoteForEdit(latestQuotation)}
@@ -502,7 +504,7 @@ export function QuotationManager({ project }: QuotationManagerProps) {
                                 <Printer className="w-3.5 h-3.5" />
                               </button>
 
-                              {currentRole !== 'viewer' && (
+                              {canEditQuotes && (
                                 <>
                                   <button
                                     onClick={() => setSelectedQuoteForEdit(q)}

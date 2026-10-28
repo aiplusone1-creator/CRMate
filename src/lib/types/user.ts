@@ -32,7 +32,8 @@ export type AuthErrorCode =
   | 'INVALID_EMAIL' 
   | 'INVALID_PASSWORD' 
   | 'INACTIVE_USER'
-  | 'USER_NOT_FOUND';
+  | 'USER_NOT_FOUND'
+  | 'EMAIL_EXISTS';
 
 export class AuthError extends Error {
   code: AuthErrorCode;

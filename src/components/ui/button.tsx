@@ -25,7 +25,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       accent:
         'bg-[#8FC2F0] hover:bg-[#7ab2e3] text-[#141820] shadow-xs',
       success:
-        'bg-[#77CE69] hover:bg-[#68b85b] text-white shadow-xs',
+        'bg-[#15803D] hover:bg-[#166534] text-white shadow-xs',
       secondary:
         'bg-slate-100 hover:bg-slate-200/80 text-slate-700 dark:bg-[#232A38] dark:hover:bg-[#2c3547] dark:text-slate-200',
       outline:

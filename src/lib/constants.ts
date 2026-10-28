@@ -96,6 +96,30 @@ export const RFQ_PACKAGES: {
   { value: 'both', label: 'LC + BMS (Combined)', labelAr: 'تيارات خفيفة وإدارة مباني (LC + BMS)', badgeClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800', icon: '⚡🏢' },
 ];
 
+export const PROJECT_SYSTEMS: string[] = [
+  'BMS / BAS',
+  'GRMS',
+  'EMS',
+  'Lighting Control',
+  'Fire Alarm System (FAS)',
+  'CCTV',
+  'Access Control (ACS)',
+  'PAVA / PA System',
+  'Networking – Core / Access',
+  'Networking – Wi-Fi',
+  'Networking – Firewall / SD',
+  'IP Telephone',
+  'Passive Data / Cabling',
+  'IPTV',
+  'MATV',
+  'Master Clock',
+  'Car Parking Management',
+  'UPS Systems',
+  'Intercom',
+  'Nurse Call',
+  'AV / Video Wall',
+];
+
 export const SUBMITTAL_STATUSES: { 
   value: SubmittalStatus; 
   label: string; 
@@ -234,5 +258,24 @@ export const PROJECT_CARD_COLORS: ProjectCardColorOption[] = [
     cardClass: 'crm-card-rose',
     borderHover: 'hover:border-rose-400 dark:hover:border-rose-700'
   }
+];
+
+export const QUICK_AREAS = [
+  { en: 'Jeddah Industrial Area 2', ar: 'صناعية جدة الثانية' },
+  { en: 'Yanbu Industrial City', ar: 'ينبع الصناعية' },
+  { en: 'King Abdullah Economic City', ar: 'مدينة الملك عبدالله الاقتصادية' },
+  { en: 'Makkah Expansion Area', ar: 'منطقة مكة والتوسعات' },
+  { en: 'Madinah Road Consultants', ar: 'مكاتب الاستشاريين طريق المدينة' },
+  { en: 'Al-Kharj Industrial Zone', ar: 'صناعية الخرج' },
+  { en: 'Jeddah Seafront & Obhur', ar: 'أبحر والكورنيش الشمالي' }
+];
+
+export const TIME_SLOTS = [
+  '09:00 AM',
+  '10:30 AM',
+  '12:00 PM',
+  '02:00 PM',
+  '03:30 PM',
+  '05:00 PM'
 ];
 

@@ -189,7 +189,7 @@ export default function MigrationPage() {
         >
           <span>Fuzzy Matches Requiring Review</span>
           {pendingFuzzyCount > 0 && (
-            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full font-extrabold">
+            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-extrabold">
               {pendingFuzzyCount}
             </span>
           )}

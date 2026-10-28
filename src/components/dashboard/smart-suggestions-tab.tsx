@@ -241,7 +241,7 @@ export function SmartSuggestionsTab() {
               >
                 <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-[#38BDF8] dark:text-[#0284C7]' : 'text-slate-400'}`} />
                 <span>{isRTL ? cat.labelAr : cat.labelEn}</span>
-                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full font-black ${
+                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full font-black ${
                   isSelected ? 'bg-white/20 dark:bg-black/20 text-white dark:text-black' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'
                 }`}>
                   {count}

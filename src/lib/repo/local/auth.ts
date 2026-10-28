@@ -1,4 +1,4 @@
-import { User, AuthSession, AuthError } from '../../types/user';
+import { User, AuthSession, AuthError, UserRole } from '../../types/user';
 import { SEEDED_USERS } from '../../constants/users';
 import { hashPassword, verifyPassword } from '../../utils/hash';
 
@@ -20,7 +20,28 @@ export class LocalAuthRepository {
         localStorage.setItem(this.usersKey, JSON.stringify(SEEDED_USERS));
         return SEEDED_USERS;
       }
-      return JSON.parse(saved);
+      const parsed: User[] = JSON.parse(saved);
+      let changed = false;
+      parsed.forEach(u => {
+        if (u.id === 'u1' && (u.role !== 'sales_engineer' || u.title !== 'Sales Engineer')) {
+          u.role = 'sales_engineer';
+          u.title = 'Sales Engineer';
+          u.territory = 'Western Region (Jeddah, Makkah, Medina)';
+          changed = true;
+        }
+        if (u.id === 'u3' && (u.role !== 'admin' || u.title !== 'Commercial Director & Managing Partner')) {
+          u.name = 'Abdelrahman El-Qaffas';
+          u.name_ar = 'عبدالرحمن القفاص';
+          u.role = 'admin';
+          u.title = 'Commercial Director & Managing Partner';
+          u.territory = 'Kingdom-Wide (KSA)';
+          changed = true;
+        }
+      });
+      if (changed) {
+        localStorage.setItem(this.usersKey, JSON.stringify(parsed));
+      }
+      return parsed;
     } catch (e) {
       console.error('Failed to load users from storage, falling back to seed', e);
       return SEEDED_USERS;
@@ -141,12 +162,33 @@ export class LocalAuthRepository {
       throw new AuthError('INVALID_PASSWORD', 'Incorrect password');
     }
 
-    // Generate random token
+    // Attempt to obtain cryptographically verifiable server session token
     let token = '';
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      token = crypto.randomUUID();
-    } else {
-      token = `token_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/auth/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email, password, rememberMe })
+        });
+        if (res.ok) {
+          const authData = await res.json();
+          if (authData.token) {
+            token = authData.token;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not contact /api/auth/session during local auth:', e);
+      }
+    }
+
+    // Fallback token if server session route unavailable
+    if (!token) {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        token = crypto.randomUUID();
+      } else {
+        token = `token_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      }
     }
 
     // Calculate expiry: +30 days if rememberMe, otherwise +7 days
@@ -194,6 +236,7 @@ export class LocalAuthRepository {
   logout(): void {
     if (typeof window === 'undefined') return;
     try {
+      fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
       localStorage.removeItem(this.sessionKey);
       sessionStorage.removeItem(this.sessionKey);
       localStorage.setItem('crmate_is_authenticated', 'false');
@@ -233,6 +276,27 @@ export class LocalAuthRepository {
         role: user.role,
         avatar_initials: (user.name || 'User').split(' ').map(w => w[0] || '').join('').slice(0, 2).toUpperCase()
       }));
+
+      // In dev environment, request updated verifiable server token for the switched role
+      fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ switchUserId: userId })
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.token) {
+          const current = localStorage.getItem(this.sessionKey);
+          if (current) {
+            try {
+              const parsed = JSON.parse(current);
+              parsed.token = data.token;
+              localStorage.setItem(this.sessionKey, JSON.stringify(parsed));
+            } catch {}
+          }
+        }
+      })
+      .catch(() => {});
     }
 
     return user;
@@ -319,6 +383,106 @@ export class LocalAuthRepository {
     }
 
     return updatedUser;
+  }
+
+  /**
+   * Create a new user account (for admin / team onboarding)
+   */
+  async createUser(userData: {
+    name: string;
+    name_ar?: string;
+    email: string;
+    password: string;
+    role: UserRole;
+    title?: string;
+    territory?: string;
+    phone?: string;
+    avatar_color?: string;
+  }): Promise<User> {
+    const existing = this.getUserByEmail(userData.email);
+    if (existing) {
+      throw new AuthError('EMAIL_EXISTS', 'البريد الإلكتروني مسجل بالفعل لمستخدم آخر / Email is already registered');
+    }
+
+    const password_hash = await hashPassword(userData.password);
+    const users = this.getUsers();
+    const newUser: User = {
+      id: `u_${Date.now()}`,
+      name: userData.name.trim(),
+      name_ar: userData.name_ar?.trim() || userData.name.trim(),
+      email: userData.email.trim().toLowerCase(),
+      password_hash,
+      role: userData.role,
+      avatar_color: userData.avatar_color || '#8FC2F0',
+      is_active: true,
+      created_at: new Date().toISOString(),
+      title: userData.title?.trim() || 'Sales Engineer',
+      territory: userData.territory?.trim() || 'Western Region',
+      phone: userData.phone?.trim() || ''
+    };
+
+    users.push(newUser);
+    this.saveUsers(users);
+    return newUser;
+  }
+
+  /**
+   * Update full user details by ID (including role, territory, title, phone, email, etc.)
+   */
+  async updateUser(userId: string, updates: Partial<Omit<User, 'id' | 'password_hash'>> & { newPassword?: string }): Promise<User> {
+    const users = this.getUsers();
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex === -1) {
+      throw new AuthError('USER_NOT_FOUND', 'المستخدم غير موجود / User not found');
+    }
+
+    let password_hash = users[userIndex].password_hash;
+    if (updates.newPassword && updates.newPassword.trim()) {
+      password_hash = await hashPassword(updates.newPassword.trim());
+    }
+
+    const { newPassword, ...restUpdates } = updates;
+    const updatedUser: User = {
+      ...users[userIndex],
+      ...restUpdates,
+      password_hash
+    };
+
+    users[userIndex] = updatedUser;
+    this.saveUsers(users);
+
+    // If currently logged in, update session cache as well
+    const session = this.getSession();
+    if (session && session.user_id === userId && typeof window !== 'undefined') {
+      const cached = localStorage.getItem('crmate_auth_user');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          localStorage.setItem('crmate_auth_user', JSON.stringify({
+            ...parsed,
+            full_name: updatedUser.name,
+            name: updatedUser.name,
+            role: updatedUser.role,
+            avatar_url: updatedUser.avatar_url
+          }));
+        } catch (e) {
+          // ignore cache sync error
+        }
+      }
+    }
+
+    return updatedUser;
+  }
+
+  /**
+   * Delete user account by ID
+   */
+  deleteUser(userId: string): boolean {
+    const users = this.getUsers();
+    const filtered = users.filter(u => u.id !== userId);
+    if (filtered.length === users.length) return false;
+    this.saveUsers(filtered);
+    return true;
   }
 }
 

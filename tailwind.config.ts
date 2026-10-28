@@ -55,9 +55,40 @@ const config: Config = {
         }
       },
       fontFamily: {
-        sans: ['var(--font-urbanist)', 'var(--font-cairo)', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"SF Pro Rounded"',
+          '"SF Pro Display"',
+          '"SF Pro"',
+          'var(--font-outfit)',
+          'var(--font-urbanist)',
+          'var(--font-cairo)',
+          'system-ui',
+          'sans-serif'
+        ],
         arabic: ['var(--font-cairo)', 'system-ui', 'sans-serif'],
         urbanist: ['var(--font-urbanist)', 'sans-serif'],
+        outfit: ['var(--font-outfit)', 'sans-serif'],
+        num: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"SF Pro Rounded"',
+          '"SF Pro Display"',
+          '"SF Pro"',
+          'var(--font-outfit)',
+          'var(--font-urbanist)',
+          'sans-serif'
+        ],
+        mono: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"SF Pro Rounded"',
+          '"SF Pro Display"',
+          'var(--font-outfit)',
+          'ui-monospace',
+          'monospace'
+        ],
       },
       borderRadius: {
         '3xl': '1.5rem',

@@ -106,17 +106,17 @@ export function WhatsAppComposerModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-urbanist animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 flex flex-col">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 font-urbanist animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] overflow-hidden shadow-2xl border border-slate-200 flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 bg-emerald-700 text-white flex items-center justify-between">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-4 bg-emerald-700 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center font-bold">
-              <MessageCircle className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/20 flex items-center justify-center font-bold shrink-0">
+              <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-sm font-black tracking-tight">WhatsApp B2B Quick Composer</h3>
-              <p className="text-[11px] text-emerald-100 font-medium">
+              <h3 className="text-xs sm:text-sm font-black tracking-tight">WhatsApp B2B Quick Composer</h3>
+              <p className="text-[10px] sm:text-[11px] text-emerald-100 font-medium">
                 To: <span className="font-bold">{recipientName}</span> ({cleanPhone ? `+${cleanPhone}` : 'No phone'})
               </p>
             </div>
@@ -130,13 +130,13 @@ export function WhatsAppComposerModal({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <div className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
           {/* Template Selection */}
           <div>
             <label className="block text-[11px] font-black uppercase text-slate-400 tracking-wider mb-2">
               Select Professional Template / اختر نموذج الرسالة:
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {templates.map(tpl => (
                 <button
                   key={tpl.id}

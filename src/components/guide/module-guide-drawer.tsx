@@ -139,7 +139,7 @@ export function ModuleGuideDrawer({
   const CurrentIcon = currentModuleMeta.icon;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden font-urbanist animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-hidden font-urbanist animate-in fade-in duration-200 print:hidden">
       {/* Frosted Glass Backdrop */}
       <div 
         className="absolute inset-0 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm transition-opacity"
@@ -273,7 +273,7 @@ export function ModuleGuideDrawer({
               >
                 <Zap className="w-3.5 h-3.5 text-amber-500" />
                 <span>{t('guideKeyFeatures')}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
                   {currentGuide.keySections.length}
                 </span>
               </button>
@@ -302,7 +302,7 @@ export function ModuleGuideDrawer({
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                 <span>{t('guideDailyWorkflow')}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
                   {currentGuide.dailyWorkflow.length}
                 </span>
               </button>
@@ -318,7 +318,7 @@ export function ModuleGuideDrawer({
               >
                 <HelpCircle className="w-3.5 h-3.5 text-purple-500" />
                 <span>{t('guideFAQs')}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300">
                   {currentGuide.faqs.length}
                 </span>
               </button>

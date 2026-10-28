@@ -258,12 +258,26 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Help Note Footer */}
-          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 text-center">
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium flex items-center justify-center gap-1.5">
+          {/* Help Note Footer & Enterprise RBAC Callout */}
+          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800/80 space-y-3">
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium flex items-center justify-center gap-1.5 text-center">
               <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span>{isRTL ? 'هل تحتاج مساعدة في الدخول؟ تواصل مع مسؤول النظام' : 'Need help or access? Contact system administrator'}</span>
             </p>
+
+            <div className="p-3 bg-slate-50/80 dark:bg-slate-900/50 rounded-2xl border border-slate-200/70 dark:border-slate-800 flex items-start gap-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+              <ShieldCheck className="w-4 h-4 text-[#8FC2F0] shrink-0 mt-0.5" />
+              <div className="leading-relaxed text-right rtl:text-right ltr:text-left">
+                <span className="font-bold text-slate-700 dark:text-slate-200 block mb-0.5">
+                  {isRTL ? 'حماية النظام وحسابات فريق العمل' : 'Enterprise Provisioning & Access'}
+                </span>
+                <span>
+                  {isRTL
+                    ? 'لحماية سرية عروض الأسعار والمناقصات، التسجيل الذاتي العام مغلق. يتم إنشاء حسابات أعضاء الفريق وتعيين مناطقهم البيعية حصرياً من لوحة الإعدادات (فريق العمل والصلاحيات) عبر الإدارة.'
+                    : 'To safeguard tender projects and proprietary margins, self-registration is disabled. Employee accounts and territories are created directly in Settings (Team & RBAC) by administrators.'}
+                </span>
+              </div>
+            </div>
           </div>
 
         </div>

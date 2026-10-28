@@ -225,7 +225,7 @@ export function PriceHistoryChart({ quotations, onSelectQuotation }: PriceHistor
                   x={paddingX - 15} 
                   y={y + 3} 
                   textAnchor="end" 
-                  className="text-[9px] fill-slate-400 dark:fill-slate-500 font-mono font-medium"
+                  className="text-[10px] fill-slate-400 dark:fill-slate-500 font-mono font-medium"
                 >
                   {formatCompactSAR(val)}
                 </text>
@@ -269,7 +269,7 @@ export function PriceHistoryChart({ quotations, onSelectQuotation }: PriceHistor
                   x={midX} 
                   y={midY + 3.5} 
                   textAnchor="middle" 
-                  className="text-[9px] font-black fill-emerald-700 dark:fill-emerald-300 font-urbanist"
+                  className="text-[10px] font-black fill-emerald-700 dark:fill-emerald-300 font-urbanist"
                 >
                   {diff.formattedPercentage}
                 </text>
@@ -336,7 +336,7 @@ export function PriceHistoryChart({ quotations, onSelectQuotation }: PriceHistor
                   x={pt.x} 
                   y={svgHeight - paddingY + 24} 
                   textAnchor="middle" 
-                  className="text-[9px] fill-slate-400 dark:fill-slate-500 font-medium"
+                  className="text-[10px] fill-slate-400 dark:fill-slate-500 font-medium"
                 >
                   {formatDateString(pt.quote.quotation_date || pt.quote.sent_date || pt.quote.created_at)}
                 </text>

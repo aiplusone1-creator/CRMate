@@ -101,11 +101,11 @@ export function CompanyDetailModal({
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${company.name} ${company.city || 'Jeddah'} Saudi Arabia`)}`;
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-200">
-      <div className="glass-card rounded-3xl max-w-4xl w-full max-h-[92vh] shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 flex flex-col overflow-hidden backdrop-blur-2xl">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-5 z-50 animate-in fade-in duration-200">
+      <div className="glass-card rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[92vh] shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 flex flex-col overflow-hidden backdrop-blur-2xl">
         
         {/* CRMate Frosted Header */}
-        <div className="px-6 py-5 bg-white/40 dark:bg-[#232A38]/70 backdrop-blur-md border-b border-slate-100/80 dark:border-slate-800 shrink-0">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-5 bg-white/40 dark:bg-[#232A38]/70 backdrop-blur-md border-b border-slate-100/80 dark:border-slate-800 shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">
@@ -628,7 +628,7 @@ export function CompanyDetailModal({
                               href={waLink}
                               target="_blank"
                               rel="noreferrer"
-                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black text-white bg-[#77CE69] hover:bg-[#68bb5a] active:bg-[#5aa84d] shadow-xs transition-all"
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-black text-white bg-[#15803D] hover:bg-[#166534] active:bg-[#14532D] shadow-xs transition-all"
                               title={`Chat with ${cnt.full_name} on WhatsApp`}
                             >
                               <MessageCircle className="w-4 h-4 fill-white" />

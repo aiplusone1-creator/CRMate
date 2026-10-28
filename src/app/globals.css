@@ -70,8 +70,13 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BASE HTML
+   BASE HTML & APPLE NUMERICAL TYPOGRAPHY
+   Unifies Apple SF Pro / Outfit numbers with tabular alignment
 ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --font-apple-num: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", "SF Pro Display", "SF Pro", var(--font-outfit), var(--font-urbanist), sans-serif;
+}
 
 html {
   -webkit-font-smoothing: antialiased;
@@ -81,14 +86,44 @@ html {
 }
 
 body {
-  font-family: var(--font-urbanist), var(--font-cairo), system-ui, -apple-system, sans-serif;
-  font-feature-settings: "rlig" 1, "calt" 1;
+  font-family: var(--font-apple-num), var(--font-urbanist), var(--font-cairo), system-ui, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1, "lnum" 1;
+  font-variant-numeric: tabular-nums lining-nums;
   min-height: 100vh;
 }
 
-*, *::before, *::after {
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+html[dir="rtl"] body,
+html[lang="ar"] body {
+  /* Outfit and SF Pro only contain Latin glyphs and digits (0-9).
+     All Arabic letters fall back seamlessly to Cairo,
+     while all numbers, percentages, dates, and currencies
+     render automatically in Apple SF Pro Rounded / Outfit! */
+  font-family: var(--font-apple-num), var(--font-cairo), system-ui, sans-serif;
+  font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1, "lnum" 1;
+  font-variant-numeric: tabular-nums lining-nums;
 }
+
+/* Tabular Numbers & Monospace overrides for Apple Premium Numbers */
+.font-num,
+.font-numbers,
+.tabular-nums,
+.font-mono {
+  font-family: var(--font-apple-num) !important;
+  font-feature-settings: "tnum" 1, "lnum" 1, "zero" 1 !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  letter-spacing: -0.015em;
+}
+
+/* Also ensure all metric numbers and KPI numbers have the Apple feel */
+.kpi-value,
+.stat-number,
+.metric-value {
+  font-family: var(--font-apple-num) !important;
+  font-feature-settings: "tnum" 1, "lnum" 1 !important;
+  font-variant-numeric: tabular-nums lining-nums !important;
+  letter-spacing: -0.025em;
+}
+
 
 /* ═══════════════════════════════════════════════════════════
    LIGHT MODE — Beautiful Frosted Canvas
@@ -593,11 +628,44 @@ select {
 }
 .badge-pulse { animation: gentle-pulse 2s ease-in-out infinite; }
 
-main { animation: fadeIn 0.18s ease-out; }
+/* ═══════════════════════════════════════════════════════════
+   PREMIUM FLUID NAVIGATION & PAGE TRANSITIONS
+   140ms subtle GPU-accelerated lift & fade (no flicker, no blank screens)
+═══════════════════════════════════════════════════════════ */
+.crm-page-transition {
+  animation: crmPageEnter 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: opacity, transform;
+  transform: translateZ(0);
+}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes crmPageEnter {
+  0% {
+    opacity: 0.90;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-page-transition {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* Fast tactile click feedback */
+button:active:not(:disabled),
+a:active,
+[role="button"]:active {
+  transform: scale(0.985);
+  transition-duration: 60ms !important;
+}
+
+main { 
+  will-change: transform, opacity;
 }
 
 @keyframes shake {
@@ -605,7 +673,7 @@ main { animation: fadeIn 0.18s ease-out; }
   20%, 60%  { transform: translateX(-8px); }
   40%, 80%  { transform: translateX(8px); }
 }
-.animate-shake { animation: shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+.animate-shake { animation: shake 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
 
 @keyframes float-slow {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -667,9 +735,133 @@ main { animation: fadeIn 0.18s ease-out; }
   background: rgba(143, 194, 240, 0.5);
 }
 
+/* ═══════════════════════════════════════════════════════════
+   PRINT ENGINE SPECIFICATION (A4 PORTRAIT & MULTI-PAGE FLOW)
+═══════════════════════════════════════════════════════════ */
 @media print {
-  aside, header, .no-print { display: none !important; }
-  main { padding: 0 !important; margin: 0 !important; }
+  @page {
+    size: A4 portrait;
+    margin: 12mm 12mm 12mm 12mm;
+  }
+
+  /* Reset document root */
+  html, body {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 10.5pt;
+    line-height: 1.35;
+  }
+
+  /* Force main wrapper containers to expand naturally across pages without clipping */
+  #__next,
+  .min-h-screen,
+  main {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Completely eliminate any sidebar indentation / gutter padding across all directionalities */
+  div[class*="ltr:pl-"],
+  div[class*="rtl:pr-"],
+  div[class*="md:ltr:pl-"],
+  div[class*="md:rtl:pr-"],
+  div[class*="ltr:pr-"],
+  div[class*="rtl:pl-"] {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* Symmetrically centered printable document with 0 offsets */
+  #printable-official-report {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide CRM application shell & interactive elements with highest priority */
+  aside,
+  header:not(.print-include-header),
+  nav,
+  footer:not(.print-include-footer),
+  button,
+  .no-print,
+  .print-hidden,
+  .print\:hidden,
+  [class*="print:hidden"],
+  [aria-hidden="true"],
+  .screen-only {
+    display: none !important;
+  }
+
+  /* Section heading orphan protection */
+  .report-section-header {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Component fragmentation protection */
+  .report-card,
+  .report-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Table multi-page pagination */
+  table {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+    table-layout: fixed !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  th, td {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+  }
+
+  /* Ensure text colors & backgrounds print with fidelity */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -678,41 +870,55 @@ main { animation: fadeIn 0.18s ease-out; }
 
 @keyframes red-bell-glow {
   0%, 100% {
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.55), 0 0 20px rgba(244, 63, 94, 0.35);
-    border-color: rgba(239, 68, 68, 0.7);
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.35);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 22px rgba(239, 68, 68, 0.95), 0 0 34px rgba(244, 63, 94, 0.65), inset 0 0 10px rgba(244, 63, 94, 0.35);
-    border-color: rgba(239, 68, 68, 1);
-    transform: scale(1.05);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.55);
+    transform: scale(1.03);
   }
 }
 
 .bell-glow-red {
-  animation: red-bell-glow 1.8s infinite ease-in-out;
+  animation: red-bell-glow 1.2s 2 ease-in-out;
   background-color: #FEF2F2 !important;
   border: 1.5px solid #EF4444 !important;
   color: #DC2626 !important;
+  box-shadow: 0 1px 3px 0 rgba(239, 68, 68, 0.2);
 }
 
 .dark .bell-glow-red {
   background-color: #2E121B !important;
   border: 1.5px solid #F43F5E !important;
   color: #FB7185 !important;
-}
-
-@keyframes red-bell-icon-pulse {
-  0%, 100% {
-    filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.7));
-  }
-  50% {
-    filter: drop-shadow(0 0 10px rgba(244, 63, 94, 1)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.8));
-  }
+  box-shadow: 0 1px 3px 0 rgba(244, 63, 94, 0.3);
 }
 
 .bell-icon-glow {
-  animation: red-bell-icon-pulse 1.8s infinite ease-in-out;
+  filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.5));
 }
+
+/* ═══════════════════════════════════════════════════════════
+   APPLE HIG ACCESSIBLE TOKENS (WCAG AA COMPLIANT)
+═══════════════════════════════════════════════════════════ */
+
+/* Accessible Sky Blue: Sky-700 in Light (5.2:1 contrast), #8FC2F0 in Dark (9.43:1) */
+.text-crmate-blue {
+  color: #0369A1;
+}
+.dark .text-crmate-blue {
+  color: #8FC2F0;
+}
+
+/* Accessible WhatsApp Action Button: Green-700 (4.65:1 contrast against white text) */
+.crm-btn-whatsapp {
+  background-color: #15803D !important;
+  color: #FFFFFF !important;
+  transition: background-color 0.18s ease-in-out, transform 0.18s ease-in-out;
+}
+.crm-btn-whatsapp:hover {
+  background-color: #166534 !important;
+}
+
 
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, 
   Plus, 
@@ -15,7 +15,11 @@ import {
   X,
   Calendar,
   MapPin,
-  Bell
+  Bell,
+  Table as TableIcon,
+  LayoutGrid,
+  Briefcase,
+  Check
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { SAUDI_LOCATIONS } from '@/lib/constants';
@@ -27,9 +31,42 @@ export default function ContactsPage() {
   const { contacts, companies, projects, addContact, updateContact, deleteContact, currentRole, openFastLog, openReminder, currentUser } = useCRM();
   const { t, isRTL } = useLanguage();
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [viewMode, setViewModeState] = useState<'cards' | 'table'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('al_mespar_contacts_view_mode');
+      if (saved === 'cards' || saved === 'table') return saved;
+    }
+    return 'table';
+  });
+  const setViewMode = React.useCallback((mode: 'cards' | 'table') => {
+    setViewModeState(mode);
+    try { sessionStorage.setItem('al_mespar_contacts_view_mode', mode); } catch {}
+  }, []);
+
+  const [searchTerm, setSearchTermState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('al_mespar_contacts_search') || '';
+    }
+    return '';
+  });
+  const setSearchTerm = React.useCallback((term: string) => {
+    setSearchTermState(term);
+    try { sessionStorage.setItem('al_mespar_contacts_search', term); } catch {}
+  }, []);
+  const deferredSearchTerm = React.useDeferredValue(searchTerm);
+
   const [onlyHotLeads, setOnlyHotLeads] = useState(false);
-  const [selectedCity, setSelectedCity] = useState('all');
+
+  const [selectedCity, setSelectedCityState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('al_mespar_contacts_city') || 'all';
+    }
+    return 'all';
+  });
+  const setSelectedCity = React.useCallback((c: string) => {
+    setSelectedCityState(c);
+    try { sessionStorage.setItem('al_mespar_contacts_city', c); } catch {}
+  }, []);
   const [selectedContactForWhatsApp, setSelectedContactForWhatsApp] = useState<Contact | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -39,6 +76,7 @@ export default function ContactsPage() {
   const closeContactModal = React.useCallback(() => {
     setIsModalOpen(false);
     setEditingContact(null);
+    setSelectedProjectIds([]);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       if (url.searchParams.has('id')) {
@@ -62,10 +100,12 @@ export default function ContactsPage() {
       setIsHotLead(found.is_hot_lead);
       setNextFollowUpAt(found.next_follow_up_at ? found.next_follow_up_at.split('T')[0] : '');
       setNotes(found.notes || '');
+      const contactProjIds = found.project_ids || projects.filter(p => (p.contact_ids || []).includes(found.id) || p.primary_contact_id === found.id).map(p => p.id);
+      setSelectedProjectIds(contactProjIds);
       setIsModalOpen(true);
       setSearchTerm(found.full_name);
     }
-  }, [contacts]);
+  }, [contacts, projects]);
 
   // Auto-sync search term from global search navigation or direct ?id=
   React.useEffect(() => {
@@ -96,6 +136,7 @@ export default function ContactsPage() {
   // Form State
   const [fullName, setFullName] = useState('');
   const [companyId, setCompanyId] = useState('');
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [jobTitle, setJobTitle] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -108,6 +149,7 @@ export default function ContactsPage() {
     setEditingContact(null);
     setFullName('');
     setCompanyId(companies[0]?.id || '');
+    setSelectedProjectIds([]);
     setJobTitle('');
     setPhone('');
     setEmail('');
@@ -122,6 +164,8 @@ export default function ContactsPage() {
     setEditingContact(cnt);
     setFullName(cnt.full_name);
     setCompanyId(cnt.company_id || '');
+    const contactProjIds = cnt.project_ids || projects.filter(p => (p.contact_ids || []).includes(cnt.id) || p.primary_contact_id === cnt.id).map(p => p.id);
+    setSelectedProjectIds(contactProjIds);
     setJobTitle(cnt.job_title || '');
     setPhone(cnt.phone || '');
     setEmail(cnt.email || '');
@@ -152,6 +196,7 @@ export default function ContactsPage() {
         is_hot_lead: isHotLead,
         next_follow_up_at: nextFollowUpAt || undefined,
         notes,
+        project_ids: selectedProjectIds.length > 0 ? selectedProjectIds : undefined,
       });
     } else {
       await addContact({
@@ -166,6 +211,7 @@ export default function ContactsPage() {
         is_hot_lead: isHotLead,
         next_follow_up_at: nextFollowUpAt || undefined,
         notes,
+        project_ids: selectedProjectIds.length > 0 ? selectedProjectIds : undefined,
       });
     }
 
@@ -178,18 +224,22 @@ export default function ContactsPage() {
     }
   };
 
-  // Filter logic
-  const filteredContacts = contacts.filter(cnt => {
-    const matchesSearch = cnt.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (cnt.job_title && cnt.job_title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (cnt.company_name && cnt.company_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (cnt.phone && cnt.phone.includes(searchTerm)) ||
-                          (cnt.email && cnt.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (cnt.notes && cnt.notes.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesHot = !onlyHotLeads || cnt.is_hot_lead;
-    const matchesCity = selectedCity === 'all' || cnt.city === selectedCity;
-    return matchesSearch && matchesHot && matchesCity;
-  });
+  // Filter logic (Memoized with deferredSearchTerm for 0ms typing latency)
+  const filteredContacts = useMemo(() => {
+    const q = deferredSearchTerm.trim().toLowerCase();
+    return contacts.filter(cnt => {
+      const matchesSearch = !q ||
+                            cnt.full_name.toLowerCase().includes(q) ||
+                            (cnt.job_title && cnt.job_title.toLowerCase().includes(q)) ||
+                            (cnt.company_name && cnt.company_name.toLowerCase().includes(q)) ||
+                            (cnt.phone && cnt.phone.includes(q)) ||
+                            (cnt.email && cnt.email.toLowerCase().includes(q)) ||
+                            (cnt.notes && cnt.notes.toLowerCase().includes(q));
+      const matchesHot = !onlyHotLeads || cnt.is_hot_lead;
+      const matchesCity = selectedCity === 'all' || cnt.city === selectedCity;
+      return matchesSearch && matchesHot && matchesCity;
+    });
+  }, [contacts, deferredSearchTerm, onlyHotLeads, selectedCity]);
 
   // KPI Metrics
   const totalContactsCount = contacts.length;
@@ -198,23 +248,23 @@ export default function ContactsPage() {
   const followUpScheduledCount = contacts.filter(c => c.next_follow_up_at).length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto font-urbanist">
+    <div className="space-y-4 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 crm-card p-6 sm:p-7">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 crm-card p-3 sm:p-4 rounded-xl shadow-2xs">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50 flex items-center gap-1 font-urbanist">
-              <Users className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/50 flex items-center gap-1">
+              <Users className="w-3 h-3" />
               <span>{isRTL ? 'سجل العلاقات المؤسسية' : 'Executive Rolodex'}</span>
             </span>
-            <span className="text-xs text-slate-400 font-bold font-urbanist">
+            <span className="text-[10.5px] text-slate-400 font-bold">
               {isRTL ? 'المنطقة الغربية • المملكة العربية السعودية' : 'Western Region • Saudi Arabia'}
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <h1 className="text-lg sm:text-xl md:text-2xl font-black text-[#292D32] dark:text-white tracking-tight">
             {t('contactsTitle')}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium font-urbanist">
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
             {t('contactsSubtitle')} ({contacts.length} {isRTL ? 'جهة اتصال مسجلة' : 'total decision makers'})
           </p>
         </div>
@@ -222,104 +272,132 @@ export default function ContactsPage() {
         {currentRole !== 'viewer' && (
           <button
             onClick={openCreateModal}
-            className="crm-pill-dark flex items-center gap-2 px-5 py-2.5 text-xs font-bold shadow-xs transition-all self-start sm:self-auto cursor-pointer group font-urbanist"
+            className="crm-pill-dark flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-2xs transition-all self-start sm:self-auto cursor-pointer group"
           >
-            <Plus className="w-4 h-4 text-[#8FC2F0] group-hover:rotate-90 transition-transform" />
+            <Plus className="w-3.5 h-3.5 text-[#8FC2F0] group-hover:rotate-90 transition-transform" />
             <span>{t('addContact')}</span>
           </button>
         )}
       </div>
 
-      {/* 4 Luxury KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2 font-urbanist">
+      {/* 4 Compact Apple-Style KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
+        <div className="crm-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
             <span>{isRTL ? 'إجمالي جهات الاتصال' : 'Total Contacts'}</span>
-            <div className="w-10 h-10 rounded-full bg-[#8FC2F0]/15 dark:bg-[#8FC2F0]/20 flex items-center justify-center text-[#292D32] dark:text-[#8FC2F0]">
-              <Users className="w-5 h-5 text-[#292D32] dark:text-[#8FC2F0]" />
+            <div className="w-6 h-6 rounded-full bg-[#8FC2F0]/15 dark:bg-[#8FC2F0]/20 flex items-center justify-center text-[#292D32] dark:text-[#8FC2F0]">
+              <Users className="w-3 h-3 text-[#292D32] dark:text-[#8FC2F0]" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <div className="text-lg sm:text-xl font-black font-mono text-[#292D32] dark:text-white tracking-tight">
             {totalContactsCount}
           </div>
-          <span className="text-[11px] font-bold text-slate-400 mt-2 block font-urbanist">
+          <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 mt-0.5 block truncate">
             {isRTL ? 'صناع قرار ومسؤولو مشتريات' : 'Verified Decision Makers'}
           </span>
         </div>
 
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2 font-urbanist">
+        <div className="crm-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
             <span>{isRTL ? 'العملاء الساخنون' : 'Hot Leads'}</span>
-            <div className="w-10 h-10 rounded-full bg-amber-500/15 dark:bg-amber-500/20 flex items-center justify-center text-amber-500">
-              <Flame className="w-5 h-5" />
+            <div className="w-6 h-6 rounded-full bg-amber-500/15 dark:bg-amber-500/20 flex items-center justify-center text-amber-500">
+              <Flame className="w-3 h-3" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight font-urbanist">
+          <div className="text-lg sm:text-xl font-black font-mono text-amber-600 dark:text-amber-400 tracking-tight">
             {hotLeadsCount}
           </div>
-          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-2 block font-urbanist">
+          <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 mt-0.5 block truncate">
             {isRTL ? 'أولوية متابعة وتواصل فورية' : 'High Purchase Intent'}
           </span>
         </div>
 
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2 font-urbanist">
+        <div className="crm-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
             <span>{isRTL ? 'المنشآت الممثلة' : 'Linked Companies'}</span>
-            <div className="w-10 h-10 rounded-full bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
-              <Building2 className="w-5 h-5" />
+            <div className="w-6 h-6 rounded-full bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <Building2 className="w-3 h-3" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <div className="text-lg sm:text-xl font-black font-mono text-[#292D32] dark:text-white tracking-tight">
             {linkedOrgsCount}
           </div>
-          <span className="text-[11px] font-bold text-slate-400 mt-2 block font-urbanist">
+          <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 mt-0.5 block truncate">
             {isRTL ? 'شركات ومؤسسات متعاملة' : 'Active Client Accounts'}
           </span>
         </div>
 
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2 font-urbanist">
+        <div className="crm-card p-2 sm:p-2.5 rounded-2xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
             <span>{isRTL ? 'متابعات مجدولة' : 'Follow-ups Set'}</span>
-            <div className="w-10 h-10 rounded-full bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
-              <Bell className="w-5 h-5" />
+            <div className="w-6 h-6 rounded-full bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Bell className="w-3 h-3" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <div className="text-lg sm:text-xl font-black font-mono text-[#292D32] dark:text-white tracking-tight">
             {followUpScheduledCount}
           </div>
-          <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 mt-2 block font-urbanist">
+          <span className="text-[10px] font-semibold text-purple-700 dark:text-purple-400 mt-0.5 block truncate">
             {isRTL ? 'مواعيد وتذكيرات قادمة' : 'Scheduled Outreach'}
           </span>
         </div>
       </div>
 
-      {/* Filter Bar with Hot Leads Toggle */}
-      <div className="crm-card p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-3 font-urbanist">
+      {/* Filter Bar with Hot Leads Toggle & View Switcher */}
+      <div className="crm-card p-2 sm:p-2.5 rounded-xl flex flex-col md:flex-row items-center justify-between gap-2 shadow-2xs">
         <div className="relative flex-1 w-full">
-          <Search className={`w-4 h-4 text-slate-400 absolute ${isRTL ? 'right-3.5' : 'left-3.5'} top-1/2 -translate-y-1/2`} />
+          <Search className={`w-3.5 h-3.5 text-slate-400 absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2`} />
           <input
             type="text"
             placeholder={isRTL ? "بحث في الأسماء، المسمى الوظيفي، الهاتف، البريد..." : "Search contacts by name, role, phone, email..."}
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className={`w-full ${isRTL ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4 text-left'} py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-[#292D32] dark:text-slate-100 font-semibold transition-all shadow-2xs`}
+            className={`w-full ${isRTL ? 'pr-9 pl-3 text-right' : 'pl-9 pr-3 text-left'} py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-[#292D32] dark:text-slate-100 font-semibold transition-all shadow-2xs`}
           />
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+          {/* View Toggle */}
+          <div className="rounded-full bg-slate-100 dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'table'
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              title="Table View"
+            >
+              <TableIcon className="w-3 h-3" />
+              <span>{isRTL ? 'جدول' : 'Table'}</span>
+            </button>
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'cards'
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+              title="Cards View"
+            >
+              <LayoutGrid className="w-3 h-3" />
+              <span>{isRTL ? 'كروت' : 'Cards'}</span>
+            </button>
+          </div>
+
           {/* Hot Leads Only Toggle Button */}
           <button
             onClick={() => setOnlyHotLeads(!onlyHotLeads)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-full transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full transition-all cursor-pointer ${
               onlyHotLeads 
                 ? 'bg-amber-500 text-white shadow-xs' 
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            <Flame className={`w-4 h-4 ${onlyHotLeads ? 'fill-white' : 'text-amber-500'}`} />
-            <span>{isRTL ? 'العملاء الساخنون فقط' : 'Hot Leads Only'}</span>
+            <Flame className={`w-3.5 h-3.5 ${onlyHotLeads ? 'fill-white' : 'text-amber-500'}`} />
+            <span>{isRTL ? 'الساخنون فقط' : 'Hot Only'}</span>
             {onlyHotLeads && (
-              <span className="bg-white/30 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+              <span className="bg-white/30 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold font-mono">
                 {hotLeadsCount}
               </span>
             )}
@@ -329,7 +407,7 @@ export default function ContactsPage() {
           <select
             value={selectedCity}
             onChange={e => setSelectedCity(e.target.value)}
-            className="px-4 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 font-bold shadow-2xs cursor-pointer"
+            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 font-bold shadow-2xs cursor-pointer"
           >
             <option value="all">{t('allCities')}</option>
             {SAUDI_LOCATIONS.map(loc => (
@@ -339,25 +417,172 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Contacts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredContacts.length === 0 ? (
-          <div className="col-span-full p-12 text-center glass-card rounded-3xl text-slate-400 font-bold">
-            {isRTL ? 'لا توجد جهات اتصال مطابقة لمعايير البحث.' : 'No contacts match the filter criteria.'}
+      {/* VIEW SWITCH: TABLE vs CARDS */}
+      {viewMode === 'table' ? (
+        <div className="crm-card rounded-xl overflow-hidden shadow-2xs border border-slate-200/80 dark:border-slate-800">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left rtl:text-right border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="py-2.5 px-4">{isRTL ? 'جهة الاتصال' : 'Contact'}</th>
+                  <th className="py-2.5 px-3">{isRTL ? 'المنشأة والمسمى' : 'Company & Role'}</th>
+                  <th className="py-2.5 px-3">{isRTL ? 'المدينة' : 'City'}</th>
+                  <th className="py-2.5 px-3">{isRTL ? 'الهاتف والتواصل السريع' : 'Phone & Outreach'}</th>
+                  <th className="py-2.5 px-3">{isRTL ? 'تاريخ المتابعة' : 'Follow-up'}</th>
+                  <th className="py-2.5 px-3 text-center">{isRTL ? 'إجراءات' : 'Actions'}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                {filteredContacts.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400 font-bold text-xs">
+                      {isRTL ? 'لا توجد جهات اتصال مطابقة لمعايير البحث.' : 'No contacts match the filter criteria.'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredContacts.map(cnt => {
+                    const rawPhone = cnt.phone || '';
+                    const cleanPhone = normalizePhoneNumber(rawPhone);
+                    const displayPhone = formatDisplayPhone(rawPhone);
+                    const linkedCompany = companies.find(c => c.id === cnt.company_id);
+                    const contactProjects = projects.filter(p => 
+                      !p.is_archived && (
+                        (cnt.project_ids || []).includes(p.id) || 
+                        (p.contact_ids || []).includes(cnt.id) || 
+                        p.primary_contact_id === cnt.id
+                      )
+                    );
+
+                    return (
+                      <tr key={cnt.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center font-bold text-xs shrink-0">
+                              {cnt.full_name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-black text-[#292D32] dark:text-white truncate flex items-center gap-1.5">
+                                <span>{cnt.full_name}</span>
+                                {cnt.is_hot_lead && (
+                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-black bg-amber-500/15 text-amber-600 border border-amber-500/30">
+                                    🔥 HOT
+                                  </span>
+                                )}
+                              </div>
+                              {cnt.email && (
+                                <div className="text-[10px] text-slate-400 font-mono truncate">{cnt.email}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="font-bold text-slate-700 dark:text-slate-200 truncate">{cnt.company_name || linkedCompany?.name || '—'}</div>
+                          <div className="text-[10.5px] text-sky-600 dark:text-[#8FC2F0] font-medium">{cnt.job_title || '—'}</div>
+                          {contactProjects.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5 max-w-[280px]">
+                              {contactProjects.map(p => (
+                                <span 
+                                  key={p.id}
+                                  title={p.name}
+                                  className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 max-w-[200px]"
+                                >
+                                  <Briefcase className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                                  <span className="truncate">{p.name}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-[11px] text-slate-600 dark:text-slate-300 font-medium">{cnt.city || '—'}</span>
+                        </td>
+                        <td className="py-2 px-3">
+                          {rawPhone ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">{displayPhone}</span>
+                              <a
+                                href={`tel:${cleanPhone || rawPhone}`}
+                                className="p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 text-blue-600 dark:text-[#8FC2F0] transition-colors"
+                                title={isRTL ? 'اتصال مباشر' : 'Call'}
+                              >
+                                <Phone className="w-3.5 h-3.5" />
+                              </a>
+                              <button
+                                onClick={() => setSelectedContactForWhatsApp(cnt)}
+                                className="p-1 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-emerald-600 transition-colors cursor-pointer"
+                                title={isRTL ? 'مراسلة واتساب' : 'WhatsApp'}
+                              >
+                                <MessageCircle className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[10px] italic">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3">
+                          {cnt.next_follow_up_at ? (
+                            <span className="font-mono text-[10px] font-bold text-sky-700 dark:text-[#8FC2F0] bg-[#8FC2F0]/15 px-2 py-0.5 rounded-full border border-[#8FC2F0]/30 whitespace-nowrap">
+                              {formatDateString(cnt.next_follow_up_at)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">—</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => openEditModal(cnt)}
+                              className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-[#292D32] dark:hover:text-white transition-colors cursor-pointer"
+                              title="Edit"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            {currentRole !== 'viewer' && (
+                              <button
+                                onClick={() => handleDelete(cnt.id, cnt.full_name)}
+                                className="p-1 rounded-md hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        ) : (
+        </div>
+      ) : (
+        /* Contacts Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {filteredContacts.length === 0 ? (
+            <div className="col-span-full p-8 text-center crm-card rounded-xl text-slate-400 font-bold text-xs">
+              {isRTL ? 'لا توجد جهات اتصال مطابقة لمعايير البحث.' : 'No contacts match the filter criteria.'}
+            </div>
+          ) : (
           filteredContacts.map(cnt => {
             const rawPhone = cnt.phone || '';
             const cleanPhone = normalizePhoneNumber(rawPhone);
             const displayPhone = formatDisplayPhone(rawPhone);
             const waLink = cleanPhone ? `https://wa.me/${cleanPhone}` : null;
             const linkedCompany = companies.find(c => c.id === cnt.company_id);
-            const linkedProject = projects.find(p => p.primary_contact_id === cnt.id || p.company_id === cnt.company_id);
+            const contactProjects = projects.filter(p => 
+              !p.is_archived && (
+                (cnt.project_ids || []).includes(p.id) || 
+                (p.contact_ids || []).includes(cnt.id) || 
+                p.primary_contact_id === cnt.id
+              )
+            );
+            const linkedProject = contactProjects[0] || projects.find(p => p.company_id === cnt.company_id);
 
             return (
               <div 
                 key={cnt.id} 
-                className="crm-card crm-card-interactive p-6 flex flex-col justify-between font-urbanist"
+                className="crm-card crm-card-interactive p-6 flex flex-col justify-between"
               >
                 <div>
                   {/* 1. Full Name on Top & Actions */}
@@ -388,6 +613,28 @@ export default function ContactsPage() {
                         <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                         <span className="truncate">{cnt.company_name || linkedCompany?.name || 'Independent / General'}</span>
                       </div>
+
+                      {/* 3.1 Assigned Projects (Names only) */}
+                      {contactProjects.length > 0 && (
+                        <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                            <Briefcase className="w-3 h-3 text-blue-500" />
+                            <span>{isRTL ? 'المشاريع المسندة:' : 'Assigned Projects:'}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {contactProjects.map(p => (
+                              <span 
+                                key={p.id}
+                                title={p.name}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50/70 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/50 max-w-full"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                                <span className="truncate">{p.name}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Edit & Delete */}
@@ -453,7 +700,7 @@ export default function ContactsPage() {
 
                     {rawPhone ? (
                       <div className="flex items-center justify-between crm-card-soft p-3">
-                        <span className="font-urbanist text-sm font-extrabold text-slate-900 dark:text-white tracking-wider select-all">
+                        <span className="font-mono text-sm font-extrabold text-slate-900 dark:text-white tracking-wider select-all">
                           {displayPhone}
                         </span>
                         <span className="text-[11px] text-slate-400 font-medium">{isRTL ? 'جوال سعودي' : 'Saudi Mobile'}</span>
@@ -485,7 +732,7 @@ export default function ContactsPage() {
                         {cleanPhone && (
                           <button
                             onClick={() => setSelectedContactForWhatsApp(cnt)}
-                            className="inline-flex items-center justify-center gap-1.5 py-2 px-4 bg-[#77CE69] hover:bg-[#68bc5b] text-white text-xs font-bold rounded-full shadow-xs transition-all shrink-0 active:scale-[0.98] cursor-pointer"
+                            className="inline-flex items-center justify-center gap-1.5 py-2 px-4 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-bold rounded-full shadow-xs transition-all shrink-0 active:scale-[0.98] cursor-pointer"
                             title={`${isRTL ? 'مراسلة واتساب لـ' : 'Compose WhatsApp message to'} ${cnt.full_name}`}
                           >
                             <MessageCircle className="w-3.5 h-3.5 fill-white" />
@@ -538,13 +785,14 @@ export default function ContactsPage() {
           })
         )}
       </div>
+      )}
 
       {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-[#1C2130] rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-[#8FC2F0]/15 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#232A38]">
-              <h2 className="font-bold text-slate-900 dark:text-white text-lg">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50">
+          <div className="bg-white dark:bg-[#1C2130] rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-[#8FC2F0]/15 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#232A38] shrink-0">
+              <h2 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg">
                 {editingContact ? (isRTL ? 'تعديل جهة الاتصال' : 'Edit Contact') : (isRTL ? 'إضافة جهة اتصال جديدة' : 'Add New Contact')}
               </h2>
               <button 
@@ -555,7 +803,7 @@ export default function ContactsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{isRTL ? 'الاسم الكامل *' : 'Full Name *'}</label>
                 <input
@@ -568,7 +816,7 @@ export default function ContactsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{isRTL ? 'الشركة' : 'Company'}</label>
                   <select
@@ -595,7 +843,7 @@ export default function ContactsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{isRTL ? 'رقم الهاتف' : 'Phone Number'}</label>
                   <input
@@ -618,7 +866,7 @@ export default function ContactsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{isRTL ? 'المدينة' : 'City'}</label>
                   <select
@@ -655,6 +903,65 @@ export default function ContactsPage() {
                   <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                   <span>{isRTL ? 'تحديد كعميل محتمل ذو أولوية عالية (متابعة عاجلة)' : 'Mark as Hot Lead (Active Inquiry / Priority Follow-up)'}</span>
                 </label>
+              </div>
+
+              {/* Assigned Projects Multi-Select */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
+                    <span>{isRTL ? 'المشاريع المسندة (مشاريع المنشأة)' : 'Assigned Projects'}</span>
+                  </span>
+                  {selectedProjectIds.length > 0 && (
+                    <span className="text-[10px] bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 font-bold px-2 py-0.5 rounded-full border border-blue-300 dark:border-blue-800 font-mono">
+                      {selectedProjectIds.length} {isRTL ? 'مشاريع' : 'projects'}
+                    </span>
+                  )}
+                </label>
+                
+                {(() => {
+                  const relevantProjects = projects.filter(p => !p.is_archived && (!companyId || p.company_id === companyId));
+                  if (relevantProjects.length === 0) {
+                    return (
+                      <div className="p-2.5 text-xs text-slate-400 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-center bg-slate-50/50 dark:bg-[#141820]/40">
+                        {isRTL ? 'لا توجد مشاريع مسجلة لهذه المنشأة حالياً' : 'No projects recorded for this company'}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="max-h-32 overflow-y-auto p-1.5 bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg space-y-1 shadow-2xs">
+                      {relevantProjects.map(p => {
+                        const isSelected = selectedProjectIds.includes(p.id);
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => {
+                              setSelectedProjectIds(prev => 
+                                prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                              );
+                            }}
+                            className={`flex items-center gap-2 p-1.5 rounded-md border text-xs cursor-pointer transition-all ${
+                              isSelected
+                                ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 font-bold text-blue-900 dark:text-blue-200 shadow-2xs'
+                                : 'bg-white/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                              isSelected 
+                                ? 'bg-blue-600 border-blue-600 text-white' 
+                                : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
+                            }`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                            <span className="font-mono text-[10px] text-slate-400 shrink-0">#{p.pr_number}</span>
+                            <span className="truncate">{p.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>

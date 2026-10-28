@@ -144,17 +144,17 @@ export function ReminderModal({ isOpen, onClose, defaultValues }: ReminderModalP
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="glass-card rounded-3xl max-w-lg w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh] backdrop-blur-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="glass-card rounded-2xl sm:rounded-3xl max-w-lg w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh] backdrop-blur-2xl">
         
         {/* CRMate Frosted Header */}
-        <div className="px-6 py-5 bg-white/40 dark:bg-[#232A38]/70 border-b border-slate-100/80 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-5 bg-white/40 dark:bg-[#232A38]/70 border-b border-slate-100/80 dark:border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shadow-2xs">
-              <Bell className="w-5 h-5 text-[#292D32] dark:text-[#8FC2F0]" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shadow-2xs">
+              <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-[#292D32] dark:text-[#8FC2F0]" />
             </div>
             <div>
-              <h3 className="font-black text-[#292D32] dark:text-white text-lg font-urbanist tracking-tight flex items-center gap-1.5">
+              <h3 className="font-black text-[#292D32] dark:text-white text-base sm:text-lg font-urbanist tracking-tight flex items-center gap-1.5">
                 <span>Set Reminder &bull; إضافة تذكير</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -171,7 +171,7 @@ export function ReminderModal({ isOpen, onClose, defaultValues }: ReminderModalP
         </div>
 
         {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 text-xs overflow-y-auto flex-1">
           
           {/* Manager / Admin: Assign Reminder To Specific Sales Account */}
           {isManager && (

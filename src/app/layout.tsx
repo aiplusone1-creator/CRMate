@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Urbanist, Cairo } from 'next/font/google';
+import { Urbanist, Cairo, Outfit } from 'next/font/google';
 import './globals.css';
 import { CRMProvider } from '@/lib/store/crm-context';
 import { Shell } from '@/components/layout/shell';
@@ -10,6 +10,13 @@ const urbanist = Urbanist({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-urbanist',
+  weight: ['400', '500', '600', '700', '800', '900']
+});
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-outfit',
   weight: ['400', '500', '600', '700', '800', '900']
 });
 
@@ -55,7 +62,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning className={`${urbanist.variable} ${cairo.variable}`}>
+    <html lang="ar" dir="rtl" suppressHydrationWarning className={`${urbanist.variable} ${outfit.variable} ${cairo.variable}`}>
       <body suppressHydrationWarning className="font-sans antialiased text-[#292D32] dark:text-[#E8EDF4] bg-[#EFF3F8] dark:bg-[#141820] selection:bg-[#8FC2F0]/30 selection:text-[#292D32] dark:selection:text-white">
         <ThemeProvider>
           <LanguageProvider>

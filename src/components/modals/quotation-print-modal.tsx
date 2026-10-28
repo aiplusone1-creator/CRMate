@@ -38,12 +38,12 @@ export function QuotationPrintModal({
   const grandTotal = quotation.amount + vatAmount;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-urbanist animate-in fade-in duration-150 overflow-y-auto print:p-0 print:bg-white print:static">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 font-urbanist animate-in fade-in duration-150 overflow-y-auto print:p-0 print:bg-white print:static">
       {/* Container */}
-      <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-8 print:border-0 print:shadow-none print:max-w-none print:w-full print:m-0 print:rounded-none">
+      <div className="bg-white rounded-2xl sm:rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col my-4 sm:my-8 print:border-0 print:shadow-none print:max-w-none print:w-full print:m-0 print:rounded-none">
         
         {/* Modal Controls Toolbar (Hidden on Print) */}
-        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between print:hidden">
+        <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-slate-900 text-white flex items-center justify-between print:hidden">
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4 text-[#8FC2F0]" />
             <span className="text-xs font-black tracking-wide">Official Commercial Quotation Sheet</span>
@@ -55,10 +55,11 @@ export function QuotationPrintModal({
           <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#8FC2F0] hover:bg-[#7ab1e0] text-slate-900 rounded-xl text-xs font-bold shadow-xs transition-all"
+              className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-[#8FC2F0] hover:bg-[#7ab1e0] text-slate-900 rounded-xl text-xs font-bold shadow-xs transition-all"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Print / Save PDF</span>
+              <span className="hidden sm:inline">Print / Save PDF</span>
+              <span className="sm:hidden">Print</span>
             </button>
             <button
               onClick={onClose}
@@ -70,12 +71,12 @@ export function QuotationPrintModal({
         </div>
 
         {/* Printable Quotation Document Paper */}
-        <div className="p-8 sm:p-12 space-y-8 bg-white text-slate-900 font-sans print:p-6" id="printable-quotation">
+        <div className="p-4 sm:p-8 md:p-12 space-y-6 sm:space-y-8 bg-white text-slate-900 font-sans print:p-6" id="printable-quotation">
           
           {/* Header & Company Brand */}
-          <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
+          <div className="flex flex-col sm:flex-row items-start justify-between border-b-2 border-slate-900 pb-6 gap-4">
             <div>
-              <div className="text-xl font-black text-slate-900 uppercase tracking-tight">
+              <div className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight">
                 شركة المسبار العالمي للمقاولات
               </div>
               <div className="text-xs font-bold text-slate-600 tracking-wider">
@@ -88,7 +89,7 @@ export function QuotationPrintModal({
               </div>
             </div>
 
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <div className="inline-block px-3 py-1 bg-slate-100 rounded-lg border border-slate-200 text-xs font-mono font-black text-slate-900 mb-2">
                 OFFICIAL QUOTATION
               </div>
@@ -110,7 +111,7 @@ export function QuotationPrintModal({
           </div>
 
           {/* Client & Project Details Grid */}
-          <div className="grid grid-cols-2 gap-6 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div>
               <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
                 Customer / الجهة الطالبة:

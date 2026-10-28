@@ -387,27 +387,27 @@ export function VoiceActivityModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
       <div 
-        className="w-full max-w-2xl glass-card rounded-3xl shadow-2xl border border-white/20 dark:border-[#8FC2F0]/25 overflow-hidden text-right font-sans flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
+        className="w-full max-w-2xl glass-card rounded-2xl sm:rounded-3xl shadow-2xl border border-white/20 dark:border-[#8FC2F0]/25 overflow-hidden text-right font-sans flex flex-col max-h-[92vh] sm:max-h-[90vh] animate-in zoom-in-95 duration-200"
         dir="rtl"
       >
         {/* Header */}
-        <div className="bg-gradient-to-l from-[#1E232A] via-[#292D32] to-[#16191D] p-5 text-white flex items-center justify-between relative overflow-hidden shrink-0">
+        <div className="bg-gradient-to-l from-[#1E232A] via-[#292D32] to-[#16191D] p-3.5 sm:p-5 text-white flex items-center justify-between relative overflow-hidden shrink-0">
           <div className="absolute top-[-20%] right-[-10%] w-48 h-48 rounded-full bg-[#8FC2F0]/20 blur-2xl pointer-events-none" />
           <div className="absolute bottom-[-20%] left-[-10%] w-48 h-48 rounded-full bg-[#77CE69]/20 blur-2xl pointer-events-none" />
 
-          <div className="relative z-10 flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-inner ${
+          <div className="relative z-10 flex items-center gap-2.5 sm:gap-3">
+            <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shadow-inner shrink-0 ${
               isRecording ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse' : 'bg-white/10 text-[#8FC2F0] border border-white/20'
             }`}>
-              <Mic className="w-5 h-5" />
+              <Mic className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h3 className="font-cairo font-black text-lg text-white">
+              <h3 className="font-cairo font-black text-base sm:text-lg text-white">
                 تسجيل الأنشطة اليومية بالصوت 🎙️
               </h3>
-              <p className="text-xs text-slate-300 font-cairo">
+              <p className="text-[11px] sm:text-xs text-slate-300 font-cairo">
                 {dayLabel ? dayLabel : targetDate} &bull; احكِ ما حدث وسيقوم الذكاء الاصطناعي بتقسيم الأنشطة تلقائياً
               </p>
             </div>
@@ -438,7 +438,7 @@ export function VoiceActivityModal({
         {/* STEP 1: VOICE RECORDING & TRANSCRIPT EDIT */}
         {/* ========================================================================= */}
         {step === 'record' && (
-          <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1">
             {/* Brave / Network Blocked Guidance Card */}
             {isNetworkBlocked ? (
               <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 rounded-2xl space-y-2.5 font-cairo text-amber-950 dark:text-amber-200 animate-in fade-in">

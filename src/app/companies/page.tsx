@@ -1,6 +1,5 @@
 'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Building2, 
   Plus, 
@@ -26,6 +25,7 @@ import { CompanyDetailModal } from '@/components/modals/company-detail-modal';
 import { AddProjectModal } from '@/components/modals/add-project-modal';
 import { AddContactModal } from '@/components/modals/add-contact-modal';
 import { formatCurrencySAR, normalizePhoneNumber } from '@/lib/utils';
+import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
 
@@ -33,9 +33,39 @@ export default function CompaniesPage() {
   const { companies, projects, contacts, addCompany, updateCompany, deleteCompany, currentRole, currentUser } = useCRM();
   const { t, isRTL } = useLanguage();
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedType, setSelectedType] = useState<string>('all');
-  const [selectedCity, setSelectedCity] = useState<string>('all');
+  const [searchTerm, setSearchTermState] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('al_mespar_companies_search') || '';
+    }
+    return '';
+  });
+  const setSearchTerm = React.useCallback((term: string) => {
+    setSearchTermState(term);
+    try { sessionStorage.setItem('al_mespar_companies_search', term); } catch {}
+  }, []);
+  const deferredSearchTerm = React.useDeferredValue(searchTerm);
+
+  const [selectedType, setSelectedTypeState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('al_mespar_companies_type') || 'all';
+    }
+    return 'all';
+  });
+  const setSelectedType = React.useCallback((t: string) => {
+    setSelectedTypeState(t);
+    try { sessionStorage.setItem('al_mespar_companies_type', t); } catch {}
+  }, []);
+
+  const [selectedCity, setSelectedCityState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('al_mespar_companies_city') || 'all';
+    }
+    return 'all';
+  });
+  const setSelectedCity = React.useCallback((c: string) => {
+    setSelectedCityState(c);
+    try { sessionStorage.setItem('al_mespar_companies_city', c); } catch {}
+  }, []);
 
   // Company Detail Cockpit Modal State
   const [selectedCompanyForDetail, setSelectedCompanyForDetail] = useState<Company | null>(null);
@@ -188,15 +218,19 @@ export default function CompaniesPage() {
     }
   };
 
-  // Filter logic
-  const filteredCompanies = companies.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (c.phone && c.phone.includes(searchTerm)) ||
-                          (c.city && c.city.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesType = selectedType === 'all' || c.company_type === selectedType;
-    const matchesCity = selectedCity === 'all' || c.city === selectedCity;
-    return matchesSearch && matchesType && matchesCity;
-  });
+  // Filter logic (Memoized with deferredSearchTerm for 0ms typing latency)
+  const filteredCompanies = useMemo(() => {
+    const q = deferredSearchTerm.trim().toLowerCase();
+    return companies.filter(c => {
+      const matchesSearch = !q ||
+                            c.name.toLowerCase().includes(q) ||
+                            (c.phone && c.phone.includes(q)) ||
+                            (c.city && c.city.toLowerCase().includes(q));
+      const matchesType = selectedType === 'all' || c.company_type === selectedType;
+      const matchesCity = selectedCity === 'all' || c.city === selectedCity;
+      return matchesSearch && matchesType && matchesCity;
+    });
+  }, [companies, deferredSearchTerm, selectedType, selectedCity]);
 
   // KPI Metrics
   const totalOrganizations = companies.length;
@@ -205,23 +239,23 @@ export default function CompaniesPage() {
   const totalDecisionMakers = contacts.length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto font-urbanist">
+    <div className="space-y-4 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 crm-card p-6 sm:p-7">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 crm-card p-3 sm:p-4 rounded-xl shadow-2xs">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1 font-urbanist">
-              <Building2 className="w-3.5 h-3.5 text-[#292D32] dark:text-[#8FC2F0]" />
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
+              <Building2 className="w-3 h-3 text-[#292D32] dark:text-[#8FC2F0]" />
               <span>{isRTL ? 'دليل المنشآت المؤسسي' : 'Enterprise Directory'}</span>
             </span>
-            <span className="text-xs text-slate-400 font-bold font-urbanist">
+            <span className="text-[10.5px] text-slate-400 font-bold">
               {isRTL ? 'المنطقة الغربية • المملكة العربية السعودية' : 'Western Region • Saudi Arabia'}
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <h1 className="text-lg sm:text-xl md:text-2xl font-black text-[#292D32] dark:text-white tracking-tight">
             {t('companiesTitle')}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium font-urbanist">
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
             {t('companiesSubtitle')} ({companies.length} {isRTL ? 'شركة مسجلة' : 'organizations'})
           </p>
         </div>
@@ -229,73 +263,73 @@ export default function CompaniesPage() {
         {currentRole !== 'viewer' && (
           <button
             onClick={openCreateModal}
-            className="crm-pill-dark flex items-center gap-2 px-5 py-2.5 text-xs font-bold shadow-xs transition-all self-start sm:self-auto cursor-pointer group font-urbanist"
+            className="crm-pill-dark flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-2xs transition-all self-start sm:self-auto cursor-pointer group"
           >
-            <Plus className="w-4 h-4 text-[#8FC2F0] group-hover:rotate-90 transition-transform" />
+            <Plus className="w-3.5 h-3.5 text-[#8FC2F0] group-hover:rotate-90 transition-transform" />
             <span>{t('addCompany')}</span>
           </button>
         )}
       </div>
 
       {/* 4 Luxury KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
+        <div className="crm-card p-3 sm:p-3.5 rounded-xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
             <span>{isRTL ? 'إجمالي المنشآت' : 'Total Companies'}</span>
-            <div className="w-10 h-10 rounded-full bg-[#8FC2F0]/15 dark:bg-[#8FC2F0]/20 flex items-center justify-center text-[#292D32] dark:text-[#8FC2F0]">
-              <Building2 className="w-5 h-5 text-[#292D32] dark:text-[#8FC2F0]" />
+            <div className="w-7 h-7 rounded-full bg-[#8FC2F0]/15 dark:bg-[#8FC2F0]/20 flex items-center justify-center text-[#292D32] dark:text-[#8FC2F0]">
+              <Building2 className="w-3.5 h-3.5 text-[#292D32] dark:text-[#8FC2F0]" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <div className="text-xl sm:text-2xl font-black font-mono text-[#292D32] dark:text-white tracking-tight">
             {totalOrganizations}
           </div>
-          <span className="text-[11px] font-bold text-slate-400 mt-2 block font-urbanist">
+          <span className="text-[10px] font-bold text-slate-400 mt-1 block">
             {isRTL ? 'عملاء ومقاولون واستشاريون' : 'Contractors, Clients & Consultants'}
           </span>
         </div>
 
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
+        <div className="crm-card p-3 sm:p-3.5 rounded-xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
             <span>{isRTL ? 'قيمة خط الصفقات' : 'Pipeline Value'}</span>
-            <div className="w-10 h-10 rounded-full bg-[#77CE69]/15 dark:bg-[#77CE69]/20 flex items-center justify-center text-[#77CE69]">
-              <TrendingUp className="w-5 h-5 text-[#77CE69]" />
+            <div className="w-7 h-7 rounded-full bg-[#77CE69]/15 dark:bg-[#77CE69]/20 flex items-center justify-center text-[#77CE69]">
+              <TrendingUp className="w-3.5 h-3.5 text-[#77CE69]" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <div className="text-xl sm:text-2xl font-black font-mono text-[#292D32] dark:text-white tracking-tight">
             {formatCurrencySAR(totalPipelineVal)}
           </div>
-          <span className="text-[11px] font-bold text-[#77CE69] mt-2 block font-urbanist">
+          <span className="text-[10px] font-bold text-[#77CE69] mt-1 block">
             {isRTL ? 'قيمة كافة الصفقات المرتبطة' : 'Total Associated Deals'}
           </span>
         </div>
 
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
+        <div className="crm-card p-3 sm:p-3.5 rounded-xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
             <span>{isRTL ? 'المشاريع المرتبطة' : 'Linked Projects'}</span>
-            <div className="w-10 h-10 rounded-full bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
-              <Briefcase className="w-5 h-5" />
+            <div className="w-7 h-7 rounded-full bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <Briefcase className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <div className="text-xl sm:text-2xl font-black font-mono text-[#292D32] dark:text-white tracking-tight">
             {totalLinkedProjectsCount}
           </div>
-          <span className="text-[11px] font-bold text-slate-400 mt-2 block font-urbanist">
+          <span className="text-[10px] font-bold text-slate-400 mt-1 block">
             {isRTL ? 'فرص ومشاريع تحت المتابعة' : 'Active Projects in Motion'}
           </span>
         </div>
 
-        <div className="crm-card p-5 sm:p-6 flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
+        <div className="crm-card p-3 sm:p-3.5 rounded-xl flex flex-col justify-between shadow-2xs">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
             <span>{isRTL ? 'صناع القرار' : 'Decision Makers'}</span>
-            <div className="w-10 h-10 rounded-full bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
-              <Users className="w-5 h-5" />
+            <div className="w-7 h-7 rounded-full bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
+              <Users className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight font-urbanist">
+          <div className="text-xl sm:text-2xl font-black font-mono text-[#292D32] dark:text-white tracking-tight">
             {totalDecisionMakers}
           </div>
-          <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 mt-2 block font-urbanist">
-            {isRTL ? 'جهات اتصال ومسؤولو مشتريات' : 'Verified Contacts'}
+          <span className="text-[10px] font-bold text-slate-400 mt-1 block">
+            {isRTL ? 'جهات اتصال ومسؤولو مشتريات' : 'Verified Decision Makers'}
           </span>
         </div>
       </div>
@@ -364,11 +398,31 @@ export default function CompaniesPage() {
             const primaryCleanPhone = primaryContact ? normalizePhoneNumber(primaryContact.phone) : '';
             const primaryWaLink = primaryCleanPhone ? `https://wa.me/${primaryCleanPhone}` : null;
 
+            const activeBidsCount = linkedProjects.filter(p => p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost').length;
+            const tier = totalValue >= 10_000_000 ? 'A' : totalValue >= 2_000_000 ? 'B' : 'C';
+            const tierConfig = {
+              A: {
+                label: isRTL ? 'فئة أ • كبار العملاء' : 'Tier A • Strategic',
+                badgeClass: 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30',
+                dotClass: 'bg-amber-500',
+              },
+              B: {
+                label: isRTL ? 'فئة ب • رئيسي' : 'Tier B • Key Client',
+                badgeClass: 'bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30',
+                dotClass: 'bg-sky-500',
+              },
+              C: {
+                label: isRTL ? 'فئة ج • اعتيادي' : 'Tier C • Standard',
+                badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20',
+                dotClass: 'bg-slate-400',
+              },
+            }[tier];
+
             return (
               <div 
                 key={c.id} 
                 onClick={() => openDetailCockpit(c, 'projects')}
-                className="crm-card crm-card-interactive p-6 flex flex-col justify-between cursor-pointer group relative font-urbanist"
+                className="crm-card crm-card-interactive p-4 sm:p-5 flex flex-col justify-between cursor-pointer group relative"
               >
                 <div>
                   {/* Top Bar: Company Name & Actions */}
@@ -379,9 +433,13 @@ export default function CompaniesPage() {
                         <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-[#8FC2F0] shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                       </h3>
 
-                      <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                        <span className="text-xs px-3 py-1 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                           {typeConfig?.label || c.company_type}
+                        </span>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-black border ${tierConfig.badgeClass}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${tierConfig.dotClass}`} />
+                          <span>{tierConfig.label}</span>
                         </span>
                         {c.city && (
                           <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
@@ -415,24 +473,43 @@ export default function CompaniesPage() {
                     )}
                   </div>
 
-                  {/* Portfolio Value & Locked Indicators */}
-                  <div className="mt-3.5 flex items-center gap-2 flex-wrap font-urbanist">
-                    {totalValue > 0 && (
-                      <div className="flex items-center gap-1.5 text-xs text-[#77CE69] bg-[#77CE69]/10 px-3 py-1 rounded-full border border-[#77CE69]/20 font-bold w-fit">
-                        <TrendingUp className="w-3.5 h-3.5 text-[#77CE69]" />
-                        <span>{isRTL ? 'قيمة الصفقات:' : 'Pipeline Value:'} {formatCurrencySAR(totalValue)}</span>
-                      </div>
-                    )}
-                    {lockedProjectsCount > 0 && (
-                      <div 
-                        className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20 font-bold w-fit" 
-                        title={isRTL ? 'توجد مشاريع أخرى لهذه الشركة مسندة لمهندسين آخرين بالفريق' : 'Other projects for this client assigned to team members'}
-                      >
-                        <Lock className="w-3 h-3 text-amber-600" />
-                        <span>{isRTL ? `${lockedProjectsCount} مشاريع لفريق المبيعات` : `${lockedProjectsCount} team deals`}</span>
-                      </div>
-                    )}
+                  {/* Contractor Power Metrics Strip */}
+                  <div className="mt-3 grid grid-cols-3 gap-1.5 p-2 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 text-center">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                        {isRTL ? 'عروض جارية' : 'Active Bids'}
+                      </span>
+                      <span className="text-xs font-black font-mono text-sky-600 dark:text-sky-400">
+                        {activeBidsCount}
+                      </span>
+                    </div>
+                    <div className="flex flex-col border-x border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                        {isRTL ? 'حجم الصفقات' : 'Pipeline'}
+                      </span>
+                      <span className="text-xs font-black font-mono text-emerald-600 dark:text-emerald-400">
+                        {formatCompactSAR(totalValue)}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                        {isRTL ? 'صناع القرار' : 'Contacts'}
+                      </span>
+                      <span className="text-xs font-black font-mono text-slate-700 dark:text-slate-200">
+                        {linkedContacts.length}
+                      </span>
+                    </div>
                   </div>
+
+                  {lockedProjectsCount > 0 && (
+                    <div 
+                      className="mt-2 flex items-center gap-1.5 text-[10.5px] text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20 font-bold w-fit" 
+                      title={isRTL ? 'توجد مشاريع أخرى لهذه الشركة مسندة لمهندسين آخرين بالفريق' : 'Other projects for this client assigned to team members'}
+                    >
+                      <Lock className="w-3 h-3 text-amber-600" />
+                      <span>{isRTL ? `${lockedProjectsCount} مشاريع لفريق المبيعات` : `${lockedProjectsCount} team deals`}</span>
+                    </div>
+                  )}
 
                   {/* Notes / Details */}
                   {c.notes && (
@@ -599,48 +676,48 @@ export default function CompaniesPage() {
 
       {/* Create / Edit Company Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="glass-card bg-white/95 dark:bg-[#1C2130] rounded-3xl max-w-lg w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/10 overflow-hidden backdrop-blur-2xl animate-in zoom-in-95 duration-150">
-            <div className="px-6 py-5 border-b border-slate-100/80 dark:border-[#292D32]/60 flex items-center justify-between bg-white/80 dark:bg-[#232A38]">
-              <div className="flex items-center gap-3">
-                <span className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shrink-0 shadow-2xs">
-                  <Building2 className="w-5 h-5" />
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150">
+          <div className="glass-card bg-white/95 dark:bg-[#1C2130] rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl border border-white/90 dark:border-[#8FC2F0]/10 overflow-hidden backdrop-blur-2xl animate-in zoom-in-95 duration-150">
+            <div className="px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100/80 dark:border-[#292D32]/60 flex items-center justify-between bg-white/80 dark:bg-[#232A38] shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shrink-0 shadow-2xs">
+                  <Building2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </span>
                 <div>
-                  <h2 className="font-black text-[#292D32] dark:text-white text-lg font-urbanist">
-                    {editingCompany ? 'Edit Company Profile' : 'Create New Company'}
+                  <h2 className="font-black text-[#292D32] dark:text-white text-base sm:text-lg font-urbanist">
+                    {editingCompany ? (isRTL ? 'تعديل ملف المنشأة' : 'Edit Company Profile') : (isRTL ? 'تسجيل منشأة جديدة' : 'Create New Company')}
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Western Region Commercial Directory</p>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">Western Region Commercial Directory</p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-2xl text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#232A38] transition-colors"
+                className="p-1.5 sm:p-2 rounded-2xl text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#232A38] transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
               <div>
-                <label className="block text-xs font-bold text-[#292D32] mb-1.5">Company Name *</label>
+                <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'اسم الشركة *' : 'Company Name *'}</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Creet / Alsaad Contracting"
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 font-medium transition-all shadow-2xs"
+                  className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white font-medium transition-all shadow-2xs"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#292D32] mb-1.5">Company Type</label>
+                  <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'نوع النشاط' : 'Company Type'}</label>
                   <select
                     value={companyType}
                     onChange={e => setCompanyType(e.target.value as CompanyType)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-800 font-medium transition-all shadow-2xs"
+                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-800 dark:text-white font-medium transition-all shadow-2xs"
                   >
                     {COMPANY_TYPES.map(t => (
                       <option key={t.value} value={t.value}>{t.label}</option>
@@ -649,11 +726,11 @@ export default function CompaniesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#292D32] mb-1.5">City / Region</label>
+                  <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'المدينة / المنطقة' : 'City / Region'}</label>
                   <select
                     value={city}
                     onChange={e => setCity(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-800 font-medium transition-all shadow-2xs"
+                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-800 dark:text-white font-medium transition-all shadow-2xs"
                   >
                     {SAUDI_LOCATIONS.map(loc => (
                       <option key={loc} value={loc}>{loc}</option>
@@ -662,64 +739,64 @@ export default function CompaniesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#292D32] mb-1.5">Office / HQ Landline</label>
+                  <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'الهاتف / خط المكتب' : 'Office / HQ Landline'}</label>
                   <input
                     type="text"
                     placeholder="012XXXXXXX (Optional)"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 font-medium transition-all shadow-2xs"
+                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white font-medium transition-all shadow-2xs"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#292D32] mb-1.5">Website</label>
+                  <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'الموقع الإلكتروني' : 'Website'}</label>
                   <input
                     type="url"
                     placeholder="https://..."
                     value={website}
                     onChange={e => setWebsite(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 font-medium transition-all shadow-2xs"
+                    className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white font-medium transition-all shadow-2xs"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#292D32] mb-1.5">Google Maps URL</label>
+                <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'رابط خرائط جوجل' : 'Google Maps URL'}</label>
                 <input
                   type="text"
                   placeholder="https://maps.app.goo.gl/..."
                   value={googleMapsUrl}
                   onChange={e => setGoogleMapsUrl(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 font-medium transition-all shadow-2xs"
+                  className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white font-medium transition-all shadow-2xs"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#292D32] mb-1.5">Internal Notes & Sister Entities</label>
+                <label className="block text-xs font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'ملاحظات داخلية' : 'Internal Notes & Sister Entities'}</label>
                 <textarea
                   rows={2}
-                  placeholder="Company scope, major contracts, procurement preferences..."
+                  placeholder={isRTL ? "مجال نشاط الشركة، تفضيلات المشتريات..." : "Company scope, major contracts, procurement preferences..."}
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs bg-white/90 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 font-medium transition-all shadow-2xs"
+                  className="w-full px-3.5 py-2.5 text-xs bg-white/90 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] text-slate-900 dark:text-white font-medium transition-all shadow-2xs"
                 />
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-2.5">
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                  className="px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
                 >
-                  Cancel
+                  {isRTL ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2.5 text-xs font-bold text-white bg-[#292D32] hover:bg-[#1E2124] rounded-xl shadow-xs transition-colors"
                 >
-                  {editingCompany ? 'Save Changes' : 'Create Company'}
+                  {editingCompany ? (isRTL ? 'حفظ التعديلات' : 'Save Changes') : (isRTL ? 'تسجيل المنشأة' : 'Create Company')}
                 </button>
               </div>
             </form>

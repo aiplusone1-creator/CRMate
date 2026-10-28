@@ -25,15 +25,18 @@ import {
   X,
   Flame,
   Trash2,
+  Pencil,
   ExternalLink,
   Search,
   Filter,
   ArrowRightLeft,
   Navigation,
   GripVertical,
-  ArrowDown
+  ArrowDown,
+  MessageSquare
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
+import { useSalesScope } from '@/lib/hooks/useSalesScope';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { 
   formatCurrencySAR, 
@@ -53,6 +56,8 @@ interface DayConfig {
   arabic: string;
   dateStr: string; // YYYY-MM-DD
   dayNum: number;
+  monthName: string;
+  monthNameAr: string;
 }
 
 type PlanTargetMode = 'existing_project' | 'custom_project' | 'area_hunting';
@@ -87,41 +92,41 @@ export default function MyWeekPage() {
     addPlannedActivity, 
     updatePlannedActivity,
     deletePlannedActivity,
+    completePlannedActivity,
+    completeAllPastPlannedActivities,
     currentRole,
     salesTargets,
     selectedSalesFilter,
     setSelectedSalesFilter,
-    teamMembers
+    teamMembers,
+    sharePlanTaskToChat,
+    openChat
   } = useCRM();
   const { t, isRTL, language } = useLanguage();
 
-  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin' || currentRole === 'sales_manager' || currentRole === 'admin';
-
-  const scopedPlannedActivities = useMemo(() => {
-    if (isManager) {
-      if (selectedSalesFilter === 'all') return plannedActivities;
-      return plannedActivities.filter(p => p.user_id === selectedSalesFilter);
-    }
-    return plannedActivities.filter(p => p.user_id === currentUser.id);
-  }, [plannedActivities, isManager, selectedSalesFilter, currentUser.id]);
-
-  const scopedProjects = useMemo(() => {
-    if (isManager) {
-      if (selectedSalesFilter === 'all') return projects;
-      return projects.filter(p => p.owner_id === selectedSalesFilter);
-    }
-    return projects.filter(p => p.owner_id === currentUser.id);
-  }, [projects, isManager, selectedSalesFilter, currentUser.id]);
+  const { 
+    isManager, 
+    scopedProjects, 
+    scopedPlannedActivities 
+  } = useSalesScope();
 
   // Selected Week state (Sunday to Thursday)
   const [weekOffset, setWeekOffset] = useState(0);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [selectedDayForAdd, setSelectedDayForAdd] = useState<string>('2026-09-17');
+  const [isSuggestionsModalOpen, setIsSuggestionsModalOpen] = useState(false);
+  const [isOverdueNoticesModalOpen, setIsOverdueNoticesModalOpen] = useState(false);
+  const [suggestionsSearch, setSuggestionsSearch] = useState('');
+  const [overdueSearch, setOverdueSearch] = useState('');
+  const [selectedDayForAdd, setSelectedDayForAdd] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [editingActivity, setEditingActivity] = useState<PlannedActivity | null>(null);
   const [isPlanSubmitted, setIsPlanSubmitted] = useState(true);
 
-  // Filters state
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  // Filters state (with deferred search values for 0ms typing responsiveness)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'follow_ups' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = React.useDeferredValue(searchQuery);
+  const deferredSuggestionsSearch = React.useDeferredValue(suggestionsSearch);
+  const deferredOverdueSearch = React.useDeferredValue(overdueSearch);
 
   // Form State for new planned item
   const [targetMode, setTargetMode] = useState<PlanTargetMode>('existing_project');
@@ -141,6 +146,11 @@ export default function MyWeekPage() {
   const [dragOverDayDate, setDragOverDayDate] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Chat collaboration state (Manager/Peer reviewing plan cards)
+  const [selectedTaskForChat, setSelectedTaskForChat] = useState<PlannedActivity | null>(null);
+  const [chatComment, setChatComment] = useState('');
+  const [isChatNoteModalOpen, setIsChatNoteModalOpen] = useState(false);
+
   // Compute 6 Saudi work days: Saturday through Thursday
   const workDays: DayConfig[] = useMemo(() => {
     // Computes Saturday of the current week (or offset week)
@@ -149,6 +159,8 @@ export default function MyWeekPage() {
     const dayNames = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
     const dayShorts = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
     const dayArabics = ['السبت', 'الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
+    const monthNamesEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthNamesAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
     return dayNames.map((name, idx) => {
       const d = new Date(baseSaturday);
@@ -161,13 +173,15 @@ export default function MyWeekPage() {
         short: dayShorts[idx],
         arabic: dayArabics[idx],
         dateStr: `${y}-${m}-${day}`,
-        dayNum: d.getDate()
+        dayNum: d.getDate(),
+        monthName: monthNamesEn[d.getMonth()],
+        monthNameAr: monthNamesAr[d.getMonth()]
       };
     });
   }, [weekOffset]);
 
-  // Suggested Activities Engine (PRD Section 5)
-  const suggestedItems = useMemo(() => {
+  // Suggested Activities Engine (PRD Section 5) - Full list of overdue or high value at risk
+  const allSuggestedItems = useMemo(() => {
     const plannedProjectIds = new Set(scopedPlannedActivities.map(p => p.project_id).filter(Boolean));
     const today = new Date().toISOString().split('T')[0];
 
@@ -175,8 +189,20 @@ export default function MyWeekPage() {
       if (p.pipeline_stage === 'won' || p.pipeline_stage === 'lost' || p.pipeline_stage === 'hold') return false;
       if (plannedProjectIds.has(p.id)) return false;
       return (p.next_follow_up_at && p.next_follow_up_at <= today) || p.calculated_health === 'red';
-    }).slice(0, 3);
+    }).sort((a, b) => (b.estimated_value || 0) - (a.estimated_value || 0));
   }, [scopedProjects, scopedPlannedActivities]);
+
+  const filteredSuggestedItems = useMemo(() => {
+    if (!deferredSuggestionsSearch.trim()) return allSuggestedItems;
+    const q = deferredSuggestionsSearch.toLowerCase();
+    return allSuggestedItems.filter(p => 
+      p.name.toLowerCase().includes(q) ||
+      p.pr_number.toLowerCase().includes(q) ||
+      (p.company_name && p.company_name.toLowerCase().includes(q))
+    );
+  }, [allSuggestedItems, deferredSuggestionsSearch]);
+
+  const suggestedItems = filteredSuggestedItems;
 
   // Channel UI helper
   const getChannelConfig = (ch: ActivityChannel) => {
@@ -192,6 +218,7 @@ export default function MyWeekPage() {
   };
 
   const handleOpenAddModal = (dateStr: string) => {
+    setEditingActivity(null);
     setSelectedDayForAdd(dateStr);
     setTargetMode('existing_project');
     setNewProjectId(scopedProjects[0]?.id || '');
@@ -199,7 +226,40 @@ export default function MyWeekPage() {
     setCustomCompanyName('');
     setLocationAreaName('');
     setGoogleMapsUrl('');
+    setTimeSlot('10:00 AM');
+    setNewChannel('call');
+    setNewPurpose('follow_up');
     setNewGoal('');
+    setNewPriority('high');
+    setIsAddModalOpen(true);
+  };
+
+  const handleOpenEditModal = (item: PlannedActivity) => {
+    setEditingActivity(item);
+    setSelectedDayForAdd(item.scheduled_date || workDays[0]?.dateStr || '');
+    setTimeSlot(item.time_slot || '10:00 AM');
+    setNewChannel(item.channel || 'call');
+    setNewPurpose(item.visit_purpose || 'follow_up');
+    setNewGoal(item.goal || '');
+    setNewPriority(item.priority || 'high');
+    setLocationAreaName(item.location_name || '');
+    setGoogleMapsUrl(item.google_maps_url || '');
+
+    if (item.project_id) {
+      setTargetMode('existing_project');
+      setNewProjectId(item.project_id);
+      setCustomProjectName('');
+      setCustomCompanyName('');
+    } else if (item.custom_target) {
+      setTargetMode('custom_project');
+      setCustomProjectName(item.project_name || item.custom_target || '');
+      setCustomCompanyName(item.company_name || '');
+    } else {
+      setTargetMode('area_hunting');
+      setCustomCompanyName(item.company_name || '');
+      setLocationAreaName(item.location_name || item.project_name || '');
+    }
+
     setIsAddModalOpen(true);
   };
 
@@ -221,6 +281,7 @@ export default function MyWeekPage() {
     } else if (targetMode === 'custom_project') {
       projName = customProjectName.trim();
       compName = customCompanyName.trim() || 'Direct Account';
+      locName = locationAreaName.trim();
     } else {
       // Area / Hunting
       projName = locationAreaName.trim() || 'Regional Hunting Zone';
@@ -228,23 +289,43 @@ export default function MyWeekPage() {
       locName = locationAreaName.trim() || 'Western Region';
     }
 
-    await addPlannedActivity({
-      weekly_plan_id: `wp_2026_w38`,
-      project_id: projId,
-      project_name: projName,
-      company_name: compName,
-      location_name: locName,
-      google_maps_url: googleMapsUrl.trim() || undefined,
-      custom_target: targetMode !== 'existing_project' ? projName : undefined,
-      scheduled_date: selectedDayForAdd,
-      time_slot: timeSlot,
-      channel: newChannel,
-      visit_purpose: newPurpose,
-      goal: newGoal.trim(),
-      priority: newPriority,
-      user_id: currentUser.id,
-      user_name: currentUser.full_name,
-    });
+    if (editingActivity) {
+      await updatePlannedActivity(editingActivity.id, {
+        project_id: projId,
+        project_name: projName,
+        company_name: compName,
+        location_name: locName,
+        google_maps_url: googleMapsUrl.trim() || undefined,
+        custom_target: targetMode !== 'existing_project' ? projName : undefined,
+        scheduled_date: selectedDayForAdd,
+        time_slot: timeSlot,
+        channel: newChannel,
+        visit_purpose: newPurpose,
+        goal: newGoal.trim(),
+        priority: newPriority,
+      });
+      setToastMessage(isRTL ? 'تم تحديث النشاط المخطط بنجاح' : 'Planned activity updated successfully');
+      setTimeout(() => setToastMessage(null), 3000);
+      setEditingActivity(null);
+    } else {
+      await addPlannedActivity({
+        weekly_plan_id: `wp_2026_w38`,
+        project_id: projId,
+        project_name: projName,
+        company_name: compName,
+        location_name: locName,
+        google_maps_url: googleMapsUrl.trim() || undefined,
+        custom_target: targetMode !== 'existing_project' ? projName : undefined,
+        scheduled_date: selectedDayForAdd,
+        time_slot: timeSlot,
+        channel: newChannel,
+        visit_purpose: newPurpose,
+        goal: newGoal.trim(),
+        priority: newPriority,
+        user_id: currentUser.id,
+        user_name: currentUser.full_name,
+      });
+    }
 
     setIsAddModalOpen(false);
   };
@@ -290,23 +371,117 @@ export default function MyWeekPage() {
     }
   };
 
-  // Week metrics
-  const totalPlannedWeek = scopedPlannedActivities.length;
-  const completedPlannedWeek = scopedPlannedActivities.filter(p => p.status === 'completed').length;
+  const currentWeekDates = useMemo(() => new Set(workDays.map(d => d.dateStr)), [workDays]);
+
+  // Current week specific activities & metrics
+  const thisWeekActivities = useMemo(() => {
+    return scopedPlannedActivities.filter(p => currentWeekDates.has(p.scheduled_date));
+  }, [scopedPlannedActivities, currentWeekDates]);
+
+  const thisWeekPlannedCount = thisWeekActivities.length;
+  const thisWeekCompletedCount = thisWeekActivities.filter(p => p.status === 'completed').length;
+  const thisWeekFollowUpsCount = thisWeekActivities.filter(p => p.is_follow_up).length;
   const weeklyTarget = 20;
-  const weekProgressPercent = Math.min(100, Math.round((completedPlannedWeek / weeklyTarget) * 100));
+  const weekProgressPercent = Math.min(100, Math.round((thisWeekCompletedCount / weeklyTarget) * 100));
+
+  // Pending tasks from earlier / other weeks
+  const pendingOtherWeeksActivities = useMemo(() => {
+    return scopedPlannedActivities.filter(p => p.status === 'planned' && !currentWeekDates.has(p.scheduled_date))
+      .sort((a, b) => new Date(b.scheduled_date || 0).getTime() - new Date(a.scheduled_date || 0).getTime());
+  }, [scopedPlannedActivities, currentWeekDates]);
+
+  const pendingOtherWeeksCount = pendingOtherWeeksActivities.length;
+
+  const filteredOverdueActivities = useMemo(() => {
+    if (!deferredOverdueSearch.trim()) return pendingOtherWeeksActivities;
+    const q = deferredOverdueSearch.toLowerCase();
+    return pendingOtherWeeksActivities.filter(p => 
+      (p.project_name && p.project_name.toLowerCase().includes(q)) ||
+      (p.company_name && p.company_name.toLowerCase().includes(q)) ||
+      (p.goal && p.goal.toLowerCase().includes(q)) ||
+      (p.location_name && p.location_name.toLowerCase().includes(q)) ||
+      (p.scheduled_date && p.scheduled_date.includes(q))
+    );
+  }, [pendingOtherWeeksActivities, deferredOverdueSearch]);
+
+  const jumpToActivityWeek = (scheduledDate: string) => {
+    try {
+      const actDate = new Date(scheduledDate + 'T00:00:00');
+      const todaySat = getSaturdayOfWeek(new Date(), 0);
+      const actSat = getSaturdayOfWeek(actDate, 0);
+      const diffTime = actSat.getTime() - todaySat.getTime();
+      const diffWeeks = Math.round(diffTime / (1000 * 60 * 60 * 24 * 7));
+      setWeekOffset(diffWeeks);
+      setIsOverdueNoticesModalOpen(false);
+      setToastMessage(isRTL ? `تم الانتقال لأسبوع النشاط (${scheduledDate})` : `Navigated to activity week (${scheduledDate})`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch {
+      setWeekOffset(prev => prev - 1);
+      setIsOverdueNoticesModalOpen(false);
+    }
+  };
+
+  const handleReschedulePending = async (activityId: string, targetDateStr: string) => {
+    await updatePlannedActivity(activityId, { scheduled_date: targetDateStr });
+    const targetDayObj = workDays.find(d => d.dateStr === targetDateStr);
+    const dayLabel = targetDayObj ? `${targetDayObj.name} (${targetDayObj.arabic})` : targetDateStr;
+    setToastMessage(isRTL ? `تم ترحيل النشاط إلى ${dayLabel} بنجاح` : `Rescheduled activity to ${dayLabel}`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleMarkPendingCompleted = async (activityId: string) => {
+    const act = scopedPlannedActivities.find(a => a.id === activityId);
+    if (act) {
+      const proj = scopedProjects.find(p => p.id === act.project_id);
+      await completePlannedActivity(activityId, {
+        project_id: act.project_id,
+        project_name: act.project_name || proj?.name,
+        company_id: act.company_id || proj?.company_id,
+        company_name: act.company_name || proj?.company_name,
+        contact_id: act.contact_id,
+        contact_name: act.contact_name,
+        user_id: act.user_id || currentUser.id,
+        user_name: act.user_name || currentUser.full_name,
+        activity_date: act.scheduled_date || new Date().toISOString().split('T')[0],
+        activity_time: act.time_slot || '10:00 AM',
+        channel: act.channel || 'call',
+        visit_purpose: act.visit_purpose || 'follow_up',
+        outcome: 'connected',
+        notes: act.goal || (isRTL ? 'تم إنجاز النشاط من الخطة الأسبوعية' : 'Completed from weekly plan'),
+        location_name: act.location_name,
+        google_maps_url: act.google_maps_url,
+        priority: act.priority,
+      });
+    } else {
+      await updatePlannedActivity(activityId, { status: 'completed' });
+    }
+    setToastMessage(isRTL ? 'تم تسجيل إنجاز النشاط ونقله لسجل الأنشطة بنجاح' : 'Activity marked as completed and logged to Activities');
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleRolloverTopBatch = async (count: number = 10) => {
+    const toRollover = pendingOtherWeeksActivities.slice(0, count);
+    if (toRollover.length === 0) return;
+    
+    for (let i = 0; i < toRollover.length; i++) {
+      const targetDay = workDays[i % workDays.length].dateStr;
+      await updatePlannedActivity(toRollover[i].id, { scheduled_date: targetDay });
+    }
+    setToastMessage(isRTL ? `تم ترحيل ${toRollover.length} نشاط بنجاح إلى هذا الأسبوع` : `Rolled over ${toRollover.length} activities to this week`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const selectedExistingProject = scopedProjects.find(p => p.id === newProjectId);
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-200 text-[#292D32] dark:text-white font-urbanist">
+    <div className="space-y-2.5 sm:space-y-3 max-w-[1600px] mx-auto animate-in fade-in duration-200 text-[#292D32] dark:text-white">
       
       {/* ========================================================================= */}
       {/* HEADER BAR: SAUDI WORKWEEK NAVIGATION & STATUS */}
       {/* ========================================================================= */}
-      <div className="crm-card p-6 sm:p-7 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="crm-card p-4 sm:p-5 rounded-2xl shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="text-[10px] font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
               <CalendarDays className="w-3.5 h-3.5" />
               <span>{t('saudiWorkweek')}</span>
@@ -322,11 +497,43 @@ export default function MyWeekPage() {
                 {isRTL ? 'مسودة خطة' : 'Draft Plan'}
               </span>
             )}
+
+            {weekOffset === 0 ? (
+              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 rounded-full">
+                {isRTL ? '● الأسبوع الحالي' : '● Current Week'}
+              </span>
+            ) : weekOffset < 0 ? (
+              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2.5 py-0.5 rounded-full">
+                {isRTL ? `◀ الأسبوع الماضي (${Math.abs(weekOffset)})` : `◀ Past Week (${Math.abs(weekOffset)})`}
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 rounded-full">
+                {isRTL ? `الأسبوع القادم (+${weekOffset}) ▶` : `Future Week (+${weekOffset}) ▶`}
+              </span>
+            )}
+
+            {/* Smart Plan Suggestions Button */}
+            <button
+              type="button"
+              onClick={() => setIsSuggestionsModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/40 dark:to-purple-950/40 border border-blue-200 dark:border-blue-800 hover:border-blue-400 text-xs font-bold text-[#292D32] dark:text-[#8FC2F0] transition-all cursor-pointer shadow-2xs hover:shadow-xs group"
+              title={isRTL ? 'عرض مقترحات المشاريع التي تتطلب متابعة أو ذات قيمة كبرى' : 'View automated plan suggestions'}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 animate-pulse group-hover:rotate-12 transition-transform" />
+              <span>{isRTL ? '✨ الاقتراحات الذكية للخطة' : '✨ Smart Suggestions'}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-purple-600 dark:bg-purple-500 text-white text-[10px] font-mono font-bold">
+                {allSuggestedItems.length}
+              </span>
+            </button>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight">
-            {isRTL ? 'خطة الأسبوع الميدانية' : 'My Week Plan'} &bull; {workDays[0]?.short} {workDays[0]?.dayNum} &ndash; {workDays[workDays.length - 1]?.short} {workDays[workDays.length - 1]?.dayNum}
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight flex items-center gap-2 flex-wrap">
+            <span>{isRTL ? 'خطة الأسبوع الميدانية' : 'My Week Plan'}</span>
+            <span className="text-slate-400 font-normal">&bull;</span>
+            <span className="text-blue-600 dark:text-[#8FC2F0]">
+              {workDays[0]?.short} {workDays[0]?.dayNum} &ndash; {workDays[workDays.length - 1]?.short} {workDays[workDays.length - 1]?.dayNum}
+            </span>
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
             {isRTL 
               ? 'مخطط الأسبوع الميداني لـ 6 أيام (السبت - الخميس) بربط الخرائط والتسجيل المباشر وتحديد مستهدفات العملاء'
               : '6-day structured field planner (Saturday – Thursday) with Google Maps GPS routing, direct logging, and flexible client targets'}
@@ -334,15 +541,15 @@ export default function MyWeekPage() {
         </div>
 
         {/* Progress against 20 Touchpoints Target */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
           <div className="text-right">
-            <div className="text-xs font-bold text-slate-400">{isRTL ? 'سرعة الإنجاز' : 'Week Velocity'}</div>
-            <div className="text-xl sm:text-2xl font-extrabold text-[#292D32] dark:text-white">
-              {completedPlannedWeek} <span className="text-sm text-slate-400 font-bold">/ {totalPlannedWeek} {isRTL ? 'مخطط' : 'Planned'}</span>
+            <div className="text-xs font-bold text-slate-400">{isRTL ? 'سرعة إنجاز الأسبوع' : 'Week Velocity'}</div>
+            <div className="text-lg sm:text-xl font-extrabold text-[#292D32] dark:text-white font-mono">
+              {thisWeekCompletedCount} <span className="text-xs text-slate-400 font-bold font-sans">/ {thisWeekPlannedCount} {isRTL ? 'مخطط' : 'Planned'}</span>
             </div>
-            <div className="w-36 bg-slate-100 dark:bg-slate-800 rounded-full h-2 mt-1.5 overflow-hidden">
+            <div className="w-32 sm:w-36 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 sm:h-2 mt-1 overflow-hidden">
               <div 
-                className="bg-[#8FC2F0] h-full rounded-full transition-all duration-500"
+                className="bg-[#8FC2F0] h-full rounded-full transition-[width] duration-300 ease-out"
                 style={{ width: `${weekProgressPercent}%` }}
               />
             </div>
@@ -365,147 +572,144 @@ export default function MyWeekPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-1 border-l border-slate-200 dark:border-slate-800 pl-4">
+          <div className="flex items-center gap-1 ltr:border-l rtl:border-r border-slate-200 dark:border-slate-800 ltr:pl-3 rtl:pr-3">
             <button
               onClick={() => setWeekOffset(prev => prev - 1)}
-              className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer shadow-2xs"
               title={isRTL ? 'الأسبوع السابق' : 'Previous Week'}
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4 rtl:rotate-180" />
             </button>
             <button
               onClick={() => setWeekOffset(0)}
-              className="px-3.5 py-1.5 rounded-full border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className={cn(
+                "px-3 py-1.5 rounded-full border text-xs font-bold transition-colors cursor-pointer shadow-2xs",
+                weekOffset === 0 
+                  ? "bg-blue-600 dark:bg-[#8FC2F0] text-white dark:text-[#141820] border-transparent" 
+                  : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              )}
             >
               {isRTL ? 'الأسبوع الحالي' : 'Current Week'}
             </button>
             <button
               onClick={() => setWeekOffset(prev => prev + 1)}
-              className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer shadow-2xs"
               title={isRTL ? 'الأسبوع القادم' : 'Next Week'}
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4 rtl:rotate-180" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* ========================================================================= */}
+      {/* Pending Activities from Other Weeks Alert Banner - Single Slim & Professional */}
+      {pendingOtherWeeksCount > 0 && (
+        <div className="crm-card px-3.5 py-2 rounded-xl bg-amber-500/10 dark:bg-amber-950/25 border border-amber-500/30 flex items-center justify-between flex-wrap gap-2 text-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
+            <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-xs font-medium">
+              {isRTL 
+                ? `تنبيه: لديك ${pendingOtherWeeksCount} نشاط مخطط معلق من أسابيع سابقة لم تكتمل بعد.`
+                : `Notice: You have ${pendingOtherWeeksCount} pending planned activities from previous/other weeks.`}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                await completeAllPastPlannedActivities();
+                setToastMessage(isRTL ? '✓ تم تعليم كافة المتابعات والمهام السابقة كمكتملة بنجاح!' : '✓ All past pending tasks marked as completed!');
+                setTimeout(() => setToastMessage(null), 3500);
+              }}
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              title={isRTL ? 'إذا كنت قد قمت بمتابعة هذه الأنشطة مسبقاً (مكالمات/واتساب)، اضغط هنا لإنهائها دفعة واحدة' : 'Mark all past pending tasks as completed'}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{isRTL ? '✓ تم إنجازها جميعاً' : '✓ Mark All Done'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsOverdueNoticesModalOpen(true)}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span>{isRTL ? 'عرض وإدارة' : 'Review & Manage'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* QUICK FILTER BAR */}
-      {/* ========================================================================= */}
-      <div className="crm-card p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-urbanist">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+      <div className="crm-card p-2.5 sm:p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={isRTL ? 'ابحث في الخطة بالمشروع، المنطقة، أو الهدف...' : 'Search plan by project, area, or goal...'}
-              className="w-full pl-10 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
+              className="w-full ltr:pl-8.5 rtl:pr-8.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0] text-xs font-medium text-slate-800 dark:text-slate-100 placeholder:text-slate-400 shadow-2xs"
             />
           </div>
 
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-full border border-slate-200/80 dark:border-slate-700/80 font-bold">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-700/80 font-bold text-xs flex-wrap gap-0.5">
             <button
               onClick={() => setStatusFilter('all')}
               className={cn(
-                "px-3.5 py-1.5 rounded-full transition-all text-xs cursor-pointer",
-                statusFilter === 'all' ? "bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                "px-2.5 py-1 rounded-md transition-all text-xs cursor-pointer",
+                statusFilter === 'all' ? "bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               )}
             >
-              {isRTL ? 'الكل' : 'All'} ({totalPlannedWeek})
+              {isRTL ? 'الكل' : 'All'} ({thisWeekPlannedCount})
             </button>
             <button
               onClick={() => setStatusFilter('pending')}
               className={cn(
-                "px-3.5 py-1.5 rounded-full transition-all text-xs cursor-pointer",
-                statusFilter === 'pending' ? "bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                "px-2.5 py-1 rounded-md transition-all text-xs cursor-pointer",
+                statusFilter === 'pending' ? "bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               )}
             >
-              {isRTL ? 'معلق' : 'Pending'} ({totalPlannedWeek - completedPlannedWeek})
+              {isRTL ? 'معلق' : 'Pending'} ({thisWeekPlannedCount - thisWeekCompletedCount})
+            </button>
+            <button
+              onClick={() => setStatusFilter('follow_ups')}
+              className={cn(
+                "px-2.5 py-1 rounded-md transition-all text-xs cursor-pointer flex items-center gap-1",
+                statusFilter === 'follow_ups' 
+                  ? "bg-amber-500 text-white shadow-2xs" 
+                  : "text-amber-700 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 hover:bg-amber-50/50 dark:hover:bg-amber-950/30"
+              )}
+              title={isRTL ? 'عرض مهام المتابعة فقط' : 'Show follow-up tasks only'}
+            >
+              <Clock className="w-3 h-3" />
+              <span>{isRTL ? 'متابعات' : 'Follow-ups'} ({thisWeekFollowUpsCount})</span>
             </button>
             <button
               onClick={() => setStatusFilter('completed')}
               className={cn(
-                "px-3.5 py-1.5 rounded-full transition-all text-xs cursor-pointer",
-                statusFilter === 'completed' ? "bg-[#77CE69] text-white shadow-xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                "px-2.5 py-1 rounded-md transition-all text-xs cursor-pointer",
+                statusFilter === 'completed' ? "bg-[#77CE69] text-white shadow-2xs" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               )}
             >
-              {isRTL ? 'مكتمل' : 'Completed'} ({completedPlannedWeek})
+              {isRTL ? 'مكتمل' : 'Completed'} ({thisWeekCompletedCount})
             </button>
           </div>
         </div>
 
         <button
           onClick={() => handleOpenAddModal(workDays[0].dateStr)}
-          className="crm-pill-dark w-full sm:w-auto px-5 py-2.5 flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer text-xs"
+          className="crm-pill-dark w-full sm:w-auto px-4 py-2 flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer text-xs"
         >
-          <Plus className="w-4 h-4 text-[#8FC2F0]" />
+          <Plus className="w-3.5 h-3.5 text-[#8FC2F0]" />
           <span>{isRTL ? '+ نشاط بيعي جديد' : 'New Sales Activity'}</span>
         </button>
       </div>
 
       {/* ========================================================================= */}
-      {/* AI AUTO-SUGGESTION ENGINE (PRD Section 5) */}
-      {/* ========================================================================= */}
-      {suggestedItems.length > 0 && (
-        <div className="crm-card p-6 sm:p-7 font-urbanist">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#8FC2F0] animate-pulse" />
-              <h3 className="text-xs font-extrabold text-[#292D32] dark:text-slate-100 uppercase tracking-wider">
-                Automated Plan Suggestions &bull; Overdue or High Value At Risk
-              </h3>
-            </div>
-            <span className="text-[11px] text-[#292D32] dark:text-[#8FC2F0] font-bold bg-[#8FC2F0]/20 px-3 py-1 rounded-full border border-[#8FC2F0]/30">
-              PRD Smart Cadence Engine
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            {suggestedItems.map(p => (
-              <div 
-                key={p.id}
-                className="crm-card-soft p-4 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between text-[10px] font-urbanist text-slate-400 mb-1">
-                    <span className="font-bold">{p.pr_number}</span>
-                    <span className="text-rose-600 dark:text-rose-400 font-bold font-sans">
-                      {p.calculated_health === 'red' ? 'Needs Attention' : 'High Value'}
-                    </span>
-                  </div>
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">{p.name}</h4>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{p.company_name}</div>
-                  <div className="text-xs font-extrabold text-slate-800 dark:text-slate-200 mt-1 font-urbanist">{formatCurrencySAR(p.estimated_value)}</div>
-                </div>
-
-                <div className="mt-3 pt-2.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between gap-1 text-[11px]">
-                  <span className="text-slate-400 font-medium">Add to:</span>
-                  <div className="flex items-center gap-1">
-                    {workDays.slice(0, 3).map((d) => (
-                      <button
-                        key={d.dateStr}
-                        onClick={() => handleAcceptSuggestion(p, d.dateStr)}
-                        className="px-2.5 py-0.5 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] hover:bg-[#8FC2F0]/30 font-bold transition-colors text-[10px] cursor-pointer"
-                        title={`Add to ${d.name}`}
-                      >
-                        {d.short}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
       {/* 5-DAY SAUDI WORKWEEK PLANNER GRID (Sun &ndash; Thu) & Odoo Drag & Drop */}
       {/* ========================================================================= */}
-      <div className="space-y-2 font-urbanist">
+      <div className="space-y-2">
         {/* Odoo Style Drag & Drop Helper Badge */}
         {currentRole !== 'viewer' && (
           <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
@@ -533,10 +737,12 @@ export default function MyWeekPage() {
               dayActivities = dayActivities.filter(p => p.status !== 'completed');
             } else if (statusFilter === 'completed') {
               dayActivities = dayActivities.filter(p => p.status === 'completed');
+            } else if (statusFilter === 'follow_ups') {
+              dayActivities = dayActivities.filter(p => p.is_follow_up);
             }
 
-            if (searchQuery.trim()) {
-              const q = searchQuery.toLowerCase();
+            if (deferredSearchQuery.trim()) {
+              const q = deferredSearchQuery.toLowerCase();
               dayActivities = dayActivities.filter(p => 
                 (p.project_name && p.project_name.toLowerCase().includes(q)) ||
                 (p.company_name && p.company_name.toLowerCase().includes(q)) ||
@@ -583,23 +789,23 @@ export default function MyWeekPage() {
                 }`}
               >
                 {/* Day Column Header */}
-                <div className={`p-4 border-b rounded-t-[28px] flex items-center justify-between font-urbanist ${
+                <div className={`p-4 border-b rounded-t-[28px] flex items-center justify-between ${
                   isToday ? 'bg-[#292D32] dark:bg-slate-800 text-white border-slate-700' : 'bg-slate-50/50 dark:bg-slate-800/40 text-slate-800 dark:text-slate-100 border-slate-100 dark:border-slate-800'
                 }`}>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-extrabold text-sm tracking-tight">{day.name}</span>
+                      <span className="font-extrabold text-sm tracking-tight">{isRTL ? day.arabic : day.name}</span>
                       <span className={`text-[10px] font-bold ${isToday ? 'text-slate-300' : 'text-slate-400'}`}>
-                        ({day.arabic})
+                        ({isRTL ? day.short : day.arabic})
                       </span>
                       {isToday && (
-                        <span className="text-[9px] font-extrabold uppercase bg-[#8FC2F0] text-[#292D32] px-2 py-0.5 rounded-full">
-                          Today
+                        <span className="text-[10px] font-extrabold uppercase bg-[#8FC2F0] text-[#292D32] px-2 py-0.5 rounded-full">
+                          {isRTL ? 'اليوم' : 'Today'}
                         </span>
                       )}
                     </div>
                     <div className={`text-[11px] font-semibold ${isToday ? 'text-slate-300' : 'text-slate-400'}`}>
-                      {day.dayNum} September
+                      {day.dayNum} {isRTL ? day.monthNameAr : day.monthName}
                     </div>
                   </div>
 
@@ -673,7 +879,9 @@ export default function MyWeekPage() {
                               ? 'opacity-35 border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 shadow-none scale-[0.98] rounded-[24px]'
                               : isDone 
                                 ? 'crm-kanban-card border-[#77CE69]/60 dark:border-[#77CE69]/40 bg-gradient-to-b from-white dark:from-[#1C2232] to-emerald-50/40 dark:to-emerald-950/20' 
-                                : 'crm-kanban-card'
+                                : item.is_follow_up
+                                  ? 'crm-kanban-card border-amber-300 dark:border-amber-500/80 bg-gradient-to-b from-amber-50/85 via-amber-50/30 to-white dark:from-amber-950/40 dark:via-[#1C2232] dark:to-[#1C2232] shadow-[0_4px_16px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/40 dark:ring-amber-500/30'
+                                  : 'crm-kanban-card'
                           } ${currentRole !== 'viewer' ? 'cursor-grab active:cursor-grabbing' : ''}`}
                         >
                           <div>
@@ -689,22 +897,29 @@ export default function MyWeekPage() {
                                   </div>
                                 )}
 
+                                {item.is_follow_up && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700/80 flex items-center gap-1 shadow-2xs shrink-0">
+                                    <Clock className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
+                                    <span>{isRTL ? 'متابعة مطلوبة' : 'Follow-up Task'}</span>
+                                  </span>
+                                )}
+
                                 {item.project_id && proj ? (
-                                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                                     {proj.pr_number}
                                   </span>
                                 ) : item.custom_target ? (
-                                  <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  <span className="text-[10px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                                     Custom Target
                                   </span>
                                 ) : item.location_name ? (
-                                  <span className="text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                  <span className="text-[10px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                                     Hunting Zone
                                   </span>
                                 ) : null}
 
                                 {item.priority === 'urgent' && !isDone && (
-                                  <span className="text-[9px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                  <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                                     <Flame className="w-2.5 h-2.5" />
                                     Urgent
                                   </span>
@@ -720,15 +935,26 @@ export default function MyWeekPage() {
                                 ) : null}
 
                                 {currentRole !== 'viewer' && (
-                                  <button
-                                    draggable={false}
-                                    onMouseDown={(e) => e.stopPropagation()}
-                                    onClick={() => handleDelete(item.id)}
-                                    className="text-slate-300 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1 transition-colors rounded hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                                    title="Remove from plan"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  <div className="flex items-center gap-0.5">
+                                    <button
+                                      draggable={false}
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={() => handleOpenEditModal(item)}
+                                      className="text-slate-300 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 p-1 transition-colors rounded hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                                      title={isRTL ? "تعديل النشاط" : "Edit planned activity"}
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      draggable={false}
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={() => handleDelete(item.id)}
+                                      className="text-slate-300 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1 transition-colors rounded hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                      title={isRTL ? "حذف من الخطة" : "Remove from plan"}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -750,12 +976,21 @@ export default function MyWeekPage() {
                                 </h4>
                               )}
 
-                              {item.company_name && (
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5 flex items-center gap-1">
-                                  <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
-                                  <span className="truncate">{item.company_name}</span>
-                                </div>
-                              )}
+                              <div className="flex flex-col gap-0.5 mt-1">
+                                {item.company_name && (
+                                  <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate flex items-center gap-1">
+                                    <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span className="truncate">{item.company_name}</span>
+                                  </div>
+                                )}
+
+                                {item.contact_name && (
+                                  <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium truncate flex items-center gap-1">
+                                    <User className="w-3 h-3 text-slate-400 shrink-0" />
+                                    <span className="truncate">{item.contact_name}</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* 3. CHANNEL BADGE & TIME SLOT SUB-BAR */}
@@ -773,12 +1008,29 @@ export default function MyWeekPage() {
                               )}
                             </div>
 
-                            {/* 4. GOAL / ACTION DESCRIPTION (Clean crm-card-soft container) */}
-                            <div className="crm-card-soft p-2.5 text-xs text-slate-700 dark:text-slate-300 font-medium leading-relaxed break-words">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
-                                Activity Goal:
-                              </span>
-                              {item.goal}
+                            {/* 4. GOAL / ACTION DESCRIPTION (Enhanced for Follow-up) */}
+                            <div className={cn(
+                              "p-2.5 text-xs font-medium leading-relaxed break-words rounded-xl transition-colors",
+                              item.is_follow_up
+                                ? "bg-amber-100/70 dark:bg-amber-950/50 border border-amber-300/80 dark:border-amber-700/60 text-amber-950 dark:text-amber-100 shadow-2xs"
+                                : "crm-card-soft text-slate-700 dark:text-slate-300"
+                            )}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className={cn(
+                                  "text-[10px] font-bold uppercase tracking-wider block",
+                                  item.is_follow_up ? "text-amber-700 dark:text-amber-400 font-extrabold flex items-center gap-1" : "text-slate-400 dark:text-slate-500"
+                                )}>
+                                  {item.is_follow_up ? (
+                                    <>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                                      <span>{isRTL ? 'إجراء المتابعة المطلوب (Next Action):' : 'Next Action / Follow-up:'}</span>
+                                    </>
+                                  ) : (
+                                    isRTL ? 'هدف النشاط:' : 'Activity Goal:'
+                                  )}
+                                </span>
+                              </div>
+                              <p className="font-semibold text-slate-900 dark:text-slate-100">{item.goal}</p>
                             </div>
 
                             {/* 5. GOOGLE MAPS LOCATION BUTTON */}
@@ -830,22 +1082,57 @@ export default function MyWeekPage() {
                               <option value={day.dateStr} className="dark:bg-[#1C2130] dark:text-slate-200">Move...</option>
                               {workDays.map(d => (
                                 <option key={d.dateStr} value={d.dateStr} className="dark:bg-[#1C2130] dark:text-slate-200">
-                                  &rarr; {d.short} ({d.dayNum} Sep)
+                                  &rarr; {isRTL ? d.arabic : d.short} ({d.dayNum} {isRTL ? d.monthNameAr : d.monthName})
                                 </option>
                               ))}
                             </select>
+
+                            {/* Manager Review Action: Send directive/comment to employee who owns this plan card */}
+                            {isManager && item.user_id !== currentUser.id && (
+                              <button
+                                type="button"
+                                data-testid="task-chat-btn"
+                                draggable={false}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => {
+                                  setSelectedTaskForChat(item);
+                                  setChatComment('');
+                                  setIsChatNoteModalOpen(true);
+                                }}
+                                className="p-1.5 rounded-full text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors cursor-pointer"
+                                title={isRTL ? `إرسال توجيه للمهندس ${item.user_name || ''} عبر المحادثة الخاصة` : `Send directive to ${item.user_name || 'Sales Rep'} in private chat`}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </button>
+                            )}
 
                             {/* Log Activity Button */}
                             {currentRole !== 'viewer' && (
                               <button
                                 draggable={false}
                                 onMouseDown={(e) => e.stopPropagation()}
-                                onClick={() => openFastLog({
-                                  project: proj || null,
-                                  contactId: item.contact_id,
-                                  plannedActivityId: item.id,
-                                  defaultGoal: item.goal
-                                })}
+                                onClick={() => {
+                                  const isArea = !item.project_id && !!(item.location_name || item.custom_target);
+                                  const isCustom = !item.project_id && !!item.project_name && !item.location_name;
+                                  const mode = isArea ? 'area_hunting' : isCustom ? 'custom_project' : 'existing_project';
+
+                                  openFastLog({
+                                    project: proj || null,
+                                    contactId: item.contact_id,
+                                    plannedActivityId: item.id,
+                                    defaultGoal: item.goal,
+                                    initialDate: item.scheduled_date || day.dateStr,
+                                    initialTime: item.time_slot || '10:00 AM',
+                                    defaultChannel: item.channel,
+                                    defaultPurpose: item.visit_purpose,
+                                    initialTargetMode: mode,
+                                    initialCustomProjectName: item.project_name,
+                                    initialCompanyName: item.company_name,
+                                    initialLocationName: item.location_name,
+                                    initialGoogleMapsUrl: item.google_maps_url,
+                                    initialPriority: item.priority,
+                                  });
+                                }}
                                 className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                                   isDone 
                                     ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
@@ -853,7 +1140,7 @@ export default function MyWeekPage() {
                                 }`}
                               >
                                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                <span>{isDone ? 'Logged' : 'Log Activity'}</span>
+                                <span>{isDone ? (isRTL ? 'تم التسجيل ✓' : 'Logged ✓') : (isRTL ? 'تسجيل النشاط' : 'Log Activity')}</span>
                               </button>
                             )}
                           </div>
@@ -878,15 +1165,23 @@ export default function MyWeekPage() {
             <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#232A38] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                  <CalendarDays className="w-4 h-4" />
+                  {editingActivity ? <Pencil className="w-4 h-4" /> : <CalendarDays className="w-4 h-4" />}
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-base">Plan Sales Activity</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Scheduled touchpoint with client or regional hunting</p>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    {editingActivity 
+                      ? (isRTL ? 'تعديل النشاط المخطط' : 'Edit Planned Activity')
+                      : (isRTL ? 'تخطيط نشاط مبيعات' : 'Plan Sales Activity')}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {editingActivity 
+                      ? (isRTL ? 'تعديل موعد أو تفاصيل أو هدف الزيارة' : 'Update date, time, target, or goal')
+                      : (isRTL ? 'موعد مجدول مع عميل أو نشاط ميداني' : 'Scheduled touchpoint with client or regional hunting')}
+                  </p>
                 </div>
               </div>
               <button 
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => { setIsAddModalOpen(false); setEditingActivity(null); }}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
@@ -1072,7 +1367,7 @@ export default function MyWeekPage() {
                             key={area.en}
                             type="button"
                             onClick={() => setLocationAreaName(areaLabel)}
-                            className="text-[9px] px-2 py-0.5 rounded bg-white dark:bg-[#1C2130] hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-medium transition-colors cursor-pointer"
+                            className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-[#1C2130] hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-medium transition-colors cursor-pointer"
                           >
                             {areaLabel}
                           </button>
@@ -1203,7 +1498,7 @@ export default function MyWeekPage() {
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => { setIsAddModalOpen(false); setEditingActivity(null); }}
                   className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold"
                 >
                   Cancel
@@ -1212,10 +1507,447 @@ export default function MyWeekPage() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-[#8FC2F0] dark:hover:bg-[#7ab2e3] text-white dark:text-[#141820] font-bold shadow-md shadow-blue-500/20"
                 >
-                  Save to Week Plan
+                  {editingActivity 
+                    ? (isRTL ? 'حفظ التعديلات' : 'Save Changes')
+                    : (isRTL ? 'إضافة إلى خطة الأسبوع' : 'Save to Week Plan')}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SMART PLAN SUGGESTIONS MODAL (All overdue or high-value projects) */}
+      {/* ========================================================================= */}
+      {isSuggestionsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="crm-card w-full max-w-4xl max-h-[90vh] flex flex-col rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#141820] overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-gradient-to-r from-blue-50/50 via-purple-50/40 to-slate-50/50 dark:from-blue-950/20 dark:via-purple-950/20 dark:to-slate-900/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 shadow-2xs">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-[#292D32] dark:text-white flex items-center gap-2">
+                    <span>{isRTL ? 'اقتراحات الخطة الذكية للمشاريع' : 'Automated Smart Plan Suggestions'}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-mono font-bold">
+                      {allSuggestedItems.length}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                    {isRTL 
+                      ? 'مشاريع متأخرة المتابعة أو ذات قيمة تعاقدية عالية؛ يمكنك جدولتها مباشرة في اليوم المطلوب لهذا الأسبوع'
+                      : 'Projects overdue for follow-up or high-value at risk; click any day to schedule immediately.'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSuggestionsModalOpen(false)}
+                className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Search Bar */}
+            <div className="p-3 sm:px-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={suggestionsSearch}
+                  onChange={(e) => setSuggestionsSearch(e.target.value)}
+                  placeholder={isRTL ? 'بحث في المقترحات برقم PR، اسم المشروع، المقاول...' : 'Search suggestions by PR, name, company...'}
+                  className="w-full ltr:pl-8.5 rtl:pr-8.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-medium focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0]"
+                />
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono font-medium shrink-0">
+                {filteredSuggestedItems.length} {isRTL ? 'مقترح متطابق' : 'matches'}
+              </span>
+            </div>
+
+            {/* Suggestions Cards List */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1">
+              {filteredSuggestedItems.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-xs">
+                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-500 opacity-80" />
+                  <p className="font-bold">{isRTL ? 'لا توجد مشاريع بحاجة لاقتراحات إضافية حالياً' : 'No suggestions found'}</p>
+                  <p className="text-[11px] mt-1 text-slate-400">{isRTL ? 'كافة المشاريع المؤهلة مجدولة أو تمت متابعتها' : 'All eligible projects are scheduled or up-to-date.'}</p>
+                </div>
+              ) : (
+                filteredSuggestedItems.map((p) => (
+                  <div
+                    key={p.id}
+                    className="crm-card-soft p-3.5 sm:p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-[#8FC2F0]/60 transition-all border border-slate-200/80 dark:border-slate-800"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                          {p.pr_number}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          p.calculated_health === 'red'
+                            ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+                            : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                        }`}>
+                          {p.calculated_health === 'red' ? (isRTL ? '⚠️ متأخر عن المتابعة' : 'Needs Attention') : (isRTL ? '💎 صفقة كبرى' : 'High Value')}
+                        </span>
+                        <span className="text-xs font-black font-mono text-emerald-600 dark:text-emerald-400">
+                          {formatCurrencySAR(p.estimated_value)}
+                        </span>
+                      </div>
+
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                        {p.name}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 flex items-center gap-1.5">
+                        <Building2 className="w-3 h-3 text-slate-400" />
+                        <span>{p.company_name}</span>
+                        {p.location && (
+                          <>
+                            <span className="opacity-40">•</span>
+                            <MapPin className="w-3 h-3 text-slate-400" />
+                            <span>{p.location}</span>
+                          </>
+                        )}
+                      </p>
+                      {p.next_action && (
+                        <p className="text-[10.5px] text-blue-600 dark:text-blue-400 mt-1 truncate">
+                          ↳ {isRTL ? 'الإجراء التالي:' : 'Next Action:'} {p.next_action}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Schedule Into Day Action */}
+                    <div className="shrink-0 flex flex-col md:items-end gap-1.5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {isRTL ? 'جدولة النشاط في يوم:' : 'Add to Day:'}
+                      </span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {workDays.map((d) => (
+                          <button
+                            key={d.dateStr}
+                            type="button"
+                            onClick={() => handleAcceptSuggestion(p, d.dateStr)}
+                            className="px-2.5 py-1 rounded-lg bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] hover:bg-[#8FC2F0]/35 font-bold transition-all text-[11px] cursor-pointer shadow-2xs"
+                            title={`${isRTL ? 'إضافة إلى' : 'Add to'} ${d.arabic || d.name} (${d.dayNum} ${isRTL ? d.monthNameAr : d.monthName})`}
+                          >
+                            <span>{isRTL ? d.arabic : d.short}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 sm:px-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs bg-slate-50/50 dark:bg-slate-900/40">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                {isRTL ? 'يتم حفظ أي نشاط تتم جدولته فورياً في خطة الأسبوع والإكسيل' : 'Scheduled activities are instantly synced to your week & Excel.'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsSuggestionsModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors cursor-pointer"
+              >
+                {isRTL ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* OVERDUE / PENDING ACTIVITIES MODAL (Manage 506 backlogged activities) */}
+      {/* ========================================================================= */}
+      {isOverdueNoticesModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="crm-card w-full max-w-5xl max-h-[90vh] flex flex-col rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#141820] overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-gradient-to-r from-amber-50/60 via-orange-50/40 to-slate-50/50 dark:from-amber-950/20 dark:via-orange-950/20 dark:to-slate-900/40">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 shadow-2xs">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-[#292D32] dark:text-white flex items-center gap-2">
+                    <span>{isRTL ? 'إدارة الأنشطة المعلقة من الأسابيع السابقة' : 'Pending Activities from Previous Weeks'}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-600 text-white text-[10px] font-mono font-bold">
+                      {pendingOtherWeeksCount}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                    {isRTL 
+                      ? 'يمكنك ترحيل أي نشاط مباشرة إلى أيام هذا الأسبوع، أو تعليمه كمكتمل، أو الانتقال لأسبوع النشاط في التقويم'
+                      : 'Review backlogged tasks; rollover to this week with 1 click, mark completed, or jump to its week.'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsOverdueNoticesModalOpen(false)}
+                className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center cursor-pointer transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Search & Bulk Bar */}
+            <div className="p-3 sm:px-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 flex items-center justify-between gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[220px]">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={overdueSearch}
+                  onChange={(e) => setOverdueSearch(e.target.value)}
+                  placeholder={isRTL ? 'بحث بالاسم، التاريخ، المقاول، الهدف...' : 'Search by name, date, company, goal...'}
+                  className="w-full ltr:pl-8.5 rtl:pr-8.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-medium focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await completeAllPastPlannedActivities();
+                    setIsOverdueNoticesModalOpen(false);
+                    setToastMessage(isRTL ? '✓ تم تعليم كافة المتابعات والمهام السابقة كمكتملة بنجاح!' : '✓ All past pending tasks marked as completed!');
+                    setTimeout(() => setToastMessage(null), 3500);
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                  title={isRTL ? 'تعليم كافة المتابعات السابقة كمكتملة دفعة واحدة' : 'Mark all past pending tasks as completed'}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{isRTL ? '✓ إنجاز الكل كمكتمل' : '✓ Mark All Completed'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRolloverTopBatch(10)}
+                  className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                  title={isRTL ? 'ترحيل أول 10 مهام معلقة وتوزيعها تلقائياً على أيام هذا الأسبوع' : 'Rollover first 10 pending tasks into this week'}
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>{isRTL ? '⚡ ترحيل أول 10' : '⚡ Rollover Top 10'}</span>
+                </button>
+                <span className="text-[11px] text-slate-400 font-mono font-medium shrink-0">
+                  {filteredOverdueActivities.length} {isRTL ? 'نشاط' : 'tasks'}
+                </span>
+              </div>
+            </div>
+
+            {/* Activities List */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1">
+              {filteredOverdueActivities.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 dark:text-slate-500 text-xs">
+                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-500 opacity-80" />
+                  <p className="font-bold">{isRTL ? 'لا توجد مهام معلقة تطابق البحث' : 'No pending tasks found'}</p>
+                </div>
+              ) : (
+                filteredOverdueActivities.slice(0, 100).map((act) => {
+                  const channelCfg = getChannelConfig(act.channel);
+                  return (
+                    <div
+                      key={act.id}
+                      className="crm-card-soft p-3 sm:p-3.5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 border border-slate-200/80 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-700 transition-all"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>{act.scheduled_date || 'Previous Week'}</span>
+                          </span>
+
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${channelCfg.color}`}>
+                            {channelCfg.icon}
+                            <span>{channelCfg.label}</span>
+                          </span>
+
+                          {act.priority && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                              act.priority === 'urgent' ? 'bg-rose-100 text-rose-700' :
+                              act.priority === 'high' ? 'bg-amber-100 text-amber-800' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {act.priority}
+                            </span>
+                          )}
+                        </div>
+
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                          {act.project_name || act.custom_target || 'Target Account'}
+                        </h4>
+
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 flex items-center gap-2 flex-wrap">
+                          {act.company_name && (
+                            <span className="flex items-center gap-1">
+                              <Building2 className="w-3 h-3 text-slate-400" />
+                              <span>{act.company_name}</span>
+                            </span>
+                          )}
+                          {act.goal && (
+                            <span className="text-slate-700 dark:text-slate-300 italic">
+                              &ldquo;{act.goal}&rdquo;
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Direct Actions: Reschedule to This Week, Complete, Jump to Week */}
+                      <div className="shrink-0 flex items-center gap-1.5 flex-wrap pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800">
+                        {/* Reschedule Dropdown / Quick Buttons */}
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase hidden sm:inline">
+                            {isRTL ? 'ترحيل:' : 'Move:'}
+                          </span>
+                          {workDays.slice(0, 3).map((d) => (
+                            <button
+                              key={d.dateStr}
+                              type="button"
+                              onClick={() => handleReschedulePending(act.id, d.dateStr)}
+                              className="px-2 py-1 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 font-bold transition-all text-[10px] cursor-pointer border border-blue-200 dark:border-blue-800"
+                              title={`${isRTL ? 'ترحيل إلى' : 'Reschedule to'} ${d.arabic} (${d.dayNum} ${isRTL ? d.monthNameAr : d.monthName})`}
+                            >
+                              {isRTL ? d.arabic : d.short}
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleMarkPendingCompleted(act.id)}
+                          className="px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 font-bold text-[10.5px] transition-all cursor-pointer border border-emerald-200 dark:border-emerald-800 flex items-center gap-1"
+                          title={isRTL ? 'تسجيل النشاط كمكتمل' : 'Mark activity completed'}
+                        >
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          <span>{isRTL ? 'تم الإنجاز' : 'Done'}</span>
+                        </button>
+
+                        {act.scheduled_date && (
+                          <button
+                            type="button"
+                            onClick={() => jumpToActivityWeek(act.scheduled_date)}
+                            className="px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 text-[10.5px] font-medium transition-all cursor-pointer"
+                            title={isRTL ? 'عرض لوحة هذا الأسبوع في التقويم' : 'Jump to this activity week on calendar'}
+                          >
+                            <span>{isRTL ? 'عرض الأسبوع ↗' : 'Week ↗'}</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(act.id)}
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          title={isRTL ? 'حذف من الخطة' : 'Delete'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 sm:px-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs bg-slate-50/50 dark:bg-slate-900/40">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                {isRTL ? `المجموع المعلق: ${pendingOtherWeeksCount} نشاط | يتم تحديث الخطة فورياً بمجرد الترحيل أو الإنجاز` : `Total pending: ${pendingOtherWeeksCount} tasks.`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsOverdueNoticesModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors cursor-pointer"
+              >
+                {isRTL ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chat Collaboration Modal (Send Plan Card to Chat with Manager/Colleague Note) */}
+      {isChatNoteModalOpen && selectedTaskForChat && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-[#1C2130] rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden animate-in zoom-in-95 p-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                    {isRTL ? 'إرسال المهمة للمحادثة مع تعليق' : 'Share Task Card to Chat'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {selectedTaskForChat.user_name ? `${isRTL ? 'المهندس:' : 'Engineer:'} ${selectedTaskForChat.user_name}` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChatNoteModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-[#141820] border border-slate-200 dark:border-white/5 text-xs">
+              <p className="font-bold text-slate-900 dark:text-white">{selectedTaskForChat.goal}</p>
+              <div className="flex items-center gap-2 text-slate-500 mt-1 text-[11px]">
+                <span>📅 {selectedTaskForChat.scheduled_date}</span>
+                {selectedTaskForChat.company_name && <span>🏢 {selectedTaskForChat.company_name}</span>}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                {isRTL ? 'ملاحظة أو توجيهات الشات (مثل: طلب التأجيل أو تعليمات جديدة):' : 'Chat Comment / Directive (e.g. reschedule request):'}
+              </label>
+              <textarea
+                rows={3}
+                placeholder={isRTL ? 'مثال: يرجى تأجيل هذه الزيارة للأسبوع القادم لحين استلام تقرير الاعتماد...' : 'e.g. Please postpone this visit to next week until the report is ready...'}
+                value={chatComment}
+                onChange={e => setChatComment(e.target.value)}
+                className="w-full text-xs px-3 py-2 rounded-xl bg-white dark:bg-[#141820] border border-slate-200 dark:border-white/10 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsChatNoteModalOpen(false)}
+                className="px-3 py-1.5 text-xs rounded-xl bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 font-medium"
+              >
+                {isRTL ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const targetEmployeeId = selectedTaskForChat.user_id 
+                    || teamMembers.find(t => t.full_name === selectedTaskForChat.user_name)?.id 
+                    || 'u1';
+
+                  await sharePlanTaskToChat({
+                    taskId: selectedTaskForChat.id,
+                    targetUserId: targetEmployeeId,
+                    comment: chatComment.trim()
+                  });
+                  setIsChatNoteModalOpen(false);
+                }}
+                className="px-4 py-1.5 text-xs rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1.5 shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>{isRTL ? 'إرسال وفتح المحادثة' : 'Send & Open Chat'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

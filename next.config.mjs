@@ -1,9 +1,25 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   reactStrictMode: true,
   trailingSlash: false,
   images: {
     unoptimized: true,
+  },
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: [
+          '**/node_modules/**',
+          '**/.git/**',
+          '**/source-data/**',
+          '**/*.xlsx',
+          '**/*.backup.xlsx',
+        ],
+      };
+    }
+    return config;
   },
   async headers() {
     return [

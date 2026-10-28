@@ -3,9 +3,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { 
-  MapPin, Calendar, MessageCircle, Phone, Clock, ArrowRight, Plus, 
+  MapPin, Calendar, MessageCircle, MessageSquare, Phone, Clock, ArrowRight, Plus, 
   GripVertical, Bell, ShieldCheck, Palette, Check, FileCheck, 
-  Layers, Tag, Target, AlertTriangle, UserCheck, X, Lock 
+  Layers, Tag, Target, AlertTriangle, UserCheck, X, Lock, Sparkles 
 } from 'lucide-react';
 import { Project, OpportunityType, RFQPackage, SubmittalStatus } from '@/types/crm';
 import { PIPELINE_STAGES, PROJECT_CARD_COLORS } from '@/lib/constants';
@@ -26,7 +26,7 @@ interface ProjectCardProps {
   isReadOnlyForSalesRep?: boolean;
 }
 
-export function ProjectCard({ 
+export const ProjectCard = React.memo(function ProjectCard({ 
   project, 
   onLogActivity,
   isDraggable = false,
@@ -45,7 +45,8 @@ export function ProjectCard({
     quotations,
     currentUser,
     teamMembers,
-    referProject
+    referProject,
+    shareProjectToChat
   } = useCRM();
   const { language, t } = useLanguage();
   const isRTL = language === 'ar';
@@ -81,14 +82,29 @@ export function ProjectCard({
   // - Won stage -> always emerald (Green)
   // - Lost stage -> always rose (Red)
   // - Any previous / active stage -> returns to original base color
+  // Calculate if project was added within the last 7 days (New This Week)
+  const isAddedThisWeek = React.useMemo(() => {
+    if (!project.created_at) return false;
+    const created = new Date(project.created_at).getTime();
+    if (isNaN(created)) return false;
+    const diffDays = (Date.now() - created) / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= 7;
+  }, [project.created_at]);
+
+  // Effective card color based on pipeline stage & creation date:
+  // - Won stage -> always emerald (Green)
+  // - Lost stage -> always rose (Red)
+  // - Added in the last week -> automatically highlighted in Warm Amber / Yellow (#f59e0b)
+  // - Older than a week -> returns to original stage / base color
   const effectiveColorId = React.useMemo(() => {
     if (project.pipeline_stage === 'won') return 'emerald';
     if (project.pipeline_stage === 'lost') return 'rose';
+    if (isAddedThisWeek) return 'amber';
     if (project.card_color === 'emerald' || project.card_color === 'rose') {
       return project.base_card_color || 'default';
     }
     return project.card_color || project.base_card_color || 'default';
-  }, [project.pipeline_stage, project.card_color, project.base_card_color]);
+  }, [project.pipeline_stage, project.card_color, project.base_card_color, isAddedThisWeek]);
 
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
@@ -120,6 +136,13 @@ export function ProjectCard({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isReferOpen]);
 
+  const [showInHandPromptModal, setShowInHandPromptModal] = useState(false);
+  const [inHandClosingDateInput, setInHandClosingDateInput] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split('T')[0];
+  });
+
   const handleSelectColor = async (colorId: string) => {
     setSelectedColor(colorId);
     setIsColorPickerOpen(false);
@@ -134,14 +157,15 @@ export function ProjectCard({
   const handleToggleOpportunityType = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const nextType: OpportunityType = project.opportunity_type === 'in_hand' ? 'tender' : 'in_hand';
-    await updateProject(project.id, { opportunity_type: nextType });
-  };
-
-  const handleTogglePackage = async (e: React.MouseEvent, pkg: RFQPackage) => {
-    e.preventDefault();
-    e.stopPropagation();
-    await updateProject(project.id, { rfq_packages: pkg });
+    if (project.opportunity_type === 'in_hand') {
+      await updateProject(project.id, { opportunity_type: 'tender' });
+    } else {
+      if (project.closing_date) {
+        await updateProject(project.id, { opportunity_type: 'in_hand' });
+      } else {
+        setShowInHandPromptModal(true);
+      }
+    }
   };
 
   const handleSetSubmittalStatus = async (e: React.MouseEvent, status: SubmittalStatus) => {
@@ -199,60 +223,87 @@ export function ProjectCard({
       draggable={isDraggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`crm-kanban-card p-5 group flex flex-col justify-between transition-all duration-200 ${currentColorConfig?.cardClass || ''} ${
+      className={`crm-kanban-card p-3 sm:p-4 group flex flex-col justify-between transition-all duration-200 ${currentColorConfig?.cardClass || ''} ${
         isDragging 
           ? 'opacity-35 border-2 border-dashed border-[#8FC2F0] bg-white/40 shadow-none scale-[0.98]' 
           : ''
       } ${isDraggable && !isLockedForSales ? 'cursor-grab active:cursor-grabbing' : ''}`}
     >
-      <div className="space-y-3.5">
-        {/* Header: Drag Grip + Initials Avatar + Project Title + Company Name + Color Picker */}
-        <div className="flex items-start gap-3">
+      <div className="space-y-2.5">
+        {/* Header: Drag Grip + Initials Avatar + Project Title + PR Number + Aging Timer + Company Name */}
+        <div className="flex items-start gap-2.5">
           {isDraggable && !isLockedForSales && (
             <div 
-              className="text-slate-300 group-hover:text-[#8FC2F0] transition-colors pt-2 -ml-1 cursor-grab active:cursor-grabbing shrink-0" 
+              className="text-slate-300 group-hover:text-[#8FC2F0] transition-colors pt-1.5 -ml-0.5 cursor-grab active:cursor-grabbing shrink-0" 
               title="Drag and drop to change pipeline stage"
             >
-              <GripVertical className="w-4 h-4" />
+              <GripVertical className="w-3.5 h-3.5" />
             </div>
           )}
           
-          <div className="w-11 h-11 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] font-black text-sm flex items-center justify-center shrink-0 border border-[#8FC2F0]/30 shadow-xs font-urbanist">
+          <div className="w-9 h-9 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] font-black text-xs flex items-center justify-center shrink-0 border border-[#8FC2F0]/30 shadow-xs font-urbanist">
             {initials}
           </div>
 
           <div className="min-w-0 flex-1 pt-0.5">
-            {isLockedForSales ? (
-              <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {isLockedForSales ? (
                 <span className="text-sm font-extrabold text-[#292D32] dark:text-white leading-snug break-words font-sans">
                   {project.name}
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shadow-2xs">
-                  <Lock className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400" />
-                  <span>{isRTL ? 'للاطلاع فقط' : 'View only'}</span>
+              ) : (
+                <Link 
+                  href={`/projects/${project.id}`} 
+                  draggable={false}
+                  className="text-sm font-extrabold text-[#292D32] dark:text-white hover:text-[#8FC2F0] dark:hover:text-[#8FC2F0] transition-colors leading-snug break-words font-sans"
+                >
+                  {project.name}
+                </Link>
+              )}
+
+              {/* PR Number (Sleek beside project name) */}
+              <span className="font-mono text-[10px] font-bold text-slate-600 dark:text-[#8FC2F0] bg-slate-100 dark:bg-[#8FC2F0]/10 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-[#8FC2F0]/25 font-urbanist shrink-0">
+                {project.pr_number}
+              </span>
+
+              {/* Stage aging timer (e.g. 8d) - slim, neat and color-coded */}
+              {project.pipeline_stage !== 'won' && project.pipeline_stage !== 'lost' && (
+                <span 
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full border inline-flex items-center gap-0.5 font-urbanist shrink-0 font-bold ${aging.badgeClass}`}
+                  title={isRTL ? `المشروع في هذه المرحلة منذ ${aging.daysInStage} يوماً (الحد المعياري للمرحلة: ${aging.slaDays} يوم)` : `Project in this stage for ${aging.daysInStage} days (Target SLA: ${aging.slaDays}d)`}
+                >
+                  <Clock className="w-2.5 h-2.5" />
+                  <span>{aging.daysInStage}d</span>
                 </span>
-              </div>
-            ) : (
-              <Link 
-                href={`/projects/${project.id}`} 
-                draggable={false}
-                className="text-sm font-extrabold text-[#292D32] dark:text-white hover:text-[#8FC2F0] dark:hover:text-[#8FC2F0] transition-colors block leading-snug break-words font-sans"
-              >
-                {project.name}
-              </Link>
-            )}
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium break-words mt-0.5 leading-normal">
+              )}
+
+              {isAddedThisWeek && project.pipeline_stage !== 'won' && project.pipeline_stage !== 'lost' && (
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-950 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-700 shadow-2xs flex items-center gap-0.5 shrink-0">
+                  <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                  <span>{isRTL ? 'جديد' : 'New'}</span>
+                </span>
+              )}
+
+              {isLockedForSales && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shadow-2xs shrink-0">
+                  <Lock className="w-2.5 h-2.5 text-amber-600" />
+                  <span>{isRTL ? 'للاطلاع' : 'View only'}</span>
+                </span>
+              )}
+            </div>
+
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium break-words mt-0.5 leading-tight">
               {project.company_name || 'Organization'}
             </div>
 
-            {/* Owner & Referred To (exact same font & style as requested) */}
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium break-words mt-1 leading-normal font-sans space-y-0.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{isRTL ? 'المالك:' : 'Owner:'}</span>
-                <span className="text-slate-800 dark:text-slate-200">{project.owner_name || 'Eslam Mohandes'}</span>
+            {/* Owner & Referred To */}
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium break-words mt-0.5 leading-tight font-sans space-y-0.5">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">{isRTL ? 'المالك:' : 'Owner:'}</span>
+                <span className="text-slate-700 dark:text-slate-200">{project.owner_name || 'Eslam Mohandes'}</span>
               </div>
               {project.referred_to_name && (
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="flex items-center gap-1 flex-wrap">
                   <span className="font-semibold text-blue-600 dark:text-[#8FC2F0]">{isRTL ? 'محال إلى:' : 'Referred To:'}</span>
                   <span className="text-blue-700 dark:text-blue-300 font-bold">{project.referred_to_name}</span>
                 </div>
@@ -330,7 +381,7 @@ export function ProjectCard({
                               <span className="truncate">{rep.full_name}</span>
                             </div>
                             {isCurrent && (
-                              <span className="text-[9px] font-bold text-slate-400 shrink-0">
+                              <span className="text-[10px] font-bold text-slate-400 shrink-0">
                                 {isRTL ? 'الحالي' : 'Current'}
                               </span>
                             )}
@@ -395,8 +446,8 @@ export function ProjectCard({
           </div>
         </div>
 
-        {/* Estimated Value & Latest Quotation (Rule 19) & PR Number */}
-        <div className="crm-card-soft p-3 space-y-2">
+        {/* Estimated Value & Latest Quotation (Rule 19) */}
+        <div className="crm-card-soft p-2.5 sm:p-3 space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5 font-urbanist">
@@ -413,17 +464,13 @@ export function ProjectCard({
                 </span>
               )}
             </div>
-
-            <span className="text-xs font-urbanist font-bold text-slate-700 dark:text-slate-300 bg-white dark:bg-[#232A38] px-2.5 py-1 rounded-full border border-slate-200/80 dark:border-slate-700 shadow-2xs shrink-0">
-              {project.pr_number}
-            </span>
           </div>
 
           {!isLockedForSales && latestQuote && (
-            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs font-urbanist">
+            <div className="pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs font-urbanist">
               <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-[#8FC2F0] flex items-center gap-1.5">
                 <span>{isRTL ? 'أحدث عرض سعر:' : 'Latest Quote:'}</span>
-                <span className="px-1.5 py-0.2 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 text-[9px] font-black">
+                <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 text-[10px] font-black">
                   V{latestQuote.version}
                 </span>
               </span>
@@ -434,34 +481,9 @@ export function ProjectCard({
           )}
         </div>
 
-        {/* Stage Badge & Stage Aging & Health Status */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {!isLockedForSales ? (
-              <>
-                <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${stageConfig?.badgeClass || 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'}`}>
-                  {isRTL ? stageConfig?.labelAr || stageConfig?.label : stageConfig?.label || project.pipeline_stage}
-                </span>
-
-                {project.pipeline_stage !== 'won' && project.pipeline_stage !== 'lost' && (
-                  <span 
-                    className={`text-[10px] px-2.5 py-0.5 rounded-full border flex items-center gap-1 font-urbanist ${aging.badgeClass}`}
-                    title={isRTL ? `المشروع في هذه المرحلة منذ ${aging.daysInStage} يوماً (الحد المعياري للمرحلة: ${aging.slaDays} يوم)` : `Project in this stage for ${aging.daysInStage} days (Target SLA: ${aging.slaDays}d)`}
-                  >
-                    <Clock className="w-3 h-3" />
-                    <span>{isRTL ? aging.labelAr : aging.labelEn}</span>
-                  </span>
-                )}
-              </>
-            ) : (
-              <span className="text-[11px] font-bold px-3 py-1 rounded-full border bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 flex items-center gap-1 font-urbanist">
-                <Lock className="w-3 h-3 text-amber-500" />
-                <span>{isRTL ? 'المرحلة محجوبة للمالك' : 'Stage Hidden'}</span>
-              </span>
-            )}
-          </div>
-
-          {pendingRequest && (
+        {/* Approval Request Badge (If pending) */}
+        {pendingRequest && (
+          <div className="flex items-center">
             <button
               draggable={false}
               onMouseDown={(e) => e.stopPropagation()}
@@ -479,93 +501,26 @@ export function ProjectCard({
             >
               <span>⏳ {pendingRequest.type === 'discount' && pendingRequest.payload?.discount_pct ? `Discount ${pendingRequest.payload.discount_pct}%` : pendingRequest.type.replace('_', ' ')}</span>
               {pendingRequest.urgency === 'urgent' && (
-                <span className="bg-rose-600 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Urgent</span>
+                <span className="bg-rose-600 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Urgent</span>
               )}
             </button>
-          )}
-
-          {project.calculated_health === 'red' && (
-            <span className="text-[11px] font-bold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 px-3 py-1 rounded-full border border-rose-200 dark:border-rose-900/50 flex items-center gap-1.5 shrink-0 font-urbanist">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-              {project.days_overdue ? `${project.days_overdue} ${t('daysLate')}` : t('urgentActionRequired')}
-            </span>
-          )}
-          {project.calculated_health === 'yellow' && (
-            <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-900/50 flex items-center gap-1.5 shrink-0 font-urbanist">
-              <span className="w-2 h-2 rounded-full bg-amber-500" />
-              {t('dueSoon')}
-            </span>
-          )}
-          {project.calculated_health === 'green' && (
-            <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-full border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-1.5 shrink-0 font-urbanist">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              {t('healthy')}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Internal Commercial Details (Hidden for Unauthorized Sales Reps) */}
         {!isLockedForSales && (
           <>
             {/* Next Action Snippet with Pure Localization */}
             {project.next_action && (
-          <div className="crm-card-soft p-3 text-xs leading-relaxed break-words whitespace-normal">
-            <span className="font-bold text-amber-600 dark:text-amber-400 block text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1 font-urbanist">
-              <span>{t('nextAction')}:</span>
-            </span>
-            <p className="font-medium text-slate-800 dark:text-slate-300 break-words leading-relaxed text-xs">
-              {project.next_action}
-            </p>
-          </div>
-        )}
-
-        {/* Stage 2: RFQ Processing - Packages Being Priced (LC, BMS, or Both) */}
-        {(project.pipeline_stage === 'rfq_processing' || (project.pipeline_stage as string) === 'pricing') && (
-          <div className="p-2.5 rounded-2xl bg-sky-50/80 dark:bg-sky-950/40 border border-sky-200/90 dark:border-sky-800/60 text-xs space-y-2 font-urbanist">
-            <div className="flex items-center justify-between gap-1 flex-wrap">
-              <span className="text-[10px] font-black uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                <span>{isRTL ? 'حزم وأنظمة التسعير (Pre-Sales):' : 'Pricing Packages:'}</span>
-              </span>
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                {isRTL ? 'اضغط للتبديل' : 'Click to select'}
-              </span>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-1">
-              {[
-                { id: 'lc', label: 'LC', sub: isRTL ? 'تيارات خفيفة' : 'Light Current', icon: '⚡' },
-                { id: 'bms', label: 'BMS', sub: isRTL ? 'إدارة مباني' : 'Automation', icon: '🏢' },
-                { id: 'both', label: 'LC + BMS', sub: isRTL ? 'كلا النظامين' : 'Combined', icon: '⚡🏢' },
-              ].map(pkg => {
-                const isSelected = (project.rfq_packages || 'both') === pkg.id;
-                return (
-                  <button
-                    key={pkg.id}
-                    type="button"
-                    draggable={false}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => handleTogglePackage(e, pkg.id as RFQPackage)}
-                    className={`p-1.5 rounded-xl border text-center transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-sky-600 text-white border-sky-600 font-black shadow-xs scale-[1.02]'
-                        : 'bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-sky-700'
-                    }`}
-                    title={pkg.sub}
-                  >
-                    <div className="text-[11px] font-black leading-tight flex items-center justify-center gap-1">
-                      <span>{pkg.icon}</span>
-                      <span>{pkg.label}</span>
-                    </div>
-                    <div className={`text-[8px] truncate mt-0.5 ${isSelected ? 'text-sky-100 font-bold' : 'text-slate-400'}`}>
-                      {pkg.sub}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+              <div className="crm-card-soft p-2.5 text-xs leading-relaxed break-words whitespace-normal">
+                <span className="font-bold text-amber-600 dark:text-amber-400 block text-[10px] uppercase tracking-wider mb-1 flex items-center gap-1 font-urbanist">
+                  <span>{t('nextAction')}:</span>
+                </span>
+                <p className="font-medium text-slate-800 dark:text-slate-300 break-words leading-relaxed text-xs">
+                  {project.next_action}
+                </p>
+              </div>
+            )}
 
         {/* Stage 3: Quotation Sent - Follow-up Days Tracker (Alerts at 3, 7, 10 days) */}
         {project.pipeline_stage === 'quotation_sent' && (
@@ -699,7 +654,7 @@ export function ProjectCard({
             {/* Outside Card Metrics: Latest Discount & Client Target Price */}
             <div className="grid grid-cols-2 gap-1.5 pt-0.5">
               <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-amber-200/70 dark:border-amber-900/40 space-y-0.5">
-                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
                   <Tag className="w-2.5 h-2.5 text-rose-500" />
                   <span>{isRTL ? 'آخر خصم مرسل:' : 'Latest Discount:'}</span>
                 </span>
@@ -709,7 +664,7 @@ export function ProjectCard({
               </div>
 
               <div className="p-2 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-amber-200/70 dark:border-amber-900/40 space-y-0.5">
-                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
                   <Target className="w-2.5 h-2.5 text-emerald-500" />
                   <span>{isRTL ? 'السعر المستهدف:' : 'Target Price:'}</span>
                 </span>
@@ -826,6 +781,15 @@ export function ProjectCard({
               moduleId="projects"
               size="xs"
             />
+            {project.opportunity_type === 'in_hand' && project.closing_date && (
+              <span 
+                className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-2xs shrink-0"
+                title={isRTL ? `تاريخ الإغلاق المتوقع: ${formatDateString(project.closing_date)}` : `Expected Closing Date: ${formatDateString(project.closing_date)}`}
+              >
+                <Calendar className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
+                <span>{isRTL ? 'إغلاق:' : 'Close:'} {formatDateString(project.closing_date)}</span>
+              </span>
+            )}
           </div>
 
           <span className="flex items-center gap-1 shrink-0">
@@ -838,8 +802,7 @@ export function ProjectCard({
           </span>
         </div>
 
-        {/* Action Buttons Row */}
-        <div className="flex items-center gap-1.5 shrink-0 ml-auto flex-wrap">
+        <div className="flex items-center gap-1.5 shrink-0 ml-auto flex-wrap opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           {isLockedForSales ? (
             <div className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-800/60 font-urbanist shadow-2xs">
               <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -935,6 +898,18 @@ export function ProjectCard({
                   <UserCheck className="w-3.5 h-3.5" />
                 </button>
               )}
+              <button
+                draggable={false}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  shareProjectToChat({ projectId: project.id });
+                }}
+                className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 hover:bg-sky-600 hover:text-white transition-all flex items-center justify-center shadow-xs cursor-pointer"
+                title={isRTL ? "مشاركة المشروع في الشات الداخلي" : "Share Project in Chat"}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+              </button>
               <Link
                 href={`/projects/${project.id}`}
                 draggable={false}
@@ -948,6 +923,85 @@ export function ProjectCard({
           )}
         </div>
       </div>
+
+      {/* Mini-Modal to prompt for Mandatory Closing Date when toggling to In Hand */}
+      {showInHandPromptModal && (
+        <div 
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-[#1C2130] rounded-2xl max-w-sm w-full shadow-2xl border border-emerald-200 dark:border-emerald-800/80 p-5 space-y-4 animate-in zoom-in-95 duration-150 text-slate-800 dark:text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center">
+                  <Calendar className="w-4 h-4" />
+                </span>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                  {isRTL ? 'تحويل المشروع إلى In Hand' : 'Convert to In Hand'}
+                </h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowInHandPromptModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {isRTL 
+                ? 'مشاريع In Hand تتطلب تحديد تاريخ الإغلاق المتوقع (Closing Date) الإلزامي لضمان دقة المتابعة والتقارير:' 
+                : 'In Hand projects require a mandatory Closing Date for accurate reporting:'}
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                {isRTL ? 'تاريخ الإغلاق المتوقع (Closing Date) *' : 'Expected Closing Date *'}
+              </label>
+              <input
+                type="date"
+                required
+                value={inHandClosingDateInput}
+                onChange={(e) => setInHandClosingDateInput(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-emerald-300 dark:border-emerald-700 rounded-xl font-mono text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowInHandPromptModal(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                {isRTL ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={!inHandClosingDateInput}
+                onClick={async () => {
+                  if (!inHandClosingDateInput) return;
+                  await updateProject(project.id, { 
+                    opportunity_type: 'in_hand', 
+                    closing_date: inHandClosingDateInput 
+                  });
+                  setShowInHandPromptModal(false);
+                }}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>{isRTL ? 'تأكيد وحفظ' : 'Confirm & Save'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+});

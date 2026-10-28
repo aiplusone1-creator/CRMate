@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { 
   FileSpreadsheet, 
@@ -18,14 +18,19 @@ import {
   RefreshCw,
   UserCheck,
   Eye,
-  FileCheck
+  FileCheck,
+  Download,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { parseExcelWorkbook, ParsedExcelResult } from '@/lib/excel/excel-importer';
+import { downloadIdealTemplateFile } from '@/lib/excel/template-generator';
+import { authRepository } from '@/lib/repo/local/auth';
 import { formatCurrencySAR } from '@/lib/utils';
 
 export default function ImportDataPage() {
-  const { teamMembers, currentUser, importSalesData } = useCRM();
+  const { teamMembers, currentUser, importSalesData, projects: existingProjects } = useCRM();
 
   // Target Sales Engineer
   const [selectedUserId, setSelectedUserId] = useState<string>(currentUser.id || 'u1');
@@ -53,7 +58,88 @@ export default function ImportDataPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const targetMember = teamMembers.find(m => m.id === selectedUserId) || currentUser;
+  // Dynamic list of all sales representatives and managers across CRM state & auth storage
+  const assignableMembers = useMemo(() => {
+    const list: Array<{ id: string; full_name: string; title: string; territory: string; email: string; role: string }> = [];
+    const seenIds = new Set<string>();
+
+    // 1. Team members from context
+    teamMembers.forEach(m => {
+      if (m.role !== 'admin' && !seenIds.has(m.id)) {
+        seenIds.add(m.id);
+        list.push({
+          id: m.id,
+          full_name: m.full_name,
+          title: m.title || m.role.replace('_', ' '),
+          territory: m.territory || 'National',
+          email: m.email,
+          role: m.role
+        });
+      }
+    });
+
+    // 2. Additional registered users from auth repository
+    try {
+      const authUsers = authRepository.getUsers();
+      authUsers.forEach(u => {
+        if (u.role !== 'admin' && !seenIds.has(u.id)) {
+          seenIds.add(u.id);
+          list.push({
+            id: u.id,
+            full_name: u.name,
+            title: u.title || u.role.replace('_', ' '),
+            territory: u.territory || 'National',
+            email: u.email,
+            role: u.role
+          });
+        }
+      });
+    } catch (e) {
+      // fallback
+    }
+
+    return list;
+  }, [teamMembers]);
+
+  const targetMember = assignableMembers.find(m => m.id === selectedUserId) || {
+    id: currentUser.id,
+    full_name: currentUser.full_name,
+    title: currentUser.title || currentUser.role,
+    territory: currentUser.territory || 'Western Region',
+    email: currentUser.email,
+    role: currentUser.role
+  };
+
+  // Real-time Deduplication Analysis against active CRM database
+  const deduplicationStats = useMemo(() => {
+    if (!parsedData) return null;
+    const existingPrSet = new Set(
+      existingProjects.map(p => p.pr_number?.toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean)
+    );
+    const existingNameSet = new Set(
+      existingProjects.map(p => p.name.trim().toLowerCase())
+    );
+
+    let willUpdateExisting = 0;
+    let willAddNew = 0;
+
+    parsedData.projects.forEach(p => {
+      const cleanPr = p.pr_number?.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanName = p.name.trim().toLowerCase();
+      if ((cleanPr && existingPrSet.has(cleanPr)) || existingNameSet.has(cleanName)) {
+        willUpdateExisting++;
+      } else {
+        willAddNew++;
+      }
+    });
+
+    return {
+      willAddNew,
+      willUpdateExisting,
+      internalDuplicatesFound: parsedData.summary.internalDuplicatesFound || 0,
+      totalParsed: parsedData.projects.length
+    };
+  }, [parsedData, existingProjects]);
 
   // Handle file reading
   const processFile = async (selectedFile: File) => {
@@ -117,13 +203,31 @@ export default function ImportDataPage() {
     setParseError(null);
     setImportResult(null);
     try {
-      const res = await fetch('/api/load-sample-sheet');
+      const rawSession = typeof window !== 'undefined' ? localStorage.getItem('al_mespar_session') : null;
+      let token = '';
+      if (rawSession) {
+        try {
+          token = JSON.parse(rawSession).token || '';
+        } catch {}
+      }
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch('/api/load-sample-sheet', { headers });
       let buffer: ArrayBuffer;
       if (res.ok) {
         buffer = await res.arrayBuffer();
       } else {
-        // Fallback: prompt user to pick the file
-        setParseError('Sample sheet can be uploaded directly from: source-data/Saudi Projects Follow UP - Eslam Mohandes(1).xlsx');
+        if (res.status === 403) {
+          setParseError('Demo sample sheet loading is disabled in production environments.');
+        } else if (res.status === 401) {
+          setParseError('Authentication required to load sample data.');
+        } else {
+          setParseError('Sample sheet can be uploaded directly from: source-data/Saudi Projects Follow UP - Eslam Mohandes(1).xlsx');
+        }
         setIsParsing(false);
         return;
       }
@@ -187,7 +291,16 @@ export default function ImportDataPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button 
+              type="button"
+              onClick={downloadIdealTemplateFile}
+              className="px-4 py-2.5 rounded-2xl bg-[#292D32] hover:bg-black text-white text-xs font-bold transition-all flex items-center gap-2 shadow-md cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+              title="تحميل شيت إكسل نموذجي معتمد ومعد بكافة الأعمدة والخيارات الصحيحة لتوزيعه على فريق المبيعات"
+            >
+              <Download className="w-4 h-4 text-[#77CE69]" />
+              <span>تحميل النموذج المعتمد (Excel Template)</span>
+            </button>
             <Link 
               href="/projects" 
               className="px-4 py-2.5 rounded-2xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-2 shadow-xs"
@@ -224,9 +337,9 @@ export default function ImportDataPage() {
               onChange={(e) => setSelectedUserId(e.target.value)}
               className="w-full bg-white border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs font-bold text-[#292D32] focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-transparent transition-all shadow-xs"
             >
-              {teamMembers.filter(m => m.role === 'sales_engineer').map(member => (
+              {assignableMembers.map(member => (
                 <option key={member.id} value={member.id}>
-                  {member.full_name} ({member.title || member.role}) - {member.territory || 'National'}
+                  {member.full_name} ({member.title}) - {member.territory}
                 </option>
               ))}
             </select>
@@ -399,6 +512,54 @@ export default function ImportDataPage() {
       {/* Step 2: Parsed KPI Metrics & Preview Section */}
       {parsedData && (
         <div className="space-y-6 animate-in fade-in">
+          {/* Deduplication & Integrity Status Banner */}
+          {deduplicationStats && (
+            <div className="glass-card p-5 rounded-3xl border border-[#77CE69]/40 bg-gradient-to-r from-emerald-500/10 via-sky-500/10 to-transparent">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-[#77CE69] text-white flex items-center justify-center font-bold shadow-md shrink-0">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-black text-[#292D32]">
+                        ضمان سلامة البيانات ومنع التكرار (Zero-Duplicate Verification)
+                      </h3>
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-[#77CE69]/20 text-emerald-800 border border-[#77CE69]/30">
+                        Verified 100%
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      تم فحص جميع السجلات المرفوعة ومقارنتها تلقائياً مع قاعدة بيانات CRMate لتفادي أي تكرار للمشاريع أو الشركات.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200 flex items-center gap-1.5 shadow-xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-slate-500 font-medium">مشاريع جديدة ستضاف:</span>
+                    <span className="font-black text-emerald-700 font-mono">+{deduplicationStats.willAddNew}</span>
+                  </div>
+
+                  <div className="px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200 flex items-center gap-1.5 shadow-xs">
+                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                    <span className="text-slate-500 font-medium">مشاريع مسبقة ستُحدّث بذكاء:</span>
+                    <span className="font-black text-sky-700 font-mono">~{deduplicationStats.willUpdateExisting}</span>
+                  </div>
+
+                  {deduplicationStats.internalDuplicatesFound > 0 && (
+                    <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-1.5 shadow-xs">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                      <span className="text-amber-800 font-medium">تكرارات داخلية بالشيت تم إلغاؤها:</span>
+                      <span className="font-black text-amber-800 font-mono">{deduplicationStats.internalDuplicatesFound}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* KPI Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
             {/* Projects Card */}

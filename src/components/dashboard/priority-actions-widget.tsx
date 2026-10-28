@@ -41,7 +41,7 @@ const ORDER_STORAGE_KEY = 'al_mespar_priority_actions_order';
 const LAYOUT_STORAGE_KEY = 'al_mespar_priority_actions_layout';
 
 interface PriorityActionsWidgetProps {
-  cardSpan?: 4 | 6 | 8 | 12;
+  cardSpan?: 4 | 5 | 6 | 7 | 8 | 12;
 }
 
 export function PriorityActionsWidget({ cardSpan = 12 }: PriorityActionsWidgetProps) {
@@ -221,6 +221,30 @@ export function PriorityActionsWidget({ cardSpan = 12 }: PriorityActionsWidgetPr
     }
   };
 
+  // 4 Attention Summary Categories
+  const overdueCount = useMemo(() => {
+    return scopedProjects.filter(p => {
+      if (['won', 'lost', 'hold'].includes(p.pipeline_stage)) return false;
+      if (p.calculated_health === 'red') return true;
+      if (p.days_overdue && p.days_overdue > 0) return true;
+      if (p.next_follow_up_at && p.next_follow_up_at.split('T')[0] < todayStr) return true;
+      return false;
+    }).length;
+  }, [scopedProjects, todayStr]);
+
+  const staleCount = staleDeals.length;
+
+  const quotationCount = useMemo(() => {
+    return scopedProjects.filter(p => p.pipeline_stage === 'quotation_sent').length;
+  }, [scopedProjects]);
+
+  const upcomingCount = useMemo(() => {
+    return scopedProjects.filter(p => {
+      if (['won', 'lost', 'hold'].includes(p.pipeline_stage)) return false;
+      return p.next_follow_up_at && p.next_follow_up_at.split('T')[0] >= todayStr;
+    }).length;
+  }, [scopedProjects, todayStr]);
+
   // Determine grid columns based on card width and layout mode
   const isSingleColumn = cardSpan <= 6 || layoutMode === 'list';
   const effectiveGridCols = isSingleColumn
@@ -231,7 +255,7 @@ export function PriorityActionsWidget({ cardSpan = 12 }: PriorityActionsWidgetPr
     <div className="crm-card p-6 sm:p-7 relative overflow-hidden font-urbanist h-full flex flex-col justify-between">
       <div>
         {/* Header Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 flex items-center justify-center font-bold border border-rose-200 dark:border-rose-900/50 shadow-2xs">
               <Zap className="w-5 h-5 text-rose-600 dark:text-rose-400" />
@@ -239,22 +263,22 @@ export function PriorityActionsWidget({ cardSpan = 12 }: PriorityActionsWidgetPr
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base sm:text-lg font-black text-[#292D32] dark:text-white tracking-tight">
-                  {isRTL ? 'ما يجب فعله اليوم (المهام ذات الأولوية)' : 'What To Do Today (Priority Actions)'}
+                  {isRTL ? 'ما يحتاج اهتمامك (المهام ذات الأولوية)' : 'Needs Your Attention'}
                 </h3>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                  {sortedItems.length}
+                  {isRTL ? '4 فئات' : '4 Categories'}
                 </span>
                 {sortedItems.length > 2 && (
                   <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#141820] text-slate-500 dark:text-slate-400 border border-slate-200/80 dark:border-slate-800">
-                    <span>{isRTL ? `يبان 2 من ${sortedItems.length}` : `2 of ${sortedItems.length} visible`}</span>
-                    <span className="text-blue-500 dark:text-[#8FC2F0] font-black">• {isRTL ? 'مرر لرؤية الباقي' : 'Scroll for more'}</span>
+                    <span>{isRTL ? `${sortedItems.length} إجراء متاح` : `${sortedItems.length} actions ready`}</span>
+                    <span className="text-blue-500 dark:text-[#8FC2F0] font-black">• {isRTL ? 'مرر للأسفل' : 'Scroll down'}</span>
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5">
                 {isRTL 
-                  ? 'مهام حاسمة مرتبة بالأولوية مع إمكانية التمرير داخلياً لإظهار المهام التالية' 
-                  : 'Actionable steps auto-ranked. Scroll internally to reveal subsequent priorities.'}
+                  ? 'عناصر ذات أولوية قصوى تتطلب المتابعة الفورية والتواصل مع المقاولين' 
+                  : 'High-priority items requiring immediate follow-up and client outreach'}
               </p>
             </div>
           </div>
@@ -310,6 +334,57 @@ export function PriorityActionsWidget({ cardSpan = 12 }: PriorityActionsWidgetPr
               <span>{isRTL ? 'أسبوعي' : 'My Week'}</span>
               {isRTL ? <ArrowLeft className="w-3 h-3" /> : <ArrowRight className="w-3 h-3" />}
             </Link>
+          </div>
+        </div>
+
+        {/* 4 Attention Summary Category Capsules */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
+          <div className="p-2.5 rounded-2xl bg-rose-50/70 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-pulse" />
+              <span className="text-[11px] font-bold text-rose-800 dark:text-rose-300 truncate">
+                {isRTL ? 'متابعات متأخرة' : 'Overdue'}
+              </span>
+            </div>
+            <span className="text-xs font-black text-rose-700 dark:text-rose-400 font-mono bg-white dark:bg-[#141820] px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-900/60">
+              {overdueCount}
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 truncate">
+                {isRTL ? 'فرص راكدة' : 'Stale Deals'}
+              </span>
+            </div>
+            <span className="text-xs font-black text-amber-700 dark:text-amber-400 font-mono bg-white dark:bg-[#141820] px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900/60">
+              {staleCount}
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+              <span className="text-[11px] font-bold text-blue-800 dark:text-blue-300 truncate">
+                {isRTL ? 'متابعة عروض' : 'Quotations'}
+              </span>
+            </div>
+            <span className="text-xs font-black text-blue-700 dark:text-[#8FC2F0] font-mono bg-white dark:bg-[#141820] px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/60">
+              {quotationCount}
+            </span>
+          </div>
+
+          <div className="p-2.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-[#77CE69] shrink-0" />
+              <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 truncate">
+                {isRTL ? 'أنشطة قادمة' : 'Upcoming'}
+              </span>
+            </div>
+            <span className="text-xs font-black text-[#216817] dark:text-[#77CE69] font-mono bg-white dark:bg-[#141820] px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-900/60">
+              {upcomingCount}
+            </span>
           </div>
         </div>
 
@@ -431,7 +506,7 @@ export function PriorityActionsWidget({ cardSpan = 12 }: PriorityActionsWidgetPr
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/50 dark:border-slate-700">
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300/50 dark:border-slate-700">
                               {item.project.pr_number}
                             </span>
                             <Link 

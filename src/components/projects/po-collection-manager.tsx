@@ -34,11 +34,13 @@ import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 interface POCollectionManagerProps {
   project: Project;
   onUpdate?: () => void;
+  readOnly?: boolean;
 }
 
-export function POCollectionManager({ project, onUpdate }: POCollectionManagerProps) {
+export function POCollectionManager({ project, onUpdate, readOnly = false }: POCollectionManagerProps) {
   const { updateProject, currentUser, addActivity } = useCRM();
   const { language, isRTL, t } = useLanguage();
+  const canEditPO = !readOnly;
   const fileInputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -279,14 +281,16 @@ export function POCollectionManager({ project, onUpdate }: POCollectionManagerPr
         </div>
 
         {/* Quick Percentage Trigger Button */}
-        <button
-          type="button"
-          onClick={() => setIsQuickPercentOpen(!isQuickPercentOpen)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs hover:shadow-emerald-600/25 cursor-pointer self-start sm:self-auto"
-        >
-          <Percent className="w-3.5 h-3.5" />
-          <span>{isRTL ? 'تعديل نسبة التحصيل' : 'Adjust Collection %'}</span>
-        </button>
+        {canEditPO && (
+          <button
+            type="button"
+            onClick={() => setIsQuickPercentOpen(!isQuickPercentOpen)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs hover:shadow-emerald-600/25 cursor-pointer self-start sm:self-auto"
+          >
+            <Percent className="w-3.5 h-3.5" />
+            <span>{isRTL ? 'تعديل نسبة التحصيل' : 'Adjust Collection %'}</span>
+          </button>
+        )}
       </div>
 
       {/* Feedback Toast */}
@@ -453,16 +457,18 @@ export function POCollectionManager({ project, onUpdate }: POCollectionManagerPr
             </h3>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsEditingPO(!isEditingPO)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-            >
-              <Edit className="w-3 h-3" />
-              <span>{isEditingPO ? (isRTL ? 'إلغاء التعديل' : 'Cancel') : (isRTL ? 'تعديل بيانات الـ PO' : 'Edit PO Details')}</span>
-            </button>
-          </div>
+          {canEditPO && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditingPO(!isEditingPO)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                <Edit className="w-3 h-3" />
+                <span>{isEditingPO ? (isRTL ? 'إلغاء التعديل' : 'Cancel') : (isRTL ? 'تعديل بيانات الـ PO' : 'Edit PO Details')}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* PO Details Editor (When Open) */}
@@ -588,26 +594,30 @@ export function POCollectionManager({ project, onUpdate }: POCollectionManagerPr
                 <span>{isRTL ? 'تحميل المستند' : 'Download'}</span>
               </a>
 
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="px-3.5 py-2 bg-white dark:bg-[#232A38] hover:bg-slate-100 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
-                <span>{isRTL ? 'استبدال' : 'Replace'}</span>
-              </button>
+              {canEditPO && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3.5 py-2 bg-white dark:bg-[#232A38] hover:bg-slate-100 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                    <span>{isRTL ? 'استبدال' : 'Replace'}</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={handleRemovePOAttachment}
-                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
-                title={isRTL ? 'حذف المرفق' : 'Remove Attachment'}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+                  <button
+                    type="button"
+                    onClick={handleRemovePOAttachment}
+                    className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+                    title={isRTL ? 'حذف المرفق' : 'Remove Attachment'}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
-        ) : (
+        ) : canEditPO ? (
           /* Dropzone / Upload Trigger */
           <div 
             onClick={() => fileInputRef.current?.click()}
@@ -626,6 +636,10 @@ export function POCollectionManager({ project, onUpdate }: POCollectionManagerPr
                   : 'Supports PDF, Images (PNG, JPG), Word Docs up to 15MB'}
               </p>
             </div>
+          </div>
+        ) : (
+          <div className="p-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-[#232A38]/20 text-center text-xs text-slate-400">
+            {isRTL ? 'لم يتم إرفاق ملف أمر الشراء (PO) لهذا المشروع بعد.' : 'No Purchase Order file attached yet.'}
           </div>
         )}
 
@@ -653,14 +667,16 @@ export function POCollectionManager({ project, onUpdate }: POCollectionManagerPr
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsAddingPayment(!isAddingPayment)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{isAddingPayment ? (isRTL ? 'إلغاء' : 'Cancel') : (isRTL ? 'تسجيل دفعة محصلة' : 'Record Payment')}</span>
-          </button>
+          {canEditPO && (
+            <button
+              type="button"
+              onClick={() => setIsAddingPayment(!isAddingPayment)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isAddingPayment ? (isRTL ? 'إلغاء' : 'Cancel') : (isRTL ? 'تسجيل دفعة محصلة' : 'Record Payment')}</span>
+            </button>
+          )}
         </div>
 
         {/* Add Payment Form */}
@@ -792,7 +808,7 @@ export function POCollectionManager({ project, onUpdate }: POCollectionManagerPr
                         {formatCurrencySAR(rec.amount)}
                       </span>
                       {rec.percentage ? (
-                        <span className="text-[10px] font-mono px-2 py-0.2 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold">
                           ~{rec.percentage}%
                         </span>
                       ) : null}

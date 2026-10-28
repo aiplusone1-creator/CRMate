@@ -109,20 +109,20 @@ export function LostReasonModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-200">
-      <div className="glass-card bg-white/95 dark:bg-[#1C2130] rounded-3xl max-w-xl w-full shadow-2xl border border-rose-200/80 dark:border-rose-900/50 flex flex-col overflow-hidden backdrop-blur-2xl animate-in zoom-in-95 duration-150 font-urbanist">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-5 z-50 animate-in fade-in duration-200">
+      <div className="glass-card bg-white/95 dark:bg-[#1C2130] rounded-2xl sm:rounded-3xl max-w-xl w-full max-h-[92vh] sm:max-h-[90vh] shadow-2xl border border-rose-200/80 dark:border-rose-900/50 flex flex-col overflow-hidden backdrop-blur-2xl animate-in zoom-in-95 duration-150 font-urbanist">
         
         {/* Header */}
-        <div className="px-6 py-5 border-b border-rose-100 dark:border-rose-950/60 flex items-center justify-between bg-rose-50/50 dark:bg-rose-950/20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 shadow-2xs">
-              <AlertTriangle className="w-5 h-5" />
+        <div className="px-4 py-3.5 sm:px-6 sm:py-5 border-b border-rose-100 dark:border-rose-950/60 flex items-center justify-between bg-rose-50/50 dark:bg-rose-950/20 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 shadow-2xs">
+              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h2 className="font-extrabold text-[#292D32] dark:text-white text-base sm:text-lg">
+              <h2 className="font-extrabold text-[#292D32] dark:text-white text-sm sm:text-base md:text-lg">
                 {isRTL ? 'تسجيل سبب خسارة الصفقة / المشروع' : 'Record Deal Loss Reason'}
               </h2>
-              <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+              <p className="text-[11px] sm:text-xs text-rose-600 dark:text-rose-400 font-medium">
                 {isRTL 
                   ? 'حقل إجباري مطلوب لتوثيق أسباب الخسارة وتحسين استراتيجية التسعير والمبيعات'
                   : 'Mandatory record for sales audit and competitive win/loss analysis'}
@@ -134,13 +134,13 @@ export function LostReasonModal({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="p-2 rounded-2xl text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#232A38] transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-2xl text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#232A38] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
           {/* Project Summary Banner */}
           <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#232A38]/70 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between gap-3 flex-wrap text-xs">
             <div className="flex items-center gap-2">

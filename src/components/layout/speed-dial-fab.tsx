@@ -31,7 +31,7 @@ export function SpeedDialFAB() {
 
   return (
     <>
-      <div className="fixed bottom-6 ltr:right-6 rtl:left-6 z-40 font-urbanist print:hidden">
+      <div className="fixed bottom-4 ltr:right-4 rtl:left-4 sm:bottom-6 sm:ltr:right-6 sm:rtl:left-6 z-40 font-urbanist print:hidden">
         {/* Expanded Actions Stack */}
         {isOpen && (
           <div className={`flex flex-col ${isRTL ? 'items-start' : 'items-end'} gap-2.5 mb-3 animate-in fade-in slide-in-from-bottom-3 duration-200`}>

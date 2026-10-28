@@ -20,26 +20,22 @@ import {
   Percent
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
+import { useSalesScope } from '@/lib/hooks/useSalesScope';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { formatCurrencySAR } from '@/lib/utils';
 
 export function ExecutiveManagerCockpit() {
+  const { projects } = useCRM();
   const { 
-    projects, 
-    teamMembers, 
-    currentUser, 
-    currentRole, 
+    isManager, 
+    salesReps: salesEngineers, 
     selectedSalesFilter, 
     setSelectedSalesFilter 
-  } = useCRM();
+  } = useSalesScope();
   const { language, t, isRTL } = useLanguage();
-
-  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin' || currentRole === 'sales_manager' || currentRole === 'admin';
 
   // Calculate detailed performance breakdown per sales engineer
   const repStats = useMemo(() => {
-    const salesEngineers = teamMembers.filter(m => m.role === 'sales_engineer');
-
     return salesEngineers.map((member, index) => {
       const memberProjects = projects.filter(p => p.owner_id === member.id);
       
@@ -84,7 +80,7 @@ export function ExecutiveManagerCockpit() {
         quotaPct,
       };
     }).sort((a, b) => b.wonValue - a.wonValue || b.activePipelineValue - a.activePipelineValue);
-  }, [teamMembers, projects]);
+  }, [salesEngineers, projects]);
 
   // Aggregate Team Pulse Metrics
   const teamAggregate = useMemo(() => {
@@ -261,7 +257,7 @@ export function ExecutiveManagerCockpit() {
               {t('allTeam')} ({projects.length})
             </button>
 
-            {teamMembers.filter(m => m.role === 'sales_engineer').map(rep => {
+            {salesEngineers.map(rep => {
               const isSelected = selectedSalesFilter === rep.id;
               const repCount = projects.filter(p => p.owner_id === rep.id).length;
               return (
@@ -274,7 +270,7 @@ export function ExecutiveManagerCockpit() {
                       : 'bg-white/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700/80'
                   }`}
                 >
-                  <span className="w-4 h-4 rounded-full bg-[#292D32] dark:bg-slate-100 text-white dark:text-[#292D32] text-[8px] flex items-center justify-center font-bold">
+                  <span className="w-4 h-4 rounded-full bg-[#292D32] dark:bg-slate-100 text-white dark:text-[#292D32] text-[10px] flex items-center justify-center font-bold">
                     {rep.avatar_initials}
                   </span>
                   <span>{rep.full_name}</span>

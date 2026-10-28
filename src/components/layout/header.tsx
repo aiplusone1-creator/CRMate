@@ -19,7 +19,10 @@ import {
   Shield,
   Briefcase,
   Award,
-  Archive
+  Archive,
+  Languages,
+  MessagesSquare,
+  MessageSquare
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { formatDateString, formatCurrencySAR } from '@/lib/utils';
@@ -33,7 +36,7 @@ import { ThemeToggle } from '@/components/common/theme-toggle';
 
 export function Header() {
   const router = useRouter();
-  const { language, t } = useLanguage();
+  const { language, toggleLanguage, t } = useLanguage();
   const isRTL = language === 'ar';
 
   const { 
@@ -47,12 +50,17 @@ export function Header() {
     reminders, 
     toggleReminderCompleted, 
     deleteReminder, 
+    completeAllReminders,
     openReminder,
     notifications,
     markNotificationRead,
     markAllNotificationsRead,
     openRequestDetail,
-    openGuide
+    openGuide,
+    chatUnreadCount,
+    isChatDrawerOpen,
+    openChat,
+    closeChat
   } = useCRM();
 
   // Filter strictly to actual sales representatives who own pipeline deals (excludes managers, admins, viewers)
@@ -98,17 +106,23 @@ export function Header() {
   }, []);
 
   // Count due/overdue + not completed reminders
-  const now = new Date();
-  const dueReminders = reminders.filter(r => {
-    if (r.is_completed) return false;
-    const dueTime = new Date(`${r.reminder_date}T${r.reminder_time}:00`);
-    return dueTime <= now;
-  });
-  const upcomingReminders = reminders.filter(r => {
-    if (r.is_completed) return false;
-    const dueTime = new Date(`${r.reminder_date}T${r.reminder_time}:00`);
-    return dueTime > now;
-  }).sort((a, b) => new Date(`${a.reminder_date}T${a.reminder_time}`).getTime() - new Date(`${b.reminder_date}T${b.reminder_time}`).getTime()).slice(0, 5);
+  const dueReminders = useMemo(() => {
+    const nowDate = new Date();
+    return reminders.filter(r => {
+      if (r.is_completed) return false;
+      const dueTime = new Date(`${r.reminder_date}T${r.reminder_time}:00`);
+      return dueTime <= nowDate;
+    });
+  }, [reminders]);
+
+  const upcomingReminders = useMemo(() => {
+    const nowDate = new Date();
+    return reminders.filter(r => {
+      if (r.is_completed) return false;
+      const dueTime = new Date(`${r.reminder_date}T${r.reminder_time}:00`);
+      return dueTime > nowDate;
+    }).sort((a, b) => new Date(`${a.reminder_date}T${a.reminder_time}`).getTime() - new Date(`${b.reminder_date}T${b.reminder_time}`).getTime()).slice(0, 5);
+  }, [reminders]);
 
   const isManagerOrAdmin = currentUser.role === 'sales_manager' || currentUser.role === 'admin';
   const isDevAdmin = currentUser.id === 'u5' || currentUser.role === 'admin';
@@ -222,40 +236,40 @@ export function Header() {
   const roleBadge = getRoleBadge(currentUser.role);
 
   return (
-    <header className="h-16 bg-white/80 dark:bg-[#1E2328]/80 backdrop-blur-md border-b border-slate-200/90 dark:border-[#8FC2F0]/10 sticky top-0 z-40 px-4 sm:px-6 flex items-center justify-between transition-colors shadow-2xs font-urbanist">
+    <header className="h-16 bg-white/80 dark:bg-[#1E2328]/80 backdrop-blur-md border-b border-slate-200/90 dark:border-[#8FC2F0]/10 sticky top-0 z-40 px-2 sm:px-6 flex items-center justify-between transition-colors shadow-2xs font-urbanist print:hidden">
       
       {/* Left: Mobile Menu Toggle / Brand + Search */}
-      <div className="flex items-center gap-3 sm:gap-4 flex-1 max-w-xl">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0 min-w-0">
         {/* CRMate Compact Horizontal Brand Lockup */}
-        <CRMateHorizontalLogo symbolSize={28} showSubtitle={false} className="shrink-0" />
+        <CRMateHorizontalLogo symbolSize={26} showSubtitle={false} className="shrink-0" />
 
-        {/* Global Instant Search Bar */}
-        <div className="flex-1 max-w-md hidden sm:block">
+        {/* Global Command Palette */}
+        <div className="hidden sm:block">
           <GlobalSearch />
         </div>
       </div>
 
       {/* Right Controls: Manager Scope Pill, Language, Theme, Notifs, Profile */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3 shrink-0">
         {/* Sales Manager Filter Pill (Visible to Sales Manager & Admin) */}
         {isManagerOrAdmin && (
           <div className="relative" ref={teamFilterRef}>
             <button
               onClick={() => setIsTeamMenuOpen(!isTeamMenuOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-[#292D32] dark:text-slate-200 bg-white dark:bg-[#22272E] hover:bg-slate-50 dark:hover:bg-[#292D32]/70 rounded-2xl border border-slate-200/90 dark:border-[#8FC2F0]/15 transition-all shadow-xs font-urbanist cursor-pointer"
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-xs font-bold text-[#292D32] dark:text-slate-200 bg-white dark:bg-[#22272E] hover:bg-slate-50 dark:hover:bg-[#292D32]/70 rounded-2xl border border-slate-200/90 dark:border-[#8FC2F0]/15 transition-all shadow-xs font-urbanist cursor-pointer"
               title="فلترة خط المبيعات حسب المندوب"
             >
-              <Users className="w-3.5 h-3.5 text-[#8FC2F0]" />
+              <Users className="w-3.5 h-3.5 text-[#8FC2F0] shrink-0" />
               <span className="hidden md:inline text-slate-500 dark:text-slate-400 font-medium">{isRTL ? 'المعروض:' : 'Viewing:'}</span>
-              <span className="max-w-[140px] truncate">{filterLabel}</span>
-              <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+              <span className="max-w-[70px] sm:max-w-[140px] truncate">{filterLabel}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
             </button>
 
             {isTeamMenuOpen && (
               <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#1E2328] border border-slate-200 dark:border-[#8FC2F0]/12 rounded-2xl shadow-xl dark:shadow-[0_16px_40px_rgba(0,0,0,0.5)] py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3 py-1 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider font-urbanist flex items-center justify-between">
                   <span>{t('salesRepScope')}</span>
-                  <span className="text-purple-600 dark:text-purple-400 font-black text-[9px]">MANAGER</span>
+                  <span className="text-purple-600 dark:text-purple-400 font-black text-[10px]">MANAGER</span>
                 </div>
 
                 <div className="p-1 space-y-0.5">
@@ -322,9 +336,9 @@ export function Header() {
           </div>
         )}
 
-        {/* DEV PANEL: Strictly visible to u5 Admin */}
+        {/* DEV PANEL: Strictly visible to u5 Admin on md+ screens */}
         {isDevAdmin && (
-          <div className="relative" ref={devMenuRef}>
+          <div className="relative hidden md:block" ref={devMenuRef}>
             <button
               onClick={() => setIsDevMenuOpen(!isDevMenuOpen)}
               className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-full border border-indigo-200/90 transition-all shadow-2xs font-mono cursor-pointer"
@@ -339,7 +353,7 @@ export function Header() {
               <div className="absolute right-0 mt-2 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl p-2.5 z-50 animate-in fade-in zoom-in-95 border border-slate-700">
                 <div className="px-3 py-1.5 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between border-b border-slate-800 pb-2 mb-1">
                   <span>Dev Quick Switcher</span>
-                  <span className="text-emerald-400 text-[9px] bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/60 font-semibold">u5 ADMIN</span>
+                  <span className="text-emerald-400 text-[10px] bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/60 font-semibold">u5 ADMIN</span>
                 </div>
                 <div className="space-y-1">
                   {SEEDED_USERS.map(u => (
@@ -364,7 +378,7 @@ export function Header() {
                         <div className="min-w-0">
                           <div className="font-semibold truncate text-[12px] leading-tight">{u.name}</div>
                           <div className="text-[10px] text-slate-400 font-normal truncate">
-                            {u.role.replace('_', ' ')} &bull; {u.id === 'u1' ? '34 deals' : u.id === 'u3' ? 'Manager' : u.id === 'u5' ? 'Admin' : '0 deals'}
+                            {u.role.replace('_', ' ')} &bull; {u.id === 'u1' ? '34 deals' : u.id === 'u3' ? 'Commercial Director' : u.id === 'u5' ? 'Admin' : '0 deals'}
                           </div>
                         </div>
                       </div>
@@ -377,20 +391,15 @@ export function Header() {
           </div>
         )}
 
-        {/* Interactive Module Guide (i) Button */}
+        {/* Interactive Module Guide (?) Button - Compact circular luxury button with status pulse */}
         <button
           onClick={() => openGuide()}
-          className="group relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-gradient-to-r from-[#8FC2F0]/15 to-[#77CE69]/15 hover:from-[#8FC2F0]/25 hover:to-[#77CE69]/25 border border-[#8FC2F0]/30 hover:border-[#8FC2F0]/60 transition-all duration-200 cursor-pointer shadow-2xs hover:shadow-[0_0_15px_rgba(143,194,240,0.35)] shrink-0"
-          title={t('moduleGuideTooltip')}
+          className="group relative flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 hover:bg-[#8FC2F0]/20 dark:bg-slate-800 dark:hover:bg-[#8FC2F0]/20 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:text-[#0088FF] dark:hover:text-[#8FC2F0] hover:border-[#8FC2F0]/50 transition-all duration-200 cursor-pointer shadow-2xs shrink-0"
+          title={t('moduleGuideTooltip') || (isRTL ? 'دليل الاستخدام التفاعلي' : 'Interactive Module Guide')}
           aria-label={t('moduleGuide')}
         >
-          <div className="w-5 h-5 rounded-full bg-[#8FC2F0] text-[#1E2328] font-mono font-black italic text-xs flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
-            i
-          </div>
-          <span className="hidden md:inline text-xs font-extrabold text-[#292D32] dark:text-[#E8EDF4] tracking-tight">
-            {t('moduleGuide')}
-          </span>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse hidden sm:inline-block" />
+          <span className="font-mono font-black italic text-xs group-hover:scale-110 transition-transform">?</span>
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#1E2328] animate-pulse" />
         </button>
 
         {/* Day & Night Mode Switcher */}
@@ -399,20 +408,45 @@ export function Header() {
         {/* Language Switcher */}
         <LanguageToggle />
 
+        {/* Dedicated Team Chat & Collaboration Button (Completely separate notification counter) */}
+        <div className="relative">
+          <button
+            onClick={() => (isChatDrawerOpen ? closeChat() : openChat())}
+            className={`relative p-1.5 sm:p-2 rounded-full transition-all duration-300 cursor-pointer ${
+              mounted && chatUnreadCount > 0
+                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 ring-2 ring-blue-500/30 shadow-[0_0_15px_rgba(59,130,246,0.35)]'
+                : isChatDrawerOpen
+                ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-[#292D32]/80'
+                : 'text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-[#292D32]/60'
+            }`}
+            title={mounted && chatUnreadCount > 0 
+              ? (isRTL ? `لديك ${chatUnreadCount} رسالة شات جديدة` : `You have ${chatUnreadCount} unread chat messages`) 
+              : (isRTL ? 'المحادثات والتنسيق الداخلي' : 'Internal Team Chat')}
+            data-testid="header-chat-btn"
+          >
+            <MessagesSquare className={`w-4 h-4 sm:w-5 sm:h-5 ${mounted && chatUnreadCount > 0 ? 'stroke-[2.5]' : ''}`} />
+            {mounted && chatUnreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-blue-600 text-white rounded-full text-[10px] font-black flex items-center justify-center shadow-md border-2 border-white dark:border-[#1E2328] animate-bounce">
+                {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+
         {/* Notification Bell with dynamic badge & glowing red status in day and night */}
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => setIsNotifOpen(!isNotifOpen)}
-            className={`relative p-2 rounded-full transition-all duration-300 cursor-pointer ${
+            className={`relative p-1.5 sm:p-2 rounded-full transition-all duration-300 cursor-pointer ${
               mounted && badgeCount > 0
                 ? 'bell-glow-red'
                 : 'text-slate-500 dark:text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#292D32]/60'
             }`}
             title={mounted && badgeCount > 0 ? (isRTL ? `لديك ${badgeCount} إشعار غير مقروء` : `You have ${badgeCount} unread notifications`) : (isRTL ? 'الإشعارات والتنبيهات' : 'Notifications')}
           >
-            <Bell className={`w-5 h-5 ${mounted && badgeCount > 0 ? 'bell-icon-glow stroke-[2.5]' : ''}`} />
+            <Bell className={`w-4 h-4 sm:w-5 sm:h-5 ${mounted && badgeCount > 0 ? 'bell-icon-glow stroke-[2.5]' : ''}`} />
             {mounted && badgeCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-600 text-white rounded-full text-[10px] font-black flex items-center justify-center shadow-md border-2 border-white dark:border-[#1E2328] animate-bounce">
+              <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-rose-600 text-white rounded-full text-[10px] sm:text-[10px] font-black flex items-center justify-center shadow-md border-2 border-white dark:border-[#1E2328] animate-bounce">
                 {badgeCount > 9 ? '9+' : badgeCount}
               </span>
             )}
@@ -452,15 +486,29 @@ export function Header() {
                         {isRTL ? 'تحديد كـ مقروء' : 'Mark all read'}
                       </button>
                     )}
-                    {notifTab === 'reminders' && unreadReminderCount > 0 && (
-                      <button
-                        onClick={() => {
-                          reminderNotifs.filter(n => !n.is_read).forEach(n => markNotificationRead(n.id));
-                        }}
-                        className="text-[11px] bg-white/15 hover:bg-white/25 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
-                      >
-                        {isRTL ? 'تحديد كـ مقروء' : 'Mark all read'}
-                      </button>
+                    {notifTab === 'reminders' && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={async () => {
+                            await completeAllReminders();
+                          }}
+                          className="text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-0.5 rounded-md font-bold transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+                          title={isRTL ? 'إنجاز كافة التذكيرات وتنبيهات المتابعة دفعة واحدة' : 'Mark all reminders as completed'}
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>{isRTL ? 'إنجاز الكل' : 'Complete All'}</span>
+                        </button>
+                        {unreadReminderCount > 0 && (
+                          <button
+                            onClick={() => {
+                              reminderNotifs.filter(n => !n.is_read).forEach(n => markNotificationRead(n.id));
+                            }}
+                            className="text-[11px] bg-white/15 hover:bg-white/25 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
+                          >
+                            {isRTL ? 'تحديد كـ مقروء' : 'Mark read'}
+                          </button>
+                        )}
+                      </div>
                     )}
                     {notifTab === 'system' && unreadSystemCount > 0 && (
                       <button
@@ -487,7 +535,7 @@ export function Header() {
                     <Shield className="w-3.5 h-3.5 shrink-0" />
                     <span>{isRTL ? 'الموافقات' : 'Approvals'}</span>
                     {unreadApprovalCount > 0 && (
-                      <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[10px] font-extrabold leading-none">
+                      <span className="px-1.5 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-extrabold leading-none">
                         {unreadApprovalCount}
                       </span>
                     )}
@@ -503,7 +551,7 @@ export function Header() {
                     <Clock className="w-3.5 h-3.5 shrink-0" />
                     <span>{isRTL ? 'التذكيرات' : 'Reminders'}</span>
                     {totalReminderBadge > 0 && (
-                      <span className="px-1.5 py-0.2 bg-amber-500 text-white rounded-full text-[10px] font-extrabold leading-none">
+                      <span className="px-1.5 py-0.5 bg-amber-500 text-white rounded-full text-[10px] font-extrabold leading-none">
                         {totalReminderBadge}
                       </span>
                     )}
@@ -519,7 +567,7 @@ export function Header() {
                     <Archive className="w-3.5 h-3.5 shrink-0" />
                     <span>{isRTL ? 'النظام' : 'System'}</span>
                     {unreadSystemCount > 0 && (
-                      <span className="px-1.5 py-0.2 bg-sky-500 text-white rounded-full text-[10px] font-extrabold leading-none">
+                      <span className="px-1.5 py-0.5 bg-sky-500 text-white rounded-full text-[10px] font-extrabold leading-none">
                         {unreadSystemCount}
                       </span>
                     )}
@@ -569,7 +617,7 @@ export function Header() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{n.title}</span>
-                            <span className="text-[9px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
                               {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
@@ -599,7 +647,7 @@ export function Header() {
                           <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
                             {isRTL ? 'تنبيهات ومتابعات عروض الأسعار' : 'Quotation Follow-up Alerts'}
                           </span>
-                          <span className="text-[10px] font-mono text-amber-600/90 dark:text-amber-400/90 font-bold bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.2 rounded-full">
+                          <span className="text-[10px] font-mono text-amber-600/90 dark:text-amber-400/90 font-bold bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded-full">
                             {reminderNotifs.length}
                           </span>
                         </div>
@@ -627,7 +675,7 @@ export function Header() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
                               <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{n.title}</span>
-                              <span className="text-[9px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
                                 {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
@@ -643,9 +691,18 @@ export function Header() {
                           <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
                             {isRTL ? 'المهام والتذكيرات المجدولة' : 'Scheduled Tasks'}
                           </span>
-                          <span className="text-[10px] font-mono text-slate-500 font-bold bg-slate-200 dark:bg-slate-700/60 px-1.5 py-0.2 rounded-full">
-                            {allVisibleReminders.length}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={completeAllReminders}
+                              className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 font-bold cursor-pointer"
+                            >
+                              {isRTL ? '✓ تم إنجازها جميعاً' : '✓ Mark all done'}
+                            </button>
+                            <span className="text-[10px] font-mono text-slate-500 font-bold bg-slate-200 dark:bg-slate-700/60 px-1.5 py-0.5 rounded-full">
+                              {allVisibleReminders.length}
+                            </span>
+                          </div>
                         </div>
                       )}
                       {allVisibleReminders.map(r => {
@@ -728,7 +785,7 @@ export function Header() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{n.title}</span>
-                            <span className="text-[9px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 shrink-0 font-mono">
                               {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
@@ -748,10 +805,10 @@ export function Header() {
         <div className="relative" ref={profileRef}>
           <button
             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-            className="flex items-center gap-2.5 pl-2 border-l border-slate-200/80 dark:border-[#8FC2F0]/10 hover:opacity-90 transition-opacity text-left cursor-pointer"
+            className="flex items-center gap-2 ps-1.5 sm:ps-2.5 border-s border-slate-200/80 dark:border-[#8FC2F0]/10 hover:opacity-90 transition-opacity text-start cursor-pointer"
           >
             <div className="relative">
-              <div suppressHydrationWarning className="w-9 h-9 rounded-xl bg-[#292D32] text-white flex items-center justify-center font-bold text-xs shadow-sm ring-2 ring-white dark:ring-[#1A1E24] font-urbanist overflow-hidden">
+              <div suppressHydrationWarning className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#292D32] text-white flex items-center justify-center font-bold text-xs shadow-sm ring-2 ring-white dark:ring-[#1A1E24] font-urbanist overflow-hidden">
                 {mounted && currentUser.avatar_url ? (
                   <img src={currentUser.avatar_url} alt={currentUser.full_name} className="w-full h-full object-cover" />
                 ) : (
@@ -761,13 +818,13 @@ export function Header() {
               <span className="w-2.5 h-2.5 rounded-full bg-[#77CE69] border-2 border-white dark:border-[#1A1E24] absolute -bottom-0.5 -right-0.5" />
             </div>
 
-            <div className="text-left leading-tight hidden lg:block max-w-[170px]">
+            <div className="text-left rtl:text-right leading-tight hidden lg:block max-w-[170px]">
               <div className="text-xs font-bold text-[#292D32] dark:text-slate-100 flex items-center gap-1.5 font-urbanist truncate">
                 <span className="truncate" suppressHydrationWarning>{currentUser.full_name}</span>
                 <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500 shrink-0" />
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className={`px-1.5 py-0.2 text-[9px] font-extrabold rounded-md border ${roleBadge.badgeClass}`}>
+                <span className={`px-1.5 py-0.5 text-[10px] font-extrabold rounded-md border ${roleBadge.badgeClass}`}>
                   {roleBadge.label}
                 </span>
               </div>
@@ -775,7 +832,7 @@ export function Header() {
           </button>
 
           {isProfileMenuOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-[#1E2328] border border-slate-200/90 dark:border-[#8FC2F0]/12 rounded-2xl shadow-2xl dark:shadow-[0_20px_50px_rgba(0,0,0,0.55)] py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 rtl:right-auto rtl:left-0 mt-2 w-72 bg-white dark:bg-[#1E2328] border border-slate-200/90 dark:border-[#8FC2F0]/12 rounded-2xl shadow-2xl dark:shadow-[0_20px_50px_rgba(0,0,0,0.55)] py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
               {/* Profile Card Summary */}
               <div className="px-4 py-3 border-b border-slate-100 dark:border-[#292D32]/60">
                 <div className="flex items-center gap-3">
@@ -794,7 +851,7 @@ export function Header() {
                       {currentUser.email}
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className={`px-1.5 py-0.2 text-[9px] font-extrabold rounded-md border ${roleBadge.badgeClass}`}>
+                      <span className={`px-1.5 py-0.5 text-[10px] font-extrabold rounded-md border ${roleBadge.badgeClass}`}>
                         {roleBadge.label}
                       </span>
                     </div>
@@ -819,11 +876,31 @@ export function Header() {
                 )}
               </div>
 
+              {/* Language Switcher inside Profile Menu */}
+              <div className="p-1.5 border-b border-slate-100 dark:border-[#292D32]/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    toggleLanguage();
+                    setIsProfileMenuOpen(false);
+                  }}
+                  className="w-full px-3 py-2 text-start text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#292D32]/50 rounded-xl flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Languages className="w-4 h-4 text-[#8FC2F0]" />
+                    <span>{isRTL ? 'تغيير اللغة' : 'Change Language'}</span>
+                  </div>
+                  <span className="text-[11px] font-black px-2 py-0.5 rounded-lg bg-[#EFF3F8] dark:bg-[#292D32] text-[#8FC2F0]">
+                    {language === 'ar' ? 'English (EN)' : 'العربية (AR)'}
+                  </span>
+                </button>
+              </div>
+
               {/* Logout button */}
               <div className="p-1.5">
                 <button
                   onClick={handleLogout}
-                  className="w-full px-3 py-2 text-left text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/15 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
+                  className="w-full px-3 py-2 text-start text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/15 rounded-xl flex items-center gap-2 transition-colors cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>{t('logout')}</span>

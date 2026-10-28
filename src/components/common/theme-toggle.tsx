@@ -45,7 +45,7 @@ export function ThemeToggle({ className = '', variant = 'pill' }: ThemeTogglePro
     <button
       type="button"
       onClick={toggleTheme}
-      className={`relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 cursor-pointer backdrop-blur-md select-none ${
+      className={`relative inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full border transition-all duration-300 cursor-pointer backdrop-blur-md select-none shrink-0 ${
         isDark
           ? 'bg-[#22272E]/90 text-slate-200 border-[#8FC2F0]/15 hover:border-[#8FC2F0]/30 shadow-[0_2px_10px_rgba(0,0,0,0.3)]'
           : 'bg-white/90 text-[#292D32] border-white/90 hover:border-slate-200 shadow-2xs'
@@ -64,7 +64,7 @@ export function ThemeToggle({ className = '', variant = 'pill' }: ThemeTogglePro
         )}
       </div>
 
-      <span className="text-xs font-bold font-urbanist tracking-wide">
+      <span className="text-xs font-bold font-urbanist tracking-wide hidden sm:inline">
         {isDark ? (isRTL ? 'ليلي' : 'Dark') : (isRTL ? 'نهاري' : 'Light')}
       </span>
     </button>

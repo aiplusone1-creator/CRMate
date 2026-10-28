@@ -4,8 +4,16 @@ import React, { createContext, useContext, useState, useEffect, useMemo } from '
 import { 
   Project, Contact, Company, Activity, PlannedActivity, 
   Quotation, QuotationStatus, SalesTarget, UserRole, Profile, ProjectHealth,
-  Reminder, ReminderUrgency, ApprovalRequest, AppNotification, PipelineStage
+  Reminder, ReminderUrgency, ApprovalRequest, AppNotification, PipelineStage,
+  ActivityChannel, VisitPurpose, ProjectPriority,
+  ChatConversation, ChatMessage, ChatProjectCard, ChatPlanTaskCard, ChatAttachment, ProjectMember
 } from '@/types/crm';
+import {
+  getStoredConversations,
+  saveStoredConversations,
+  getStoredMessages,
+  saveStoredMessages
+} from '@/lib/logic/chat';
 import { 
   getAllRequests, 
   saveRequests, 
@@ -26,6 +34,16 @@ export interface FastLogModalState {
   contactId?: string;
   plannedActivityId?: string;
   defaultGoal?: string;
+  initialDate?: string;
+  initialTime?: string;
+  defaultChannel?: ActivityChannel;
+  defaultPurpose?: VisitPurpose;
+  initialTargetMode?: 'existing_project' | 'custom_project' | 'area_hunting';
+  initialCustomProjectName?: string;
+  initialCompanyName?: string;
+  initialLocationName?: string;
+  initialGoogleMapsUrl?: string;
+  initialPriority?: ProjectPriority;
 }
 
 export interface ReminderModalState {
@@ -45,7 +63,8 @@ interface CRMContextType {
   logout: () => void;
   switchUser: (userId: string) => void;
   updateUserProfile: (userId: string, updates: Partial<Profile>) => void;
-  addTeamMember: (member: Omit<Profile, 'id' | 'created_at'>) => Promise<Profile>;
+  addTeamMember: (member: Omit<Profile, 'id' | 'created_at'> & { id?: string }) => Promise<Profile>;
+  deleteTeamMember: (userId: string) => Promise<void>;
   projects: Project[];
   contacts: Contact[];
   companies: Company[];
@@ -59,6 +78,16 @@ interface CRMContextType {
     contactId?: string;
     plannedActivityId?: string;
     defaultGoal?: string;
+    initialDate?: string;
+    initialTime?: string;
+    defaultChannel?: ActivityChannel;
+    defaultPurpose?: VisitPurpose;
+    initialTargetMode?: 'existing_project' | 'custom_project' | 'area_hunting';
+    initialCustomProjectName?: string;
+    initialCompanyName?: string;
+    initialLocationName?: string;
+    initialGoogleMapsUrl?: string;
+    initialPriority?: ProjectPriority;
   }) => void;
   closeFastLog: () => void;
   isNewProjectModalOpen: boolean;
@@ -70,7 +99,7 @@ interface CRMContextType {
   addActivity: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<Activity>;
   updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
-  addProject: (project: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'>) => Promise<Project>;
+  addProject: (project: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'> & { created_at?: string }) => Promise<Project>;
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
   referProject: (projectId: string, targetUserId: string) => Promise<void>;
   addContact: (contact: Omit<Contact, 'id' | 'created_at' | 'updated_at'>) => Promise<Contact>;
@@ -102,6 +131,8 @@ interface CRMContextType {
   updateReminder: (id: string, updates: Partial<Reminder>) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
   toggleReminderCompleted: (id: string) => Promise<void>;
+  completeAllReminders: () => Promise<void>;
+  completeAllPastPlannedActivities: () => Promise<void>;
   // Import Sales Data
   importSalesData: (
     data: {
@@ -145,6 +176,70 @@ interface CRMContextType {
   activeGuideModuleId: string | null;
   openGuide: (moduleId?: string) => void;
   closeGuide: () => void;
+  // Real-time Excel Synchronization
+  isSyncingExcel: boolean;
+  lastExcelSyncTime: string | null;
+  syncExcelNow: (customProjects?: Project[]) => Promise<{ success: boolean; message: string }>;
+  // Internal Team Chat & Collaboration System
+  conversations: ChatConversation[];
+  messages: ChatMessage[];
+  isChatDrawerOpen: boolean;
+  activeConversationId: string | null;
+  chatUnreadCount: number;
+  draftProjectCard: ChatProjectCard | null;
+  setDraftProjectCard: (card: ChatProjectCard | null) => void;
+  openChat: (conversationId?: string) => void;
+  closeChat: () => void;
+  setActiveConversationId: (conversationId: string | null) => void;
+  sendMessage: (params: {
+    conversationId: string;
+    content: string;
+    mentions?: string[];
+    projectCard?: ChatProjectCard;
+    planTaskCard?: ChatPlanTaskCard;
+    attachments?: ChatAttachment[];
+  }) => Promise<ChatMessage>;
+  markConversationRead: (conversationId: string) => void;
+  createChannel: (name: string, name_ar: string, description: string, participant_ids: string[]) => Promise<ChatConversation>;
+  getOrCreateDM: (targetUserId: string) => ChatConversation;
+  shareProjectToChat: (params: {
+    projectId: string;
+    conversationId?: string;
+    comment?: string;
+  }) => Promise<void>;
+  grantProjectAccessFromChat: (params: {
+    messageId: string;
+    projectId: string;
+    targetUserId: string;
+    targetUserName: string;
+    role?: 'co_sales_engineer' | 'lead_estimator' | 'technical_support' | 'executive_sponsor';
+  }) => Promise<boolean>;
+  sharePlanTaskToChat: (params: {
+    taskId: string;
+    targetUserId: string;
+    comment: string;
+    conversationId?: string;
+  }) => Promise<void>;
+  reschedulePlanTaskFromChat: (params: {
+    messageId: string;
+    taskId: string;
+    daysToAdd?: number;
+  }) => Promise<void>;
+  acknowledgePlanTaskFromChat: (params: {
+    messageId: string;
+    taskId: string;
+    note?: string;
+  }) => Promise<void>;
+  assignTaskFromChatToPlan: (params: {
+    targetUserId: string;
+    title: string;
+    clientName?: string;
+    projectId?: string;
+    plannedDate: string;
+    channel: ActivityChannel;
+    purpose: VisitPurpose;
+    notes?: string;
+  }) => Promise<PlannedActivity>;
 }
 
 import migratedData from '@/lib/data/migrated_data.json';
@@ -161,6 +256,7 @@ const SEED_TAHLIA_PROJECT: Project = {
   primary_contact_phone: '+966551234567',
   location: 'Jeddah - Al Tahlia St.',
   opportunity_type: 'in_hand',
+  closing_date: '2026-11-15',
   pipeline_stage: 'negotiation',
   priority: 'high',
   estimated_value: 5000000,
@@ -188,6 +284,7 @@ const SEED_WON_PROJECT: Project = {
   primary_contact_phone: '+966504443322',
   location: 'Jeddah - King Abdulaziz Rd',
   opportunity_type: 'in_hand',
+  closing_date: '2026-09-30',
   pipeline_stage: 'won',
   priority: 'high',
   estimated_value: 2400000,
@@ -380,7 +477,43 @@ const MAPPED_ACTIVITIES: Activity[] = RAW_ACTIVITIES.map(a => ({
   user_name: a.user_name || 'Eslam Mohandes'
 }));
 
+function extractDateOnly(dateStr?: string | null): string | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const trimmed = dateStr.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match) return match[1];
+  const d = new Date(trimmed);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return null;
+}
+
 const SEED_CURRENT_WEEK_ACTIVITIES: Activity[] = [
+  {
+    id: 'act_curr_tahlia_followup',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    company_id: 'c_tahlia_group',
+    company_name: 'Al Tahlia Commercial Development',
+    contact_id: 'ct_fahad_zahrani',
+    contact_name: 'Eng. Fahad Al-Zahrani',
+    channel: 'call',
+    visit_purpose: 'follow_up',
+    activity_date: '2026-10-20',
+    activity_time: '11:00 AM',
+    notes: 'تم الاتصال بالمهندس فهد لمراجعة التعديلات النهائية على تسعير الواجهات الزجاجية',
+    outcome: 'connected',
+    next_action: 'متابعة استلام أمر الشراء واعتماد الدفعة الأولى',
+    next_follow_up_at: '2026-10-22',
+    user_id: 'u1',
+    user_name: 'Eslam Mohandes',
+    created_at: '2026-10-20T11:00:00Z',
+  },
   {
     id: 'act_tahlia_v4_submittal',
     project_id: 'p_tahlia_business_park',
@@ -396,6 +529,7 @@ const SEED_CURRENT_WEEK_ACTIVITIES: Activity[] = [
     notes: 'Delivered Quotation Revision V4 (SAR 3,620,000) directly to Eng. Fahad and discussed board approval milestones.',
     outcome: 'quotation_sent',
     next_action: 'Negotiate final commercial terms on Quotation V4 with Executive Board',
+    next_follow_up_at: '2026-09-21',
     user_id: 'u1',
     user_name: 'Eslam Mohandes',
     created_at: '2026-09-19T16:00:00Z',
@@ -415,15 +549,45 @@ const SEED_CURRENT_WEEK_ACTIVITIES: Activity[] = [
     notes: 'Phone call to confirm receipt of submittal package by commercial director. Board review scheduled for Wednesday.',
     outcome: 'connected',
     next_action: 'Prepare technical comparison sheet before board meeting',
+    next_follow_up_at: '2026-09-23',
     user_id: 'u1',
     user_name: 'Eslam Mohandes',
     created_at: '2026-09-20T11:30:00Z',
   }
 ];
 
+const SEED_CURRENT_WEEK_PLANS: PlannedActivity[] = [
+  {
+    id: 'plan_fu_act_curr_tahlia_followup',
+    weekly_plan_id: 'wp_2026-10',
+    user_id: 'u1',
+    user_name: 'Eslam Mohandes',
+    project_id: 'p_tahlia_business_park',
+    project_name: 'Al Tahlia Business Park',
+    company_id: 'c_tahlia_group',
+    company_name: 'Al Tahlia Commercial Development',
+    contact_id: 'ct_fahad_zahrani',
+    contact_name: 'Eng. Fahad Al-Zahrani',
+    scheduled_date: '2026-10-22',
+    time_slot: '11:00 AM',
+    channel: 'call',
+    visit_purpose: 'follow_up',
+    goal: 'متابعة استلام أمر الشراء واعتماد الدفعة الأولى',
+    priority: 'high',
+    status: 'planned',
+    is_follow_up: true,
+    follow_up_from_activity_id: 'act_curr_tahlia_followup',
+    created_at: '2026-10-20T11:00:00Z',
+    updated_at: '2026-10-20T11:00:00Z',
+  }
+];
+
 const INITIAL_ACTIVITIES: Activity[] = [...SEED_CURRENT_WEEK_ACTIVITIES, ...MAPPED_ACTIVITIES];
 
-const INITIAL_PLANNED_ACTIVITIES: PlannedActivity[] = (migratedData.plannedActivities as unknown as PlannedActivity[]) || [];
+const INITIAL_PLANNED_ACTIVITIES: PlannedActivity[] = [
+  ...SEED_CURRENT_WEEK_PLANS,
+  ...((migratedData.plannedActivities as unknown as PlannedActivity[]) || [])
+];
 
 import { SEEDED_USERS } from '@/lib/constants/users';
 import { authRepository } from '@/lib/repo/local/auth';
@@ -434,7 +598,7 @@ export const INITIAL_TEAM_MEMBERS: Profile[] = [
     id: 'u1',
     email: 'eslam.almohandes@almespar.com',
     full_name: 'Eslam Al-Mohandes',
-    title: 'Senior Sales Engineer',
+    title: 'Sales Engineer',
     role: 'sales_engineer',
     phone: '966500000001',
     territory: 'Western Region (Jeddah, Makkah, Medina)',
@@ -457,14 +621,14 @@ export const INITIAL_TEAM_MEMBERS: Profile[] = [
   {
     id: 'u3',
     email: 'ar.alkaffas@almespar.com',
-    full_name: 'Abdurahman Al-Kaffas',
-    title: 'Regional Sales Manager',
-    role: 'sales_manager',
+    full_name: 'Abdelrahman El-Qaffas',
+    title: 'Commercial Director & Managing Partner',
+    role: 'admin',
     phone: '966500000003',
     territory: 'Kingdom-Wide (KSA)',
     monthly_target_sar: 2500000,
     created_at: '2026-01-01',
-    avatar_initials: 'AK'
+    avatar_initials: 'AQ'
   },
   {
     id: 'u4',
@@ -510,7 +674,24 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('crmate_team_members');
       if (saved) {
-        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+        try { 
+          const parsed: Profile[] = JSON.parse(saved);
+          parsed.forEach(m => {
+            if (m.id === 'u1') {
+              m.role = 'sales_engineer';
+              m.title = 'Sales Engineer';
+              m.territory = 'Western Region (Jeddah, Makkah, Medina)';
+            }
+            if (m.id === 'u3') {
+              m.full_name = 'Abdelrahman El-Qaffas';
+              m.role = 'admin';
+              m.title = 'Commercial Director & Managing Partner';
+              m.territory = 'Kingdom-Wide (KSA)';
+              m.avatar_initials = 'AQ';
+            }
+          });
+          return parsed;
+        } catch (e) { /* fallback */ }
       }
     }
     return INITIAL_TEAM_MEMBERS;
@@ -669,18 +850,27 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addTeamMember = async (memberData: Omit<Profile, 'id' | 'created_at'>): Promise<Profile> => {
+  const addTeamMember = async (memberData: Omit<Profile, 'id' | 'created_at'> & { id?: string }): Promise<Profile> => {
     const newMember: Profile = {
       ...memberData,
-      id: `u${Date.now()}`,
+      id: memberData.id || `u${Date.now()}`,
       created_at: new Date().toISOString().split('T')[0]
     };
-    const updated = [...teamMembers, newMember];
+    const updated = [...teamMembers.filter(m => m.id !== newMember.id), newMember];
     setTeamMembers(updated);
     if (typeof window !== 'undefined') {
       localStorage.setItem('crmate_team_members', JSON.stringify(updated));
     }
     return newMember;
+  };
+
+  const deleteTeamMember = async (userId: string): Promise<void> => {
+    authRepository.deleteUser(userId);
+    const updated = teamMembers.filter(m => m.id !== userId);
+    setTeamMembers(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('crmate_team_members', JSON.stringify(updated));
+    }
   };
 
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -733,14 +923,23 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       const submittal_status = p.submittal_status || (pipeline_stage === 'technical_submission' ? 'under_approval' : pipeline_stage === 'negotiation' ? 'approved' : undefined);
       const client_target_price = p.client_target_price || (pipeline_stage === 'negotiation' ? Math.round((p.estimated_value || 100000) * 0.92) : undefined);
       const last_discount_pct = p.last_discount_pct ?? (pipeline_stage === 'negotiation' ? 8 : undefined);
+      const systems = p.systems && p.systems.length > 0 
+        ? p.systems 
+        : (rfq_packages === 'lc' ? ['Lighting Control'] : rfq_packages === 'bms' ? ['BMS / BAS'] : rfq_packages === 'both' ? ['BMS / BAS', 'Lighting Control'] : []);
+
+      const closing_date = p.closing_date || (p.opportunity_type === 'in_hand' ? (p.expected_award_date || '2026-11-30') : undefined);
 
       return { 
         ...p, 
         pipeline_stage: pipeline_stage as PipelineStage,
+        closing_date,
         rfq_packages,
+        systems,
         submittal_status,
+        submittal_sent_at: p.submittal_sent_at || ((pipeline_stage === 'technical_submission' || pipeline_stage === 'technically_approved' || pipeline_stage === 'negotiation' || pipeline_stage === 'won') ? (p.stage_entered_at || p.updated_at || p.created_at) : undefined),
         client_target_price,
         last_discount_pct,
+        contact_ids: p.contact_ids || (p.primary_contact_id ? [p.primary_contact_id] : []),
         card_color: card_color || 'default',
         base_card_color: base_card_color || (card_color !== 'emerald' && card_color !== 'rose' ? card_color : 'default'),
         owner_id: p.owner_id || 'u1', 
@@ -752,11 +951,124 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     });
   });
 
-  useEffect(() => {
+  const [isSyncingExcel, setIsSyncingExcel] = useState(false);
+  const [lastExcelSyncTime, setLastExcelSyncTime] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('al_mespar_projects', JSON.stringify(projects));
+      return localStorage.getItem('al_mespar_last_excel_sync');
     }
+    return null;
+  });
+
+  const isSyncingExcelRef = React.useRef(false);
+  const syncExcelNow = async (projectsToSync?: Project[]): Promise<{ success: boolean; message: string }> => {
+    const list = projectsToSync || projects;
+    if (!list || list.length === 0) {
+      return { success: false, message: 'No projects to sync' };
+    }
+    if (isSyncingExcelRef.current) {
+      return { success: false, message: 'Sync already in progress' };
+    }
+    isSyncingExcelRef.current = true;
+    setIsSyncingExcel(true);
+    try {
+      const session = authRepository.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (session?.token) {
+        headers['Authorization'] = `Bearer ${session.token}`;
+      }
+      const res = await fetch('/api/sync-excel', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ projects: list })
+      });
+      const data = await res.json();
+      if (res.status === 401) {
+        return { success: false, message: 'Authentication required to sync Excel' };
+      }
+      if (res.status === 403) {
+        return { success: false, message: 'Forbidden: Insufficient permissions to sync Excel' };
+      }
+      if (data.success) {
+        const timeStr = data.displayTime || new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+        setLastExcelSyncTime(timeStr);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('al_mespar_last_excel_sync', timeStr);
+          } catch (e) {}
+        }
+        return { success: true, message: data.message };
+      } else {
+        return { success: false, message: data.error || 'Failed to sync with Excel' };
+      }
+    } catch (err: any) {
+      console.error('Error syncing Excel:', err);
+      return { success: false, message: err?.message || 'Network error' };
+    } finally {
+      isSyncingExcelRef.current = false;
+      setIsSyncingExcel(false);
+    }
+  };
+
+  // State refs for durable flush on page unload
+  const projectsRef = React.useRef(projects);
+  projectsRef.current = projects;
+  const isInitialProjectsMount = React.useRef(true);
+
+  // Synchronize server-side session in development/testing if token is legacy or absent
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const session = authRepository.getSession();
+    const isExplicitlyLoggedOut = localStorage.getItem('crmate_explicit_logout') === 'true';
+    if (!isExplicitlyLoggedOut && (!session?.token || session.token.startsWith('auto_session_') || session.token.startsWith('token_'))) {
+      fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ devAutoSession: true })
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.token) {
+          const current = authRepository.getSession();
+          if (current) {
+            current.token = data.token;
+            localStorage.setItem('al_mespar_session', JSON.stringify(current));
+          }
+        }
+      })
+      .catch(() => {});
+    }
+  }, []);
+
+  // Autosave to Excel on project changes (Debounced 2500ms) & Debounced localStorage batch
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Debounced localStorage write (350ms) to prevent micro-lag during drag & drop
+    const lsTimer = setTimeout(() => {
+      try {
+        localStorage.setItem('al_mespar_projects', JSON.stringify(projects));
+      } catch (e) {
+        console.warn('LocalStorage save error for projects:', e);
+      }
+    }, 350);
+
+    // Avoid autosaving to Excel on initial mount
+    if (isInitialProjectsMount.current) {
+      isInitialProjectsMount.current = false;
+      return () => clearTimeout(lsTimer);
+    }
+
+    // Debounced Excel sync (2500ms)
+    const excelTimer = setTimeout(() => {
+      syncExcelNow(projects).catch(() => {});
+    }, 2500);
+
+    return () => {
+      clearTimeout(lsTimer);
+      clearTimeout(excelTimer);
+    };
   }, [projects]);
+
   const [contacts, setContacts] = useState<Contact[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('al_mespar_contacts');
@@ -767,10 +1079,17 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return INITIAL_CONTACTS;
   });
 
+  const contactsRef = React.useRef(contacts);
+  contactsRef.current = contacts;
+
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('al_mespar_contacts', JSON.stringify(contacts));
-    }
+    if (typeof window === 'undefined') return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem('al_mespar_contacts', JSON.stringify(contacts));
+      } catch (e) {}
+    }, 350);
+    return () => clearTimeout(timer);
   }, [contacts]);
 
   const [companies, setCompanies] = useState<Company[]>(() => {
@@ -783,10 +1102,17 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return INITIAL_COMPANIES;
   });
 
+  const companiesRef = React.useRef(companies);
+  companiesRef.current = companies;
+
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('al_mespar_companies', JSON.stringify(companies));
-    }
+    if (typeof window === 'undefined') return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem('al_mespar_companies', JSON.stringify(companies));
+      } catch (e) {}
+    }, 350);
+    return () => clearTimeout(timer);
   }, [companies]);
 
   const sortedCompanies = useMemo(() => {
@@ -794,6 +1120,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base', numeric: true })
     );
   }, [companies]);
+
   const [activities, setActivities] = useState<Activity[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('al_mespar_activities');
@@ -801,8 +1128,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         try { 
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const hasTahliaAct = parsed.some((a: any) => a.id === 'act_tahlia_v4_submittal');
-            return hasTahliaAct ? parsed : [...SEED_CURRENT_WEEK_ACTIVITIES, ...parsed];
+            const missingSeed = SEED_CURRENT_WEEK_ACTIVITIES.filter(s => !parsed.some((a: any) => a.id === s.id));
+            return missingSeed.length > 0 ? [...missingSeed, ...parsed] : parsed;
           }
         } catch (e) { /* fallback */ }
       }
@@ -810,13 +1137,128 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return INITIAL_ACTIVITIES;
   });
 
+  const activitiesRef = React.useRef(activities);
+  activitiesRef.current = activities;
+
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('al_mespar_activities', JSON.stringify(activities));
-    }
+    if (typeof window === 'undefined') return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem('al_mespar_activities', JSON.stringify(activities));
+      } catch (e) {}
+    }, 350);
+    return () => clearTimeout(timer);
   }, [activities]);
 
-  const [plannedActivities, setPlannedActivities] = useState<PlannedActivity[]>(INITIAL_PLANNED_ACTIVITIES);
+  const [plannedActivities, setPlannedActivities] = useState<PlannedActivity[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('al_mespar_planned_activities');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const missingSeed = SEED_CURRENT_WEEK_PLANS.filter(s => !parsed.some((p: any) => p.id === s.id));
+            return missingSeed.length > 0 ? [...missingSeed, ...parsed] : parsed;
+          }
+        } catch (e) { /* fallback */ }
+      }
+    }
+    return INITIAL_PLANNED_ACTIVITIES;
+  });
+
+  const plannedActivitiesRef = React.useRef(plannedActivities);
+  plannedActivitiesRef.current = plannedActivities;
+
+  // Synchronize follow-up planned activities from all activities on mount
+  useEffect(() => {
+    if (!activities || activities.length === 0) return;
+
+    setPlannedActivities(prev => {
+      let hasChanges = false;
+      const currentPlans = [...prev];
+
+      activities.forEach(act => {
+        if (!act.next_action?.trim() || !act.next_follow_up_at?.trim()) return;
+        const targetDate = extractDateOnly(act.next_follow_up_at);
+        if (!targetDate) return;
+
+        // Check if a planned activity already corresponds to this follow-up
+        const matchIdx = currentPlans.findIndex(p => 
+          p.follow_up_from_activity_id === act.id ||
+          (p.scheduled_date === targetDate && (
+            (act.project_id && p.project_id === act.project_id) ||
+            (p.goal && p.goal.trim() === act.next_action?.trim())
+          ))
+        );
+
+        if (matchIdx >= 0) {
+          const existing = currentPlans[matchIdx];
+          if (!existing.is_follow_up || existing.follow_up_from_activity_id !== act.id || existing.scheduled_date !== targetDate || existing.goal !== act.next_action.trim()) {
+            currentPlans[matchIdx] = {
+              ...existing,
+              scheduled_date: targetDate,
+              is_follow_up: true,
+              follow_up_from_activity_id: act.id,
+              goal: act.next_action.trim(),
+              project_id: act.project_id || existing.project_id,
+              project_name: act.project_name || existing.project_name,
+              company_id: act.company_id || existing.company_id,
+              company_name: act.company_name || existing.company_name,
+              contact_id: act.contact_id || existing.contact_id,
+              contact_name: act.contact_name || existing.contact_name,
+            };
+            hasChanges = true;
+          }
+        } else {
+          currentPlans.unshift({
+            id: 'plan_fu_' + act.id,
+            weekly_plan_id: 'wp_' + targetDate.substring(0, 7),
+            user_id: act.user_id || 'u1',
+            user_name: act.user_name || 'Eslam Mohandes',
+            project_id: act.project_id,
+            project_name: act.project_name,
+            company_id: act.company_id,
+            company_name: act.company_name,
+            contact_id: act.contact_id,
+            contact_name: act.contact_name,
+            location_name: act.location_name,
+            google_maps_url: act.google_maps_url,
+            scheduled_date: targetDate,
+            time_slot: act.activity_time || '10:00 AM',
+            channel: act.channel || 'call',
+            visit_purpose: 'follow_up',
+            goal: act.next_action.trim(),
+            priority: (act.priority || 'high') as ProjectPriority,
+            status: 'planned',
+            is_follow_up: true,
+            follow_up_from_activity_id: act.id,
+            created_at: act.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(currentPlans)); } catch (e) {}
+        }
+        return currentPlans;
+      }
+      return prev;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem('al_mespar_planned_activities', JSON.stringify(plannedActivities));
+      } catch (e) {}
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [plannedActivities]);
+
   const [quotations, setQuotations] = useState<Quotation[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('al_mespar_quotations');
@@ -834,11 +1276,19 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return INITIAL_QUOTATIONS;
   });
 
+  const quotationsRef = React.useRef(quotations);
+  quotationsRef.current = quotations;
+
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('al_mespar_quotations', JSON.stringify(quotations));
-    }
+    if (typeof window === 'undefined') return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem('al_mespar_quotations', JSON.stringify(quotations));
+      } catch (e) {}
+    }, 350);
+    return () => clearTimeout(timer);
   }, [quotations]);
+
   const [salesTargets, setSalesTargets] = useState<SalesTarget[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('al_mespar_sales_targets');
@@ -849,9 +1299,17 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return INITIAL_TARGETS;
   });
 
+  const salesTargetsRef = React.useRef(salesTargets);
+  salesTargetsRef.current = salesTargets;
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('al_mespar_sales_targets', JSON.stringify(salesTargets));
+      const timer = setTimeout(() => {
+        try {
+          localStorage.setItem('al_mespar_sales_targets', JSON.stringify(salesTargets));
+        } catch (e) {}
+      }, 350);
+      return () => clearTimeout(timer);
     }
   }, [salesTargets]);
 
@@ -870,11 +1328,51 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return [];
   });
 
+  const remindersRef = React.useRef(reminders);
+  remindersRef.current = reminders;
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('al_mespar_reminders', JSON.stringify(reminders));
+      const timer = setTimeout(() => {
+        try {
+          localStorage.setItem('al_mespar_reminders', JSON.stringify(reminders));
+        } catch (e) {}
+      }, 350);
+      return () => clearTimeout(timer);
     }
   }, [reminders]);
+
+  // Flush any pending updates immediately on tab close or background switch
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const flushAllToLocalStorage = () => {
+      try {
+        if (projectsRef.current) localStorage.setItem('al_mespar_projects', JSON.stringify(projectsRef.current));
+        if (contactsRef.current) localStorage.setItem('al_mespar_contacts', JSON.stringify(contactsRef.current));
+        if (companiesRef.current) localStorage.setItem('al_mespar_companies', JSON.stringify(companiesRef.current));
+        if (activitiesRef.current) localStorage.setItem('al_mespar_activities', JSON.stringify(activitiesRef.current));
+        if (plannedActivitiesRef.current) localStorage.setItem('al_mespar_planned_activities', JSON.stringify(plannedActivitiesRef.current));
+        if (quotationsRef.current) localStorage.setItem('al_mespar_quotations', JSON.stringify(quotationsRef.current));
+        if (salesTargetsRef.current) localStorage.setItem('al_mespar_sales_targets', JSON.stringify(salesTargetsRef.current));
+        if (remindersRef.current) localStorage.setItem('al_mespar_reminders', JSON.stringify(remindersRef.current));
+      } catch (e) {
+        console.warn('Failed to flush storage on unload:', e);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushAllToLocalStorage();
+      }
+    };
+
+    window.addEventListener('beforeunload', flushAllToLocalStorage);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', flushAllToLocalStorage);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const [reminderModalState, setReminderModalState] = useState<ReminderModalState>({ isOpen: false });
 
@@ -959,6 +1457,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
               : `مرت 3 أيام على إرسال عرض السعر لمشروع "${p.name}". يرجى التحقق من استلام العميل للعرض ومراجعته للشروط.`;
 
             createNotification({
+              id: notifId,
               user_id: p.owner_id || 'u1',
               type: 'reminder_due',
               category: 'reminder',
@@ -1077,6 +1576,16 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     contactId?: string;
     plannedActivityId?: string;
     defaultGoal?: string;
+    initialDate?: string;
+    initialTime?: string;
+    defaultChannel?: ActivityChannel;
+    defaultPurpose?: VisitPurpose;
+    initialTargetMode?: 'existing_project' | 'custom_project' | 'area_hunting';
+    initialCustomProjectName?: string;
+    initialCompanyName?: string;
+    initialLocationName?: string;
+    initialGoogleMapsUrl?: string;
+    initialPriority?: ProjectPriority;
   }) => {
     setFastLogState({
       isOpen: true,
@@ -1084,6 +1593,16 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       contactId: options?.contactId,
       plannedActivityId: options?.plannedActivityId,
       defaultGoal: options?.defaultGoal,
+      initialDate: options?.initialDate,
+      initialTime: options?.initialTime,
+      defaultChannel: options?.defaultChannel,
+      defaultPurpose: options?.defaultPurpose,
+      initialTargetMode: options?.initialTargetMode,
+      initialCustomProjectName: options?.initialCustomProjectName,
+      initialCompanyName: options?.initialCompanyName,
+      initialLocationName: options?.initialLocationName,
+      initialGoogleMapsUrl: options?.initialGoogleMapsUrl,
+      initialPriority: options?.initialPriority,
     });
   };
 
@@ -1155,18 +1674,156 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       }));
     }
 
+    // Auto-schedule Follow-Up into Weekly Plan if next_action and next_follow_up_at exist
+    if (newActivity.next_action?.trim() && newActivity.next_follow_up_at?.trim()) {
+      const scheduledDate = extractDateOnly(newActivity.next_follow_up_at);
+      if (scheduledDate) {
+        const proj = projectsRef.current?.find(p => p.id === newActivity.project_id);
+        const comp = companiesRef.current?.find(c => c.id === (newActivity.company_id || proj?.company_id));
+        const contactId = newActivity.contact_id || proj?.primary_contact_id || proj?.contact_ids?.[0];
+        const cont = contactsRef.current?.find(c => c.id === contactId);
+
+        const followUpPlan: PlannedActivity = {
+          id: 'plan_fu_' + newActivity.id,
+          weekly_plan_id: 'wp_' + scheduledDate.substring(0, 7),
+          user_id: newActivity.user_id || currentUser?.id || 'u1',
+          user_name: newActivity.user_name || currentUser?.full_name || 'Eslam Mohandes',
+          project_id: newActivity.project_id,
+          project_name: newActivity.project_name || proj?.name,
+          company_id: newActivity.company_id || proj?.company_id || comp?.id,
+          company_name: newActivity.company_name || proj?.company_name || comp?.name,
+          contact_id: contactId,
+          contact_name: newActivity.contact_name || proj?.primary_contact_name || cont?.full_name,
+          location_name: newActivity.location_name || proj?.location,
+          google_maps_url: newActivity.google_maps_url,
+          scheduled_date: scheduledDate,
+          time_slot: newActivity.activity_time || '10:00 AM',
+          channel: newActivity.channel || 'call',
+          visit_purpose: 'follow_up',
+          goal: newActivity.next_action.trim(),
+          priority: (newActivity.priority || proj?.priority || 'high') as ProjectPriority,
+          status: 'planned',
+          is_follow_up: true,
+          follow_up_from_activity_id: newActivity.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        setPlannedActivities(prev => {
+          const filtered = prev.filter(p => p.follow_up_from_activity_id !== newActivity.id);
+          const updated = [followUpPlan, ...filtered];
+          if (typeof window !== 'undefined') {
+            try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+          }
+          return updated;
+        });
+      }
+    }
+
     return newActivity;
   };
 
   const updateActivity = async (id: string, updates: Partial<Activity>) => {
-    setActivities(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    let updatedAct: Activity | undefined;
+    setActivities(prev => {
+      const next = prev.map(a => {
+        if (a.id === id) {
+          updatedAct = { ...a, ...updates };
+          return updatedAct;
+        }
+        return a;
+      });
+      return next;
+    });
+
+    setPlannedActivities(prev => {
+      const act = updatedAct || activitiesRef.current?.find(a => a.id === id);
+      const nextAction = (updates.next_action !== undefined ? updates.next_action : act?.next_action)?.trim();
+      const rawDate = updates.next_follow_up_at !== undefined ? updates.next_follow_up_at : act?.next_follow_up_at;
+      const scheduledDate = extractDateOnly(rawDate);
+
+      const existingIdx = prev.findIndex(p => p.follow_up_from_activity_id === id);
+
+      if (nextAction && scheduledDate) {
+        const proj = projectsRef.current?.find(p => p.id === (updates.project_id || act?.project_id));
+        const comp = companiesRef.current?.find(c => c.id === (updates.company_id || act?.company_id || proj?.company_id));
+        const contactId = updates.contact_id || act?.contact_id || proj?.primary_contact_id || proj?.contact_ids?.[0];
+        const cont = contactsRef.current?.find(c => c.id === contactId);
+
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            goal: nextAction,
+            scheduled_date: scheduledDate,
+            is_follow_up: true,
+            project_id: updates.project_id || act?.project_id || updated[existingIdx].project_id,
+            project_name: updates.project_name || act?.project_name || proj?.name || updated[existingIdx].project_name,
+            company_id: updates.company_id || act?.company_id || comp?.id || updated[existingIdx].company_id,
+            company_name: updates.company_name || act?.company_name || comp?.name || updated[existingIdx].company_name,
+            contact_id: contactId || updated[existingIdx].contact_id,
+            contact_name: updates.contact_name || act?.contact_name || proj?.primary_contact_name || cont?.full_name || updated[existingIdx].contact_name,
+            updated_at: new Date().toISOString(),
+          };
+          if (typeof window !== 'undefined') {
+            try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+          }
+          return updated;
+        } else {
+          const followUpPlan: PlannedActivity = {
+            id: 'plan_fu_' + id,
+            weekly_plan_id: 'wp_' + scheduledDate.substring(0, 7),
+            user_id: act?.user_id || currentUser?.id || 'u1',
+            user_name: act?.user_name || currentUser?.full_name || 'Eslam Mohandes',
+            project_id: updates.project_id || act?.project_id,
+            project_name: updates.project_name || act?.project_name || proj?.name,
+            company_id: updates.company_id || act?.company_id || comp?.id,
+            company_name: updates.company_name || act?.company_name || comp?.name,
+            contact_id: contactId,
+            contact_name: updates.contact_name || act?.contact_name || proj?.primary_contact_name || cont?.full_name,
+            location_name: updates.location_name || act?.location_name || proj?.location,
+            google_maps_url: updates.google_maps_url || act?.google_maps_url,
+            scheduled_date: scheduledDate,
+            time_slot: updates.activity_time || act?.activity_time || '10:00 AM',
+            channel: updates.channel || act?.channel || 'call',
+            visit_purpose: 'follow_up',
+            goal: nextAction,
+            priority: (updates.priority || act?.priority || proj?.priority || 'high') as ProjectPriority,
+            status: 'planned',
+            is_follow_up: true,
+            follow_up_from_activity_id: id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          const updated = [followUpPlan, ...prev];
+          if (typeof window !== 'undefined') {
+            try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+          }
+          return updated;
+        }
+      } else if (existingIdx >= 0 && (!nextAction || !scheduledDate)) {
+        const updated = prev.filter(p => p.follow_up_from_activity_id !== id);
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+        }
+        return updated;
+      }
+      return prev;
+    });
   };
 
   const deleteActivity = async (id: string) => {
     setActivities(prev => prev.filter(a => a.id !== id));
+    setPlannedActivities(prev => {
+      const updated = prev.filter(p => p.follow_up_from_activity_id !== id);
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+      }
+      return updated;
+    });
   };
 
-  const addProject = async (projData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'>): Promise<Project> => {
+  const addProject = async (projData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'> & { created_at?: string }): Promise<Project> => {
     const weighted = (projData.estimated_value * projData.probability) / 100;
     const stageColor = projData.pipeline_stage === 'won' ? 'emerald' : projData.pipeline_stage === 'lost' ? 'rose' : (projData.card_color || 'default');
     
@@ -1176,23 +1833,46 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     const client_target_price = projData.client_target_price || (projData.pipeline_stage === 'negotiation' ? Math.round((projData.estimated_value || 100000) * 0.92) : undefined);
     const last_discount_pct = projData.last_discount_pct ?? (projData.pipeline_stage === 'negotiation' ? 8 : undefined);
 
+    const nowIso = new Date().toISOString();
+    let initialCreatedAt = nowIso;
+    if (projData.created_at) {
+      const parsed = new Date(projData.created_at);
+      if (!isNaN(parsed.getTime())) {
+        initialCreatedAt = parsed.toISOString();
+      }
+    }
+
     const newProj: Project = {
       ...projData,
       rfq_packages,
+      systems: projData.systems || (rfq_packages === 'lc' ? ['Lighting Control'] : rfq_packages === 'bms' ? ['BMS / BAS'] : rfq_packages === 'both' ? ['BMS / BAS', 'Lighting Control'] : []),
       submittal_status,
+      submittal_sent_at: projData.submittal_sent_at || (projData.pipeline_stage === 'technical_submission' ? initialCreatedAt : undefined),
       client_target_price,
       last_discount_pct,
       card_color: stageColor,
       base_card_color: projData.base_card_color || (projData.card_color && projData.card_color !== 'emerald' && projData.card_color !== 'rose' ? projData.card_color : 'default'),
       id: 'p_' + Date.now(),
       weighted_value: weighted,
-      stage_entered_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      stage_entered_at: initialCreatedAt,
+      created_at: initialCreatedAt,
+      updated_at: nowIso,
     };
     const { health, daysOverdue } = computeProjectHealth(newProj);
     const hydrated = { ...newProj, calculated_health: health, days_overdue: daysOverdue };
     setProjects(prev => [hydrated, ...prev]);
+
+    // Bidirectional sync: link assigned contacts to this new project
+    if (newProj.contact_ids && newProj.contact_ids.length > 0) {
+      const assignedIds = new Set(newProj.contact_ids);
+      setContacts(prev => prev.map(c => {
+        if (!assignedIds.has(c.id)) return c;
+        const currentProjects = new Set(c.project_ids || []);
+        currentProjects.add(hydrated.id);
+        return { ...c, project_ids: Array.from(currentProjects) };
+      }));
+    }
+
     return hydrated;
   };
 
@@ -1237,6 +1917,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           if (!p.rfq_packages && !updates.rfq_packages) stageDefaults.rfq_packages = 'both';
         } else if (targetStage === 'technical_submission') {
           if (!p.submittal_status && !updates.submittal_status) stageDefaults.submittal_status = 'under_approval';
+          if (!p.submittal_sent_at && !updates.submittal_sent_at) stageDefaults.submittal_sent_at = new Date().toISOString();
         } else if (targetStage === 'negotiation') {
           stageDefaults.submittal_status = 'approved';
           if (!p.client_target_price && !updates.client_target_price) {
@@ -1260,6 +1941,24 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       const { health, daysOverdue } = computeProjectHealth(updated);
       return { ...updated, calculated_health: health, days_overdue: daysOverdue };
     }));
+
+    // Bidirectional sync with contacts if contact_ids was updated:
+    if (updates.contact_ids !== undefined) {
+      const newContactIds = new Set(updates.contact_ids);
+      setContacts(prev => prev.map(c => {
+        const hasContact = newContactIds.has(c.id);
+        const currentProjects = new Set(c.project_ids || []);
+        const hadProject = currentProjects.has(id);
+        if (hasContact && !hadProject) {
+          currentProjects.add(id);
+          return { ...c, project_ids: Array.from(currentProjects) };
+        } else if (!hasContact && hadProject) {
+          currentProjects.delete(id);
+          return { ...c, project_ids: Array.from(currentProjects) };
+        }
+        return c;
+      }));
+    }
   };
 
   const referProject = async (projectId: string, targetUserId: string) => {
@@ -1339,6 +2038,18 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       updated_at: new Date().toISOString(),
     };
     setContacts(prev => [newContact, ...prev]);
+
+    // Bidirectional sync: link assigned projects to this new contact
+    if (contactData.project_ids && contactData.project_ids.length > 0) {
+      const assignedProjectIds = new Set(contactData.project_ids);
+      setProjects(prev => prev.map(p => {
+        if (!assignedProjectIds.has(p.id)) return p;
+        const currentContacts = new Set(p.contact_ids || (p.primary_contact_id ? [p.primary_contact_id] : []));
+        currentContacts.add(newContact.id);
+        return { ...p, contact_ids: Array.from(currentContacts) };
+      }));
+    }
+
     return newContact;
   };
 
@@ -1361,16 +2072,34 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    setPlannedActivities(prev => [newPlan, ...prev]);
+    setPlannedActivities(prev => {
+      const updated = [newPlan, ...prev];
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+      }
+      return updated;
+    });
     return newPlan;
   };
 
   const updatePlannedActivity = async (id: string, updates: Partial<PlannedActivity>) => {
-    setPlannedActivities(prev => prev.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p));
+    setPlannedActivities(prev => {
+      const updated = prev.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p);
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+      }
+      return updated;
+    });
   };
 
   const deletePlannedActivity = async (id: string) => {
-    setPlannedActivities(prev => prev.filter(p => p.id !== id));
+    setPlannedActivities(prev => {
+      const updated = prev.filter(p => p.id !== id);
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+      }
+      return updated;
+    });
   };
 
   const completePlannedActivity = async (plannedId: string, activityData: Omit<Activity, 'id' | 'created_at' | 'planned_activity_id'>) => {
@@ -1379,19 +2108,43 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       planned_activity_id: plannedId,
     });
 
-    setPlannedActivities(prev => prev.map(p => {
-      if (p.id !== plannedId) return p;
-      return {
-        ...p,
-        status: 'completed',
-        completed_activity_id: createdAct.id,
-        updated_at: new Date().toISOString(),
-      };
-    }));
+    setPlannedActivities(prev => {
+      const updated = prev.map(p => {
+        if (p.id !== plannedId) return p;
+        return {
+          ...p,
+          status: 'completed' as const,
+          completed_activity_id: createdAct.id,
+          updated_at: new Date().toISOString(),
+        };
+      });
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated)); } catch (e) {}
+      }
+      return updated;
+    });
   };
 
   const updateContact = async (id: string, updates: Partial<Contact>) => {
     setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c));
+
+    // Bidirectional sync with projects if project_ids was updated:
+    if (updates.project_ids !== undefined) {
+      const newProjectIds = new Set(updates.project_ids);
+      setProjects(prev => prev.map(p => {
+        const hasProject = newProjectIds.has(p.id);
+        const currentContacts = new Set(p.contact_ids || (p.primary_contact_id ? [p.primary_contact_id] : []));
+        const hadContact = currentContacts.has(id);
+        if (hasProject && !hadContact) {
+          currentContacts.add(id);
+          return { ...p, contact_ids: Array.from(currentContacts) };
+        } else if (!hasProject && hadContact) {
+          currentContacts.delete(id);
+          return { ...p, contact_ids: Array.from(currentContacts) };
+        }
+        return p;
+      }));
+    }
   };
 
   const deleteContact = async (id: string) => {
@@ -1676,6 +2429,54 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       };
     }));
   };
+
+  const completeAllReminders = async () => {
+    setReminders(prev => prev.map(r => ({
+      ...r,
+      is_completed: true,
+      completed_at: r.completed_at || new Date().toISOString(),
+      notified: true
+    })));
+    // Also mark all reminder notifications as read in storage and state
+    const allNotifs = getAllNotifications();
+    const updated = allNotifs.map(n => {
+      if (
+        n.category === 'reminder' ||
+        n.type === 'reminder_due' ||
+        n.reference_type === 'reminder' ||
+        n.id?.startsWith('notif_quote_')
+      ) {
+        return { ...n, is_read: true };
+      }
+      return n;
+    });
+    saveNotifications(updated);
+    setNotifications(updated);
+  };
+
+  const completeAllPastPlannedActivities = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const nowIso = new Date().toISOString();
+    setPlannedActivities(prev => {
+      const updated = prev.map(p => {
+        if (p.status === 'planned' && p.scheduled_date && p.scheduled_date < today) {
+          return {
+            ...p,
+            status: 'completed' as const,
+            completed_at: nowIso,
+            updated_at: nowIso
+          };
+        }
+        return p;
+      });
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('al_mespar_planned_activities', JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
+  };
   // --- End Reminder CRUD Methods ---
 
   // --- Sales Data Importer & Merging Engine ---
@@ -1864,96 +2665,667 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // INTERNAL CHAT & COLLABORATION SYSTEM
+  // ═══════════════════════════════════════════════════════════
+  const [conversations, setConversations] = useState<ChatConversation[]>(() => getStoredConversations());
+  const [messages, setMessages] = useState<ChatMessage[]>(() => getStoredMessages());
+  const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>('chan_west');
+  const [draftProjectCard, setDraftProjectCard] = useState<ChatProjectCard | null>(null);
+
+  // Independent Chat Unread Counter:
+  // Strictly counts only unread messages where the current user is a participant and not the sender
+  const chatUnreadCount = useMemo(() => {
+    const userConversationIds = new Set(
+      conversations.filter(c => c.participant_ids.includes(currentUser.id)).map(c => c.id)
+    );
+    return messages.filter(
+      m => userConversationIds.has(m.conversation_id) &&
+           m.sender_id !== currentUser.id &&
+           (!m.read_by || !m.read_by.includes(currentUser.id))
+    ).length;
+  }, [conversations, messages, currentUser.id]);
+
+  const markConversationRead = (conversationId: string) => {
+    setMessages(prev => {
+      let changed = false;
+      const next = prev.map(m => {
+        if (m.conversation_id === conversationId && (!m.read_by || !m.read_by.includes(currentUser.id))) {
+          changed = true;
+          return {
+            ...m,
+            read_by: [...(m.read_by || []), currentUser.id]
+          };
+        }
+        return m;
+      });
+      if (changed) {
+        saveStoredMessages(next);
+      }
+      return next;
+    });
+  };
+
+  const openChat = (conversationId?: string) => {
+    if (conversationId) {
+      setActiveConversationId(conversationId);
+      markConversationRead(conversationId);
+    } else if (activeConversationId) {
+      markConversationRead(activeConversationId);
+    }
+    setIsChatDrawerOpen(true);
+  };
+
+  const closeChat = () => {
+    setIsChatDrawerOpen(false);
+  };
+
+  const getOrCreateDM = (targetUserId: string): ChatConversation => {
+    const existing = conversations.find(
+      c => c.type === 'direct' &&
+           c.participant_ids.length === 2 &&
+           c.participant_ids.includes(currentUser.id) &&
+           c.participant_ids.includes(targetUserId)
+    );
+    if (existing) return existing;
+
+    const sortedPair = [currentUser.id, targetUserId].sort();
+    const newDmId = `dm_${sortedPair[0]}_${sortedPair[1]}`;
+    
+    const existingById = conversations.find(c => c.id === newDmId);
+    if (existingById) return existingById;
+
+    const newDm: ChatConversation = {
+      id: newDmId,
+      type: 'direct',
+      participant_ids: [currentUser.id, targetUserId],
+      last_message: '',
+      last_message_at: new Date().toISOString(),
+      last_sender_name: currentUser.full_name,
+      created_at: new Date().toISOString(),
+      created_by: currentUser.id
+    };
+
+    setConversations(prev => {
+      const next = [newDm, ...prev];
+      saveStoredConversations(next);
+      return next;
+    });
+    return newDm;
+  };
+
+  const createChannel = async (name: string, name_ar: string, description: string, participant_ids: string[]): Promise<ChatConversation> => {
+    const channelId = `chan_${Date.now()}`;
+    const uniqueParticipants = Array.from(new Set([...participant_ids, currentUser.id]));
+    const newChan: ChatConversation = {
+      id: channelId,
+      type: 'channel',
+      name,
+      name_ar,
+      description,
+      participant_ids: uniqueParticipants,
+      last_message: 'تم تدشين القناة',
+      last_message_at: new Date().toISOString(),
+      last_sender_name: currentUser.full_name,
+      created_at: new Date().toISOString(),
+      created_by: currentUser.id
+    };
+
+    setConversations(prev => {
+      const next = [newChan, ...prev];
+      saveStoredConversations(next);
+      return next;
+    });
+    return newChan;
+  };
+
+  const sendMessage = async (params: {
+    conversationId: string;
+    content: string;
+    mentions?: string[];
+    projectCard?: ChatProjectCard;
+    planTaskCard?: ChatPlanTaskCard;
+    attachments?: ChatAttachment[];
+  }): Promise<ChatMessage> => {
+    const newMsg: ChatMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      conversation_id: params.conversationId,
+      sender_id: currentUser.id,
+      sender_name: currentUser.full_name,
+      sender_role: currentUser.role,
+      content: params.content,
+      mentions: params.mentions || [],
+      project_card: params.projectCard,
+      plan_task_card: params.planTaskCard,
+      attachments: params.attachments,
+      created_at: new Date().toISOString(),
+      read_by: [currentUser.id]
+    };
+
+    setMessages(prev => {
+      const next = [...prev, newMsg];
+      saveStoredMessages(next);
+      return next;
+    });
+
+    let summary = params.content || '';
+    if (!summary && params.projectCard) summary = `[مشروع: ${params.projectCard.name}]`;
+    if (!summary && params.planTaskCard) summary = `[خطة: ${params.planTaskCard.title}]`;
+
+    setConversations(prev => {
+      const next = prev.map(c => {
+        if (c.id === params.conversationId) {
+          return {
+            ...c,
+            last_message: summary,
+            last_message_at: newMsg.created_at,
+            last_sender_name: currentUser.full_name
+          };
+        }
+        return c;
+      });
+      saveStoredConversations(next);
+      return next;
+    });
+
+    return newMsg;
+  };
+
+  const shareProjectToChat = async ({
+    projectId,
+    conversationId,
+    comment
+  }: {
+    projectId: string;
+    conversationId?: string;
+    comment?: string;
+  }) => {
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return;
+
+    const projectCard: ChatProjectCard = {
+      project_id: proj.id,
+      pr_number: proj.pr_number,
+      name: proj.name,
+      company_name: proj.company_name,
+      estimated_value: proj.estimated_value,
+      pipeline_stage: proj.pipeline_stage,
+      opportunity_type: proj.opportunity_type,
+      closing_date: proj.closing_date,
+      owner_id: proj.owner_id,
+      owner_name: proj.owner_name
+    };
+
+    // Attach as draft message without auto-sending ("كـ message من غير to")
+    setDraftProjectCard(projectCard);
+    setActiveConversationId(conversationId || null);
+    setIsChatDrawerOpen(true);
+  };
+
+  const grantProjectAccessFromChat = async ({
+    messageId,
+    projectId,
+    targetUserId,
+    targetUserName,
+    role = 'co_sales_engineer'
+  }: {
+    messageId: string;
+    projectId: string;
+    targetUserId: string;
+    targetUserName: string;
+    role?: 'co_sales_engineer' | 'lead_estimator' | 'technical_support' | 'executive_sponsor';
+  }): Promise<boolean> => {
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return false;
+
+    // Guard: Owner already has full control, cannot be added as a member to own project
+    if (targetUserId === proj.owner_id) {
+      return false;
+    }
+
+    const existingMembers = proj.members || [];
+    const alreadyMember = existingMembers.some(m => m.user_id === targetUserId);
+    if (!alreadyMember) {
+      const newMember: ProjectMember = {
+        project_id: projectId,
+        user_id: targetUserId,
+        role,
+        user_name: targetUserName,
+        assigned_at: new Date().toISOString()
+      };
+      const updatedMembers = [...existingMembers, newMember];
+      await updateProject(projectId, { members: updatedMembers });
+    }
+
+    const msg = messages.find(m => m.id === messageId);
+    if (msg) {
+      await sendMessage({
+        conversationId: msg.conversation_id,
+        content: `✅ تم منح صلاحية الوصول للمشروع "${proj.name}" إلى ${targetUserName} بنجاح.`
+      });
+    }
+
+    return true;
+  };
+
+  const sharePlanTaskToChat = async ({
+    taskId,
+    targetUserId,
+    comment,
+    conversationId
+  }: {
+    taskId: string;
+    targetUserId: string;
+    comment: string;
+    conversationId?: string;
+  }) => {
+    const task = plannedActivities.find(p => p.id === taskId);
+    if (!task) return;
+
+    // Strictly resolve the employee who owns/created the planned task
+    const resolvedEmployeeId = targetUserId || task.user_id || (task as any).sales_rep_id || 'u1';
+    const targetUser = teamMembers.find(t => t.id === resolvedEmployeeId);
+
+    // Get or create DM strictly between current manager and this specific employee
+    const dm = getOrCreateDM(resolvedEmployeeId);
+    const targetConvId = conversationId || dm.id;
+
+    const taskTitle = (task as any).goal || (task as any).title || 'مهمة ميدانية';
+    const clientName = task.company_name || task.contact_name || task.custom_target || '';
+    const taskDate = task.scheduled_date || (task as any).planned_date || new Date().toISOString().split('T')[0];
+
+    const planCard: ChatPlanTaskCard = {
+      task_id: task.id,
+      title: taskTitle,
+      client_name: clientName,
+      project_id: task.project_id,
+      planned_date: taskDate,
+      channel: task.channel,
+      assigned_to_id: resolvedEmployeeId,
+      assigned_to_name: task.user_name || targetUser?.full_name || 'مهندس المبيعات',
+      assigned_by_id: currentUser.id,
+      assigned_by_name: currentUser.full_name,
+      manager_comment: comment,
+      status: 'pending'
+    };
+
+    await sendMessage({
+      conversationId: targetConvId,
+      content: comment ? `💬 توجيه إداري بخصوص الخطة الميدانية: ${comment}` : `مهمة الخطة الميدانية: ${taskTitle}`,
+      planTaskCard: planCard
+    });
+
+    setActiveConversationId(targetConvId);
+    openChat(targetConvId);
+  };
+
+  const reschedulePlanTaskFromChat = async ({
+    messageId,
+    taskId,
+    daysToAdd = 7
+  }: {
+    messageId: string;
+    taskId: string;
+    daysToAdd?: number;
+  }) => {
+    const task = plannedActivities.find(p => p.id === taskId);
+    const msg = messages.find(m => m.id === messageId);
+
+    const baseDateStr = task?.scheduled_date || (task as any)?.planned_date || msg?.plan_task_card?.planned_date || new Date().toISOString().split('T')[0];
+    const currentPlanDate = new Date(baseDateStr);
+    currentPlanDate.setDate(currentPlanDate.getDate() + daysToAdd);
+    const newDateStr = currentPlanDate.toISOString().split('T')[0];
+
+    if (task) {
+      await updatePlannedActivity(taskId, {
+        scheduled_date: newDateStr,
+        rescheduled_to_date: newDateStr,
+        status: 'rescheduled'
+      });
+    }
+
+    setMessages(prev => {
+      const next = prev.map(m => {
+        if (m.id === messageId && m.plan_task_card) {
+          return {
+            ...m,
+            plan_task_card: {
+              ...m.plan_task_card,
+              status: 'rescheduled' as const,
+              planned_date: newDateStr
+            }
+          };
+        }
+        return m;
+      });
+      saveStoredMessages(next);
+      return next;
+    });
+
+    const taskTitle = task?.goal || msg?.plan_task_card?.title || 'المهمة';
+    if (msg) {
+      await sendMessage({
+        conversationId: msg.conversation_id,
+        content: `📅 تم تأجيل مهمة "${taskTitle}" بنجاح إلى تاريخ ${newDateStr}. الخطة الميدانية محدثة الآن.`
+      });
+    }
+  };
+
+  const acknowledgePlanTaskFromChat = async ({
+    messageId,
+    taskId,
+    note
+  }: {
+    messageId: string;
+    taskId: string;
+    note?: string;
+  }) => {
+    setMessages(prev => {
+      const next = prev.map(m => {
+        if (m.id === messageId && m.plan_task_card) {
+          return {
+            ...m,
+            plan_task_card: {
+              ...m.plan_task_card,
+              status: 'acknowledged' as const
+            }
+          };
+        }
+        return m;
+      });
+      saveStoredMessages(next);
+      return next;
+    });
+
+    const msg = messages.find(m => m.id === messageId);
+    if (msg) {
+      await sendMessage({
+        conversationId: msg.conversation_id,
+        content: `👍 تم تأكيد المهمة والاطلاع على الملاحظات.${note ? ` (${note})` : ''}`
+      });
+    }
+  };
+
+  const assignTaskFromChatToPlan = async (params: {
+    targetUserId: string;
+    title: string;
+    clientName?: string;
+    projectId?: string;
+    plannedDate: string;
+    channel: ActivityChannel;
+    purpose: VisitPurpose;
+    notes?: string;
+  }): Promise<PlannedActivity> => {
+    const targetUser = teamMembers.find(t => t.id === params.targetUserId);
+    const newPlan = await addPlannedActivity({
+      weekly_plan_id: `wp_${params.targetUserId}_${params.plannedDate.substring(0, 7)}`,
+      user_id: params.targetUserId,
+      user_name: targetUser?.full_name || 'مهندس المبيعات',
+      scheduled_date: params.plannedDate,
+      time_slot: '10:00 AM',
+      goal: params.title,
+      company_name: params.clientName,
+      project_id: params.projectId,
+      channel: params.channel,
+      visit_purpose: params.purpose,
+      priority: 'high',
+      is_auto_suggested: false
+    });
+
+    const dm = getOrCreateDM(params.targetUserId);
+    await sendMessage({
+      conversationId: dm.id,
+      content: `🎯 تم إدراج تكليف جديد في خطتك الميدانية: "${params.title}" بتاريخ ${params.plannedDate}.`,
+      planTaskCard: {
+        task_id: newPlan.id,
+        title: newPlan.goal,
+        client_name: newPlan.company_name,
+        project_id: newPlan.project_id,
+        planned_date: newPlan.scheduled_date,
+        channel: newPlan.channel,
+        assigned_to_id: params.targetUserId,
+        assigned_to_name: targetUser?.full_name || '',
+        assigned_by_id: currentUser.id,
+        assigned_by_name: currentUser.full_name,
+        manager_comment: params.notes,
+        status: 'pending'
+      }
+    });
+
+    return newPlan;
+  };
+
+  const contextValue = useMemo(() => ({
+    importSalesData,
+    currentRole,
+    setCurrentRole,
+    currentUser,
+    isAuthenticated,
+    teamMembers,
+    selectedSalesFilter,
+    setSelectedSalesFilter,
+    login,
+    logout,
+    switchUser,
+    updateUserProfile,
+    addTeamMember,
+    deleteTeamMember,
+    projects,
+    contacts,
+    companies: sortedCompanies,
+    activities,
+    plannedActivities,
+    quotations,
+    salesTargets,
+    fastLogState,
+    openFastLog,
+    closeFastLog,
+    isNewProjectModalOpen,
+    openNewProjectModal,
+    closeNewProjectModal,
+    isNewContactModalOpen,
+    openNewContactModal,
+    closeNewContactModal,
+    addActivity,
+    updateActivity,
+    deleteActivity,
+    addProject,
+    updateProject,
+    referProject,
+    deleteProject,
+    archiveProject,
+    restoreProject,
+    addContact,
+    updateContact,
+    deleteContact,
+    addCompany,
+    updateCompany,
+    deleteCompany,
+    addPlannedActivity,
+    updatePlannedActivity,
+    deletePlannedActivity,
+    completePlannedActivity,
+    updateSalesTarget,
+    addQuotation,
+    createQuotationRevision,
+    updateQuotation,
+    updateQuotationStatus,
+    archiveQuotation,
+    deleteQuotation,
+    // Reminder system
+    reminders,
+    reminderModalState,
+    openReminder,
+    closeReminder,
+    addReminder,
+    updateReminder,
+    deleteReminder,
+    toggleReminderCompleted,
+    completeAllReminders,
+    completeAllPastPlannedActivities,
+    // Approval Requests System
+    requests,
+    createRequest,
+    updateRequest,
+    resolveRequest,
+    addRequestComment,
+    isRequestModalOpen,
+    requestModalProject,
+    requestModalQuotationId,
+    openRequestModal,
+    closeRequestModal,
+    selectedRequestIdForDetail,
+    openRequestDetail,
+    closeRequestDetail,
+    // Notifications
+    notifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    // Interactive Module Guide System
+    isGuideOpen,
+    activeGuideModuleId,
+    openGuide,
+    closeGuide,
+    // Real-time Excel Synchronization
+    isSyncingExcel,
+    lastExcelSyncTime,
+    syncExcelNow,
+    // Internal Team Chat & Collaboration System
+    conversations,
+    messages,
+    isChatDrawerOpen,
+    activeConversationId,
+    chatUnreadCount,
+    draftProjectCard,
+    setDraftProjectCard,
+    openChat,
+    closeChat,
+    setActiveConversationId,
+    sendMessage,
+    markConversationRead,
+    createChannel,
+    getOrCreateDM,
+    shareProjectToChat,
+    grantProjectAccessFromChat,
+    sharePlanTaskToChat,
+    reschedulePlanTaskFromChat,
+    acknowledgePlanTaskFromChat,
+    assignTaskFromChatToPlan,
+  }), [
+    importSalesData,
+    currentRole,
+    setCurrentRole,
+    currentUser,
+    isAuthenticated,
+    teamMembers,
+    selectedSalesFilter,
+    setSelectedSalesFilter,
+    login,
+    logout,
+    switchUser,
+    updateUserProfile,
+    addTeamMember,
+    deleteTeamMember,
+    projects,
+    contacts,
+    sortedCompanies,
+    activities,
+    plannedActivities,
+    quotations,
+    salesTargets,
+    fastLogState,
+    openFastLog,
+    closeFastLog,
+    isNewProjectModalOpen,
+    openNewProjectModal,
+    closeNewProjectModal,
+    isNewContactModalOpen,
+    openNewContactModal,
+    closeNewContactModal,
+    addActivity,
+    updateActivity,
+    deleteActivity,
+    addProject,
+    updateProject,
+    referProject,
+    deleteProject,
+    archiveProject,
+    restoreProject,
+    addContact,
+    updateContact,
+    deleteContact,
+    addCompany,
+    updateCompany,
+    deleteCompany,
+    addPlannedActivity,
+    updatePlannedActivity,
+    deletePlannedActivity,
+    completePlannedActivity,
+    updateSalesTarget,
+    addQuotation,
+    createQuotationRevision,
+    updateQuotation,
+    updateQuotationStatus,
+    archiveQuotation,
+    deleteQuotation,
+    reminders,
+    reminderModalState,
+    openReminder,
+    closeReminder,
+    addReminder,
+    updateReminder,
+    deleteReminder,
+    toggleReminderCompleted,
+    completeAllReminders,
+    completeAllPastPlannedActivities,
+    requests,
+    createRequest,
+    updateRequest,
+    resolveRequest,
+    addRequestComment,
+    isRequestModalOpen,
+    requestModalProject,
+    requestModalQuotationId,
+    openRequestModal,
+    closeRequestModal,
+    selectedRequestIdForDetail,
+    openRequestDetail,
+    closeRequestDetail,
+    notifications,
+    markNotificationRead,
+    markAllNotificationsRead,
+    isGuideOpen,
+    activeGuideModuleId,
+    openGuide,
+    closeGuide,
+    isSyncingExcel,
+    lastExcelSyncTime,
+    syncExcelNow,
+    conversations,
+    messages,
+    isChatDrawerOpen,
+    activeConversationId,
+    chatUnreadCount,
+    draftProjectCard,
+    setDraftProjectCard,
+    openChat,
+    closeChat,
+    setActiveConversationId,
+    sendMessage,
+    markConversationRead,
+    createChannel,
+    getOrCreateDM,
+    shareProjectToChat,
+    grantProjectAccessFromChat,
+    sharePlanTaskToChat,
+    reschedulePlanTaskFromChat,
+    acknowledgePlanTaskFromChat,
+    assignTaskFromChatToPlan,
+  ]);
+
   return (
-    <CRMContext.Provider value={{
-      importSalesData,
-      currentRole,
-      setCurrentRole,
-      currentUser,
-      isAuthenticated,
-      teamMembers,
-      selectedSalesFilter,
-      setSelectedSalesFilter,
-      login,
-      logout,
-      switchUser,
-      updateUserProfile,
-      addTeamMember,
-      projects,
-      contacts,
-      companies: sortedCompanies,
-      activities,
-      plannedActivities,
-      quotations,
-      salesTargets,
-      fastLogState,
-      openFastLog,
-      closeFastLog,
-      isNewProjectModalOpen,
-      openNewProjectModal,
-      closeNewProjectModal,
-      isNewContactModalOpen,
-      openNewContactModal,
-      closeNewContactModal,
-      addActivity,
-      updateActivity,
-      deleteActivity,
-      addProject,
-      updateProject,
-      referProject,
-      deleteProject,
-      archiveProject,
-      restoreProject,
-      addContact,
-      updateContact,
-      deleteContact,
-      addCompany,
-      updateCompany,
-      deleteCompany,
-      addPlannedActivity,
-      updatePlannedActivity,
-      deletePlannedActivity,
-      completePlannedActivity,
-      updateSalesTarget,
-      addQuotation,
-      createQuotationRevision,
-      updateQuotation,
-      updateQuotationStatus,
-      archiveQuotation,
-      deleteQuotation,
-      // Reminder system
-      reminders,
-      reminderModalState,
-      openReminder,
-      closeReminder,
-      addReminder,
-      updateReminder,
-      deleteReminder,
-      toggleReminderCompleted,
-      // Approval Requests System
-      requests,
-      createRequest,
-      updateRequest,
-      resolveRequest,
-      addRequestComment,
-      isRequestModalOpen,
-      requestModalProject,
-      requestModalQuotationId,
-      openRequestModal,
-      closeRequestModal,
-      selectedRequestIdForDetail,
-      openRequestDetail,
-      closeRequestDetail,
-      // Notifications
-      notifications,
-      markNotificationRead,
-      markAllNotificationsRead,
-      // Interactive Module Guide System
-      isGuideOpen,
-      activeGuideModuleId,
-      openGuide,
-      closeGuide,
-    }}>
+    <CRMContext.Provider value={contextValue}>
       {children}
     </CRMContext.Provider>
   );

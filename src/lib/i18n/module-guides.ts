@@ -851,7 +851,7 @@ export function getModuleGuideByPath(pathname: string, language: 'ar' | 'en' = '
   }
 
   if (pathname.startsWith('/my-day')) {
-    return dict['my_day'];
+    return dict['my_week'];
   }
 
   if (pathname.startsWith('/activities')) {

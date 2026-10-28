@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { X, Building2, Plus, Sparkles, FolderKanban, Layers, FileCheck, ShieldCheck, Tag, Target, UserCheck, AlertCircle, Lock } from 'lucide-react';
+import { X, Building2, Plus, Sparkles, FolderKanban, Layers, FileCheck, ShieldCheck, Tag, Target, UserCheck, AlertCircle, Lock, User, Calendar, Check, Star, Users } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { SAUDI_LOCATIONS, PIPELINE_STAGES, OPPORTUNITY_TYPES } from '@/lib/constants';
-import { PipelineStage, OpportunityType, ProjectPriority, RFQPackage, SubmittalStatus, Project } from '@/types/crm';
+import { PipelineStage, OpportunityType, ProjectPriority, RFQPackage, SubmittalStatus, Project, CompanyType } from '@/types/crm';
+import { useLanguage } from '@/lib/i18n/language-context';
+import { ProjectSystemsMultiSelect } from '@/components/projects/project-systems-select';
+import { cn, formatDateString } from '@/lib/utils';
 
 interface AddProjectModalProps {
   isOpen: boolean;
@@ -13,13 +16,17 @@ interface AddProjectModalProps {
 }
 
 export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjectModalProps) {
-  const { projects, companies, contacts, addProject, currentUser, teamMembers, referProject } = useCRM();
+  const { isRTL } = useLanguage();
+  const { projects, companies, contacts, addProject, addCompany, addContact, currentUser, teamMembers, referProject } = useCRM();
 
   const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin';
   const salesReps = teamMembers.filter(m => m.role === 'sales_engineer' || (m.role as string) === 'sales_rep');
 
   const [prNumber, setPrNumber] = useState('');
   const [name, setName] = useState('');
+  const [createdAtDate, setCreatedAtDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [companyId, setCompanyId] = useState(defaultCompanyId || companies[0]?.id || '');
   const [assignedUserId, setAssignedUserId] = useState<string>(currentUser.id);
@@ -36,23 +43,98 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
     if (isOpen) {
       setAssignedUserId(currentUser.id);
       setShowSuggestions(false);
+      setCreatedAtDate(new Date().toISOString().split('T')[0]);
+      setClosingDate('');
+      setClosingDateError('');
     }
   }, [isOpen, currentUser.id]);
 
   const [primaryContactId, setPrimaryContactId] = useState('');
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [location, setLocation] = useState('Jeddah');
   const [opportunityType, setOpportunityType] = useState<OpportunityType>('tender');
+  const [closingDate, setClosingDate] = useState('');
+  const [closingDateError, setClosingDateError] = useState('');
   const [pipelineStage, setPipelineStage] = useState<PipelineStage>('lead');
   const [estimatedValue, setEstimatedValue] = useState('');
   const [probability, setProbability] = useState('40');
   const [priority, setPriority] = useState<ProjectPriority>('high');
   const [rfqPackages, setRfqPackages] = useState<RFQPackage>('both');
+  const [selectedSystems, setSelectedSystems] = useState<string[]>([]);
   const [submittalStatus, setSubmittalStatus] = useState<SubmittalStatus>('under_approval');
   const [clientTargetPrice, setClientTargetPrice] = useState('');
   const [lastDiscountPct, setLastDiscountPct] = useState('');
   const [nextAction, setNextAction] = useState('');
   const [nextFollowUpDate, setNextFollowUpDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fast Add Company & Contact State
+  const [isFastCompanyOpen, setIsFastCompanyOpen] = useState(false);
+  const [fastCompanyName, setFastCompanyName] = useState('');
+  const [fastCompanyType, setFastCompanyType] = useState<CompanyType>('contractor');
+  const [fastCompanyCity, setFastCompanyCity] = useState('Jeddah');
+
+  const [isFastContactOpen, setIsFastContactOpen] = useState(false);
+  const [fastContactCompanyId, setFastContactCompanyId] = useState('');
+  const [fastContactName, setFastContactName] = useState('');
+  const [fastContactPhone, setFastContactPhone] = useState('');
+  const [fastContactRole, setFastContactRole] = useState('');
+
+  const toggleContactSelection = (cId: string) => {
+    setSelectedContactIds(prev => {
+      if (prev.includes(cId)) {
+        const next = prev.filter(id => id !== cId);
+        if (primaryContactId === cId) {
+          setPrimaryContactId(next[0] || '');
+        }
+        return next;
+      } else {
+        const next = [...prev, cId];
+        if (!primaryContactId) {
+          setPrimaryContactId(cId);
+        }
+        return next;
+      }
+    });
+  };
+
+  const handleSaveFastCompany = async () => {
+    if (!fastCompanyName.trim()) return;
+    const newComp = await addCompany({
+      name: fastCompanyName.trim(),
+      normalized_name: fastCompanyName.trim().toLowerCase(),
+      company_type: fastCompanyType,
+      city: fastCompanyCity,
+    });
+    setCompanyId(newComp.id);
+    setFastContactCompanyId(newComp.id);
+    setIsFastCompanyOpen(false);
+    setFastCompanyName('');
+  };
+
+  const handleSaveFastContact = async () => {
+    if (!fastContactName.trim() || !fastContactPhone.trim()) return;
+    const targetCompId = fastContactCompanyId || companyId;
+    if (!targetCompId) {
+      alert(isRTL ? 'الرجاء اختيار أو إضافة شركة أولاً لربط جهة الاتصال بها' : 'Please select or add a company first to link the contact');
+      return;
+    }
+    const currentComp = companies.find(c => c.id === targetCompId);
+    const newContact = await addContact({
+      full_name: fastContactName.trim(),
+      phone: fastContactPhone.trim(),
+      job_title: fastContactRole.trim() || 'Contact',
+      company_id: targetCompId,
+      company_name: currentComp?.name || '',
+      is_hot_lead: false,
+    });
+    setPrimaryContactId(newContact.id);
+    setSelectedContactIds(prev => prev.includes(newContact.id) ? prev : [...prev, newContact.id]);
+    setIsFastContactOpen(false);
+    setFastContactName('');
+    setFastContactPhone('');
+    setFastContactRole('');
+  };
 
   // Helper functions to retrieve assignee and company names
   const getAssigneeName = (p: { referred_to_name?: string; referred_to_id?: string; owner_name?: string; owner_id?: string }) => {
@@ -113,9 +195,15 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
     e.preventDefault();
     if (!name.trim() || !prNumber.trim() || exactDuplicateProject) return;
 
+    if (opportunityType === 'in_hand' && !closingDate.trim()) {
+      setClosingDateError(isRTL ? 'تاريخ الإغلاق المتوقع (Closing Date) إلزامي لكافة مشاريع In Hand' : 'Closing Date is mandatory for In Hand projects');
+      return;
+    }
+
     setIsSubmitting(true);
     const selectedCompany = companies.find(c => c.id === companyId);
-    const selectedContact = contacts.find(c => c.id === primaryContactId);
+    const effectivePrimaryId = primaryContactId || selectedContactIds[0];
+    const selectedContact = contacts.find(c => c.id === effectivePrimaryId);
     const val = parseFloat(estimatedValue) || 0;
     const prob = parseInt(probability, 10) || 40;
     const discountVal = parseFloat(lastDiscountPct) || undefined;
@@ -126,17 +214,26 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
     const assignedUser = teamMembers.find(m => m.id === assignedUserId);
     const isReferred = Boolean(assignedUserId && assignedUserId !== creatorId && assignedUser);
 
+    const selectedDateTime = createdAtDate 
+      ? new Date(createdAtDate + 'T' + new Date().toTimeString().split(' ')[0]).toISOString()
+      : new Date().toISOString();
+
     const createdProject = await addProject({
       pr_number: prNumber.trim().toUpperCase(),
       name: name.trim(),
+      created_at: selectedDateTime,
+      stage_entered_at: selectedDateTime,
       company_id: companyId,
       company_name: selectedCompany?.name,
-      primary_contact_id: primaryContactId || undefined,
+      primary_contact_id: effectivePrimaryId || undefined,
       primary_contact_name: selectedContact?.full_name,
       primary_contact_phone: selectedContact?.phone,
+      contact_ids: selectedContactIds.length > 0 ? selectedContactIds : (effectivePrimaryId ? [effectivePrimaryId] : undefined),
       location,
       opportunity_type: opportunityType,
+      closing_date: closingDate.trim() || undefined,
       pipeline_stage: pipelineStage,
+      systems: selectedSystems,
       rfq_packages: pipelineStage === 'rfq_processing' ? rfqPackages : undefined,
       submittal_status: pipelineStage === 'technical_submission' ? submittalStatus : undefined,
       client_target_price: clientTargetPrice ? parseFloat(clientTargetPrice) : undefined,
@@ -168,16 +265,20 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="glass-card rounded-3xl max-w-2xl w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 overflow-hidden flex flex-col max-h-[90vh] backdrop-blur-2xl animate-in zoom-in-95 duration-150">
-        <div className="px-6 py-5 border-b border-slate-100/80 dark:border-slate-800 bg-white/40 dark:bg-[#232A38]/70 flex items-center justify-between shrink-0">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150">
+      <div className="glass-card rounded-2xl sm:rounded-3xl max-w-2xl w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] backdrop-blur-2xl animate-in zoom-in-95 duration-150">
+        <div className="px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100/80 dark:border-slate-800 bg-white/40 dark:bg-[#232A38]/70 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shadow-2xs">
-              <FolderKanban className="w-5 h-5" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shadow-2xs">
+              <FolderKanban className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
-              <h2 className="font-black text-[#292D32] dark:text-white text-lg font-urbanist leading-tight">Create New Sales Project</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Western Region Opportunity Portfolio</p>
+              <h2 className="font-black text-[#292D32] dark:text-white text-base sm:text-lg font-urbanist leading-tight">
+                {isRTL ? 'إضافة مشروع مبيعات جديد' : 'Create New Sales Project'}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {isRTL ? 'محفظة فرص مشاريع شركة المسبار' : 'Western Region Opportunity Portfolio'}
+              </p>
             </div>
           </div>
           <button 
@@ -188,8 +289,8 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
-          <div className="grid grid-cols-3 gap-3">
+        <form onSubmit={handleSubmit} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
               <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">#PR Code *</label>
               <input
@@ -202,7 +303,22 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
               />
             </div>
 
-            <div className="col-span-2 relative">
+            <div>
+              <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
+                <span>{isRTL ? 'تاريخ المشروع *' : 'Project Date *'}</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={createdAtDate}
+                onChange={e => setCreatedAtDate(e.target.value)}
+                title={isRTL ? 'تاريخ إضافة أو استلام المشروع الفعلي (يمكنك اختيار تاريخ سابق)' : 'Actual project creation or receipt date (you can select a past date)'}
+                className="w-full px-3.5 py-2.5 bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] font-medium text-slate-900 dark:text-white shadow-2xs"
+              />
+            </div>
+
+            <div className="sm:col-span-2 relative">
               <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5 flex items-center justify-between">
                 <span>Project Name *</span>
                 {autocompleteMatches.length > 0 && (
@@ -305,34 +421,311 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Client / Company *</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block font-bold text-[#292D32] dark:text-slate-200">
+                  {isRTL ? 'الشركة / العميل (Company) *' : 'Company / Account *'}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsFastCompanyOpen(!isFastCompanyOpen)}
+                  className="text-xs font-bold text-blue-700 dark:text-[#8FC2F0] bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200 dark:border-blue-800/80 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-2xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
+                  <span>{isRTL ? '+ شركة جديدة (سريع)' : '+ Fast Add Company'}</span>
+                </button>
+              </div>
               <select
                 required
                 value={companyId}
-                onChange={e => setCompanyId(e.target.value)}
+                onChange={e => {
+                  if (e.target.value === '__FAST_ADD_COMPANY__') {
+                    setIsFastCompanyOpen(true);
+                    return;
+                  }
+                  setCompanyId(e.target.value);
+                }}
                 className="w-full px-3.5 py-2.5 bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] font-medium text-slate-900 dark:text-white shadow-2xs"
               >
-                <option value="" disabled className="dark:bg-[#141820] dark:text-white">-- Select Client / Company --</option>
+                <option value="" disabled className="dark:bg-[#141820] dark:text-white">
+                  {isRTL ? '-- اختر الشركة / العميل --' : '-- Select Company / Account --'}
+                </option>
+                <option value="__FAST_ADD_COMPANY__" className="font-extrabold text-blue-600 bg-blue-50 dark:bg-blue-950">
+                  {isRTL ? '⚡ + إضافة شركة جديدة سريعة...' : '⚡ + Fast Add New Company...'}
+                </option>
                 {companies.map(c => (
                   <option key={c.id} value={c.id} className="dark:bg-[#141820] dark:text-white">{c.name}</option>
                 ))}
               </select>
+
+              {/* Fast Add Company Inline Form */}
+              {isFastCompanyOpen && (
+                <div className="p-3 mt-2 rounded-2xl bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 space-y-2.5 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center justify-between text-xs font-bold text-blue-900 dark:text-blue-200">
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{isRTL ? 'إضافة شركة جديدة سريعة (الحقول الإلزامية)' : 'Fast Add Company (Mandatory Fields Only)'}</span>
+                    </span>
+                    <button type="button" onClick={() => setIsFastCompanyOpen(false)} className="text-slate-400 hover:text-rose-500">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                        {isRTL ? 'اسم الشركة *' : 'Company Name *'}
+                      </label>
+                      <input 
+                        type="text" 
+                        value={fastCompanyName} 
+                        onChange={e => setFastCompanyName(e.target.value)}
+                        placeholder={isRTL ? "مثال: شركة المسبار للمقاولات" : "e.g. Al-Mespar Contracting Co."}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          {isRTL ? 'نوع الشركة *' : 'Company Type *'}
+                        </label>
+                        <select
+                          value={fastCompanyType}
+                          onChange={e => setFastCompanyType(e.target.value as CompanyType)}
+                          className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white text-xs"
+                        >
+                          <option value="contractor">{isRTL ? 'مقاول رئيسي (Contractor)' : 'Main Contractor'}</option>
+                          <option value="consultant">{isRTL ? 'استشاري (Consultant)' : 'Consultant'}</option>
+                          <option value="client_owner">{isRTL ? 'مالك / عميل (Client Owner)' : 'Client / Owner'}</option>
+                          <option value="mep_contractor">{isRTL ? 'مقاول كهروميكانيك (MEP)' : 'MEP Contractor'}</option>
+                          <option value="developer">{isRTL ? 'مطور عقاري (Developer)' : 'Real Estate Developer'}</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          {isRTL ? 'المدينة *' : 'City *'}
+                        </label>
+                        <select
+                          value={fastCompanyCity}
+                          onChange={e => setFastCompanyCity(e.target.value)}
+                          className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white text-xs"
+                        >
+                          {SAUDI_LOCATIONS.map(loc => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      disabled={!fastCompanyName.trim()}
+                      onClick={handleSaveFastCompany}
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                    >
+                      {isRTL ? 'حفظ واختيار الشركة' : 'Save & Select Company'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
-              <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Key Contact Person</label>
-              <select
-                value={primaryContactId}
-                onChange={e => setPrimaryContactId(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] font-medium text-slate-900 dark:text-white shadow-2xs"
-              >
-                <option value="" className="dark:bg-[#141820] dark:text-white">No Contact Selected</option>
-                {contacts.filter(c => !companyId || c.company_id === companyId).map(c => (
-                  <option key={c.id} value={c.id} className="dark:bg-[#141820] dark:text-white">{c.full_name} ({c.job_title || 'Contact'})</option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block font-bold text-[#292D32] dark:text-slate-200 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{isRTL ? 'جهات الاتصال بالمشروع (Key Contacts)' : 'Project Key Contacts'}</span>
+                  {selectedContactIds.length > 0 && (
+                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">
+                      {selectedContactIds.length} {isRTL ? 'محدد' : 'selected'}
+                    </span>
+                  )}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsFastContactOpen(!isFastContactOpen)}
+                  className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800/80 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-2xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{isRTL ? '+ جهة اتصال جديدة (سريع)' : '+ Fast Add Contact'}</span>
+                </button>
+              </div>
+
+              {/* Multi-Contact Selection List with Apple HIG styling */}
+              {(() => {
+                const availableContacts = contacts.filter(c => !companyId || c.company_id === companyId);
+                if (availableContacts.length === 0) {
+                  return (
+                    <div className="p-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-center text-xs text-slate-500 dark:text-slate-400">
+                      <span>{isRTL ? 'لا توجد جهات اتصال مسجلة لهذه الشركة بعد.' : 'No contacts registered for this company yet.'}</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsFastContactOpen(true)}
+                        className="block mx-auto mt-1 text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                      >
+                        {isRTL ? '+ اضغط هنا لإضافة جهة اتصال الآن' : '+ Add Contact Now'}
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-1.5">
+                    <div className="max-h-36 overflow-y-auto p-2 bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl space-y-1.5 shadow-2xs">
+                      {availableContacts.map(c => {
+                        const isSelected = selectedContactIds.includes(c.id);
+                        const isPrimary = (primaryContactId || selectedContactIds[0]) === c.id;
+                        return (
+                          <div
+                            key={c.id}
+                            onClick={() => toggleContactSelection(c.id)}
+                            className={`flex items-center justify-between p-2 rounded-xl border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 shadow-2xs'
+                                : 'bg-white/60 dark:bg-slate-800/40 border-slate-200/70 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`w-4 h-4 rounded-md flex items-center justify-center border transition-colors shrink-0 ${
+                                isSelected 
+                                  ? 'bg-blue-600 border-blue-600 text-white' 
+                                  : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </div>
+                              <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                {c.full_name?.charAt(0) || 'C'}
+                              </div>
+                              <div className="min-w-0 truncate">
+                                <div className="text-xs font-bold text-slate-800 dark:text-white truncate">
+                                  {c.full_name}
+                                </div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-400 truncate">
+                                  {c.job_title || (isRTL ? 'جهة اتصال' : 'Contact')} {c.phone ? `• ${c.phone}` : ''}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Primary designation button if selected */}
+                            {isSelected && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPrimaryContactId(c.id);
+                                }}
+                                title={isRTL ? 'تحديد كمسؤول اتصال رئيسي' : 'Set as primary contact'}
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 transition-all ${
+                                  isPrimary
+                                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-2xs'
+                                    : 'text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                                }`}
+                              >
+                                <Star className={`w-3 h-3 ${isPrimary ? 'fill-amber-500 text-amber-500' : ''}`} />
+                                <span>{isPrimary ? (isRTL ? 'الرئيسي' : 'Primary') : (isRTL ? 'تعيين رئيسي' : 'Make Primary')}</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {selectedContactIds.length > 0 && (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {isRTL 
+                          ? `💡 تم تحديد ${selectedContactIds.length} مسؤولين للمشروع. النجمة تميز مسؤول الاتصال الأساسي.` 
+                          : `💡 ${selectedContactIds.length} key contacts assigned. Star marks the primary point of contact.`}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Fast Add Contact Inline Form */}
+              {isFastContactOpen && (
+                <div className="p-3 mt-2 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-2.5 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                    <span className="flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{isRTL ? 'إضافة جهة اتصال سريعة (الحقول الإلزامية)' : 'Fast Add Contact (Mandatory Fields Only)'}</span>
+                    </span>
+                    <button type="button" onClick={() => setIsFastContactOpen(false)} className="text-slate-400 hover:text-rose-500">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                        {isRTL ? 'الشركة / الحساب التابع له *' : 'Assigned Company / Account *'}
+                      </label>
+                      <select
+                        required
+                        value={fastContactCompanyId || companyId}
+                        onChange={e => {
+                          setFastContactCompanyId(e.target.value);
+                          if (!companyId) setCompanyId(e.target.value);
+                        }}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white text-xs font-semibold"
+                      >
+                        <option value="" disabled>
+                          {isRTL ? '-- اختر الشركة التابع لها --' : '-- Select Associated Company --'}
+                        </option>
+                        {companies.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                        {isRTL ? 'اسم الشخص / المهندس *' : 'Contact Person / Engineer *'}
+                      </label>
+                      <input 
+                        type="text" 
+                        value={fastContactName} 
+                        onChange={e => setFastContactName(e.target.value)}
+                        placeholder={isRTL ? "مثال: م. أحمد فهد" : "e.g. Eng. Ahmed Fahad"}
+                        className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          {isRTL ? 'رقم الجوال *' : 'Mobile / Phone *'}
+                        </label>
+                        <input 
+                          type="text" 
+                          value={fastContactPhone} 
+                          onChange={e => setFastContactPhone(e.target.value)}
+                          placeholder="9665XXXXXXXX"
+                          className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-0.5">
+                          {isRTL ? 'المسمى الوظيفي' : 'Job Title / Role'}
+                        </label>
+                        <input 
+                          type="text" 
+                          value={fastContactRole} 
+                          onChange={e => setFastContactRole(e.target.value)}
+                          placeholder={isRTL ? "مدير المشتريات / مهندس موقع" : "Procurement Manager / Site Eng."}
+                          className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      disabled={!fastContactName.trim() || !fastContactPhone.trim()}
+                      onClick={handleSaveFastContact}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                    >
+                      {isRTL ? 'حفظ واختيار جهة الاتصال' : 'Save & Select Contact'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -371,7 +764,7 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Location</label>
               <select
@@ -412,35 +805,71 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
             </div>
           </div>
 
-          {/* RFQ Processing: Packages Selection */}
-          {(pipelineStage === 'rfq_processing' || (pipelineStage as string) === 'pricing') && (
-            <div className="p-3 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50/70 dark:bg-sky-950/20 space-y-2 animate-in fade-in">
-              <label className="text-[11px] font-bold text-sky-900 dark:text-sky-300 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-sky-600" />
-                <span>Pre-Sales RFQ Packages (حزم وأنظمة التسعير):</span>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'lc', label: '⚡ LC (تيارات خفيفة)' },
-                  { id: 'bms', label: '🏢 BMS (إدارة مباني)' },
-                  { id: 'both', label: '⚡🏢 LC + BMS (كلاهما)' },
-                ].map(pkg => (
-                  <button
-                    key={pkg.id}
-                    type="button"
-                    onClick={() => setRfqPackages(pkg.id as RFQPackage)}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                      rfqPackages === pkg.id
-                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
-                        : 'bg-white dark:bg-[#141820] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:border-sky-400'
-                    }`}
-                  >
-                    {pkg.label}
-                  </button>
-                ))}
+          {/* Mandatory Closing Date for In Hand Projects */}
+          {opportunityType === 'in_hand' && (
+            <div className="p-3.5 rounded-xl border border-emerald-300 dark:border-emerald-700/80 bg-gradient-to-r from-emerald-50/90 via-emerald-50/40 to-white dark:from-emerald-950/40 dark:via-emerald-950/20 dark:to-transparent space-y-2 animate-in fade-in slide-in-from-top-2 duration-200 shadow-2xs">
+              <div className="flex items-center justify-between flex-wrap gap-1">
+                <label className="text-xs font-black text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>{isRTL ? 'تاريخ الإغلاق المتوقع (Closing Date) *' : 'Expected Closing Date *'}</span>
+                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-2xs">
+                    {isRTL ? 'إلزامي لمشاريع In Hand' : 'Mandatory for In Hand'}
+                  </span>
+                </label>
+                {closingDate && (
+                  <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-900/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                    {formatDateString(closingDate)}
+                  </span>
+                )}
               </div>
+              <div className="relative">
+                <input
+                  type="date"
+                  required
+                  value={closingDate}
+                  onChange={e => {
+                    setClosingDate(e.target.value);
+                    if (closingDateError) setClosingDateError('');
+                  }}
+                  className={cn(
+                    "w-full px-3.5 py-2.5 bg-white dark:bg-[#141820] border rounded-xl font-medium text-slate-900 dark:text-white shadow-2xs focus:outline-none focus:ring-2 font-mono text-sm",
+                    closingDateError 
+                      ? "border-rose-500 focus:ring-rose-500 bg-rose-50/30 ring-2 ring-rose-500/20" 
+                      : "border-emerald-300 dark:border-emerald-700 focus:ring-emerald-500 focus:border-emerald-500"
+                  )}
+                />
+              </div>
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-300/80 font-medium">
+                {isRTL 
+                  ? '💡 يحدد موعد الإغلاق المتوقع لتوقيع العقد أو الترسية النهائية لمشروع In Hand، وسيتم استخدامه في الفلترة والتقارير.' 
+                  : '💡 Target contract signing or final award closing date for this In Hand opportunity.'}
+              </p>
+              {closingDateError && (
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1 animate-in fade-in">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{closingDateError}</span>
+                </p>
+              )}
             </div>
           )}
+
+          {/* Project Systems Multi-Select Dropdown */}
+          <div className="p-3.5 rounded-xl border border-blue-200/80 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-blue-600 dark:text-[#8FC2F0]" />
+                <span>{isRTL ? 'أنظمة المشروع (Systems Scope):' : 'Project Systems Scope:'}</span>
+              </label>
+              <span className="text-[10px] text-blue-600 dark:text-[#8FC2F0] font-bold">
+                {selectedSystems.length} {isRTL ? 'أنظمة مختارة' : 'selected'}
+              </span>
+            </div>
+            <ProjectSystemsMultiSelect
+              selectedSystems={selectedSystems}
+              onChange={setSelectedSystems}
+              placeholder={isRTL ? 'اختر أنظمة المشروع من القائمة (21 نظام)...' : 'Select systems from dropdown (21 available)...'}
+            />
+          </div>
 
           {/* Technical Submittal: Approval Status */}
           {pipelineStage === 'technical_submission' && (
@@ -517,7 +946,7 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Est. Value (SAR)</label>
               <input
@@ -557,8 +986,8 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
               <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Next Action Commitment</label>
               <input
                 type="text"
@@ -569,7 +998,7 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
               />
             </div>
 
-            <div>
+            <div className="sm:col-span-1">
               <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Follow-up Target Date</label>
               <input
                 type="date"

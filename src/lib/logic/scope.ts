@@ -21,9 +21,12 @@ export function canUserAccessProjectCockpit(project: Project | null | undefined,
   const isAdminOrManager = user.role === 'admin' || user.role === 'sales_manager' || user.role === 'viewer' || user.role === 'estimator';
   if (isAdminOrManager) return true;
 
-  // Sales engineer / sales rep: can only enter if project is assigned or referred to them
-  const activeAssignee = project.referred_to_id || project.owner_id;
-  return activeAssignee === user.id;
+  // Sales engineer / sales rep: can enter if owner, referred, or authorized project member
+  const isOwner = project.owner_id === user.id;
+  const isReferred = project.referred_to_id === user.id;
+  const isMember = Boolean(project.members?.some(m => m.user_id === user.id));
+
+  return isOwner || isReferred || isMember;
 }
 
 /**
@@ -46,8 +49,9 @@ export function scopeProjects(
   if (isAdminOrManager) {
     if (selectedFilter && selectedFilter !== 'all') {
       return baseProjects.filter(p => {
-        const activeRep = p.referred_to_id || p.owner_id;
-        return activeRep === selectedFilter;
+        const isOwner = p.owner_id === selectedFilter;
+        const isReferred = p.referred_to_id === selectedFilter;
+        return isOwner || isReferred;
       });
     }
     return baseProjects;
@@ -56,13 +60,15 @@ export function scopeProjects(
   // Sales engineer:
   // If they deliberately switch filter to 'all' ("لو شال الفلتر"), allow viewing all project names across team.
   // Otherwise (default / 'mine'), return only projects currently assigned/referred to them.
+  // Collaborations/shared member access is accessible directly through the Chat card, NOT in their personal projects pipeline.
   if (selectedFilter === 'all') {
     return baseProjects;
   }
 
   return baseProjects.filter(p => {
-    const activeAssignee = p.referred_to_id || p.owner_id;
-    return activeAssignee === user.id;
+    const isOwner = p.owner_id === user.id;
+    const isReferred = p.referred_to_id === user.id;
+    return isOwner || isReferred;
   });
 }
 
@@ -107,7 +113,7 @@ export function scopePlannedActivities(
     return allPlanned;
   }
 
-  return allPlanned.filter(p => p.user_id === user.id);
+  return allPlanned.filter(p => !p.user_id || p.user_id === user.id);
 }
 
 /**

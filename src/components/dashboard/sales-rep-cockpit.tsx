@@ -4,26 +4,15 @@ import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { 
   Target, 
-  Flame, 
-  Clock, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Phone, 
   Calendar, 
-  ArrowRight, 
-  ArrowLeft,
-  Sparkles, 
-  TrendingUp, 
-  Zap, 
-  Plus,
-  Briefcase,
-  Building2,
-  User,
-  FileSpreadsheet
+  Plus, 
+  CheckCircle2, 
+  AlertTriangle 
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { useLanguage } from '@/lib/i18n/language-context';
-import { formatCurrencySAR, formatDateString } from '@/lib/utils';
+import { formatCurrencySAR } from '@/lib/utils';
+import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 import { Project } from '@/types/crm';
 import { PriorityActionsWidget } from './priority-actions-widget';
 
@@ -35,169 +24,170 @@ export function SalesRepCockpit({ showPriorityActions = false }: SalesRepCockpit
   const { 
     currentUser, 
     projects, 
-    contacts, 
     activities, 
     salesTargets,
     openFastLog,
-    openReminder
+    selectedSalesFilter
   } = useCRM();
-  const { language, t, isRTL } = useLanguage();
+  const { isRTL } = useLanguage();
 
-  // Scoped to current user
-  const myProjects = useMemo(() => {
-    return projects.filter(p => p.owner_id === currentUser.id);
-  }, [projects, currentUser.id]);
+  const isEngineer = currentUser.role === 'sales_engineer';
 
-  const myActivities = useMemo(() => {
-    return activities.filter(a => a.user_id === currentUser.id);
-  }, [activities, currentUser.id]);
+  // Scoped to target rep or all
+  const targetProjects = useMemo(() => {
+    if (selectedSalesFilter && selectedSalesFilter !== 'all') {
+      return projects.filter(p => p.owner_id === selectedSalesFilter);
+    }
+    if (isEngineer) {
+      return projects.filter(p => p.owner_id === currentUser.id);
+    }
+    return projects;
+  }, [projects, currentUser.id, selectedSalesFilter, isEngineer]);
 
-  // Calculations for Personal Quota Pace
+  const targetActivities = useMemo(() => {
+    if (selectedSalesFilter && selectedSalesFilter !== 'all') {
+      return activities.filter(a => a.user_id === selectedSalesFilter);
+    }
+    if (isEngineer) {
+      return activities.filter(a => a.user_id === currentUser.id);
+    }
+    return activities;
+  }, [activities, currentUser.id, selectedSalesFilter, isEngineer]);
+
+  // Won totals
   const wonProjects = useMemo(() => {
-    return myProjects.filter(p => p.pipeline_stage === 'won');
-  }, [myProjects]);
+    return targetProjects.filter(p => p.pipeline_stage === 'won');
+  }, [targetProjects]);
 
   const wonTotalSAR = useMemo(() => {
     return wonProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
   }, [wonProjects]);
 
+  // Target SAR calculation
   const myTargetSAR = useMemo(() => {
-    const repTarget = salesTargets.find(t => t.target_metric === 'won_value');
-    return repTarget ? repTarget.target_value : (currentUser.monthly_target_sar || 350000);
-  }, [salesTargets, currentUser.monthly_target_sar]);
+    if (selectedSalesFilter && selectedSalesFilter !== 'all') {
+      const repTarget = salesTargets.find(t => t.user_id === selectedSalesFilter && t.target_metric === 'won_value');
+      return repTarget?.target_value || 350000;
+    }
+    if (isEngineer) {
+      const repTarget = salesTargets.find(t => t.target_metric === 'won_value');
+      return repTarget ? repTarget.target_value : (currentUser.monthly_target_sar || 350000);
+    }
+    // Sales manager overview
+    const sumTargets = salesTargets.filter(t => t.target_metric === 'won_value').reduce((sum, t) => sum + t.target_value, 0);
+    return sumTargets > 0 ? sumTargets : 1500000;
+  }, [salesTargets, currentUser.monthly_target_sar, isEngineer, selectedSalesFilter]);
 
   const quotaPercent = myTargetSAR > 0 ? Math.min(100, Math.round((wonTotalSAR / myTargetSAR) * 100)) : 0;
-  const remainingGapSAR = Math.max(0, myTargetSAR - wonTotalSAR);
 
-  // Calculate days remaining in current month
-  const today = new Date();
-  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  // Days left in current month
+  const today = useMemo(() => new Date(), []);
+  const endOfMonth = useMemo(() => new Date(today.getFullYear(), today.getMonth() + 1, 0), [today]);
   const daysLeftInMonth = Math.max(1, endOfMonth.getDate() - today.getDate());
-  const requiredDailyVelocitySAR = Math.round(remainingGapSAR / daysLeftInMonth);
 
-  // Today's logged activities
-  const todayStr = today.toISOString().split('T')[0];
-  const todayActivities = useMemo(() => {
-    return myActivities.filter(a => a.activity_date === todayStr);
-  }, [myActivities, todayStr]);
-
-  // Stale deals (active but no touch in > 14 days)
-  const staleDeals = useMemo(() => {
-    return myProjects.filter(p => {
-      if (['won', 'lost', 'hold'].includes(p.pipeline_stage)) return false;
-      if (!p.updated_at) return true;
-      const diffDays = Math.floor((today.getTime() - new Date(p.updated_at).getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays >= 14;
+  // Dynamic formatted date string (e.g. "Thu, Oct 16, 2026")
+  const dateFormatted = useMemo(() => {
+    return today.toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
     });
-  }, [myProjects, today]);
+  }, [today, isRTL]);
 
-  // High-Priority Next Actions ("ما يجب فعله اليوم")
+  // Adaptive Quarterly Quota Target
+  const currentQuarter = Math.floor(today.getMonth() / 3) + 1; // Q1..Q4
+  const quartersRemaining = Math.max(1, 5 - currentQuarter);
+  const currentYear = today.getFullYear();
+  const annualTargetSAR = myTargetSAR * 12;
+
+  const yearWonProjects = useMemo(() => {
+    return wonProjects.filter(p => {
+      const d = p.updated_at ? new Date(p.updated_at) : (p.created_at ? new Date(p.created_at) : today);
+      return d.getFullYear() === currentYear;
+    });
+  }, [wonProjects, currentYear, today]);
+
+  const yearWonTotalSAR = useMemo(() => {
+    return yearWonProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
+  }, [yearWonProjects]);
+
+  const remainingAnnualGapSAR = Math.max(0, annualTargetSAR - yearWonTotalSAR);
+  const requiredQuarterlyTargetSAR = Math.round(remainingAnnualGapSAR / quartersRemaining);
+
+  // Today's actions & tasks count
+  const todayStr = useMemo(() => today.toISOString().split('T')[0], [today]);
+
   const actionableToday = useMemo(() => {
-    const list: {
-      type: 'overdue_action' | 'closing_soon' | 'stale_deal' | 'hot_lead';
-      title: string;
-      project?: Project;
-      contactName?: string;
-      phone?: string;
-      badgeText: string;
-      badgeColor: string;
-      dueText: string;
-      actionType: 'call' | 'visit' | 'log';
-    }[] = [];
-
-    // 1. Projects with next_follow_up_at due or overdue
-    myProjects.forEach(p => {
-      if (['won', 'lost', 'hold'].includes(p.pipeline_stage)) return false;
-      if (p.next_follow_up_at && p.next_follow_up_at <= todayStr) {
-        list.push({
-          type: 'overdue_action',
-          title: p.next_action || (isRTL ? 'متابعة استحقاق المشروع' : 'Project Follow-up Due'),
-          project: p,
-          contactName: p.primary_contact_name,
-          phone: p.primary_contact_phone,
-          badgeText: isRTL ? 'إجراء مستحق' : 'Due Action',
-          badgeColor: 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border-rose-200',
-          dueText: p.next_follow_up_at === todayStr 
-            ? (isRTL ? 'اليوم' : 'Today') 
-            : (isRTL ? 'متأخر' : 'Overdue'),
-          actionType: 'call'
-        });
+    const list: Project[] = [];
+    targetProjects.forEach(p => {
+      if (['won', 'lost', 'hold'].includes(p.pipeline_stage)) return;
+      if (p.next_follow_up_at && p.next_follow_up_at.split('T')[0] <= todayStr) {
+        list.push(p);
       }
     });
+    return list;
+  }, [targetProjects, todayStr]);
 
-    // 2. High probability deals in final stages
-    myProjects.forEach(p => {
-      if (['negotiation', 'technically_approved'].includes(p.pipeline_stage) && (p.estimated_value || 0) > 100000) {
-        if (!list.some(item => item.project?.id === p.id)) {
-          list.push({
-            type: 'closing_soon',
-            title: isRTL ? `إغلاق صفقة ${p.name}` : `Push to Close: ${p.name}`,
-            project: p,
-            contactName: p.primary_contact_name,
-            phone: p.primary_contact_phone,
-            badgeText: isRTL ? 'صفقة قابلة للحسم' : 'Ready to Close',
-            badgeColor: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200',
-            dueText: formatCurrencySAR(p.estimated_value || 0),
-            actionType: 'log'
-          });
-        }
-      }
-    });
-
-    // 3. Stale high-value deals
-    staleDeals.slice(0, 2).forEach(p => {
-      if (!list.some(item => item.project?.id === p.id)) {
-        list.push({
-          type: 'stale_deal',
-          title: isRTL ? `إنعاش التواصل لمشروع ${p.name}` : `Re-engage Dormant Project: ${p.name}`,
-          project: p,
-          contactName: p.primary_contact_name,
-          phone: p.primary_contact_phone,
-          badgeText: isRTL ? 'تواصل راكد' : 'Stale Touch',
-          badgeColor: 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border-amber-200',
-          dueText: isRTL ? 'لم يُحدث منذ أسبوعين' : '14+ days idle',
-          actionType: 'call'
-        });
-      }
-    });
-
-    return list.slice(0, 4);
-  }, [myProjects, todayStr, staleDeals, isRTL]);
+  const weekActivitiesCount = useMemo(() => {
+    const oneWeekAgo = new Date(today);
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
+    return targetActivities.filter(a => a.activity_date >= oneWeekAgoStr).length;
+  }, [targetActivities, today]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300 font-urbanist">
-      
-      {/* 1. Tactical Command Hero Banner */}
-      <div className="crm-card p-6 sm:p-8 relative overflow-hidden">
-        {/* Glow ambient background accent */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#8FC2F0]/20 to-[#77CE69]/10 rounded-full blur-3xl pointer-events-none -z-10" />
+    <div className="crm-card p-5 sm:p-6 relative overflow-hidden font-urbanist bg-white/90 dark:bg-[#1C2130]/90 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-xs animate-in fade-in duration-300">
+      {/* Ambient gradient accent */}
+      <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#8FC2F0]/15 to-[#77CE69]/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          {/* Left: Rep Identity & Quota Status */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#77CE69] animate-pulse" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-[#292D32] dark:text-[#8FC2F0]">
-                {isRTL ? 'مركز العمليات اليومية لمندوب المبيعات' : 'SALES REP TACTICAL COCKPIT'}
-              </span>
-            </div>
-
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight">
-              {isRTL ? `مرحباً، يا ${currentUser.full_name.split(' ')[0]}` : `Welcome back, ${currentUser.full_name.split(' ')[0]}`}
-            </h2>
-
-            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed font-medium">
-              {isRTL 
-                ? `لديك اليوم ${actionableToday.length} مهام ذات أولوية تجارية قصوى، ويتبقى ${daysLeftInMonth} يوماً على نهاية الشهر لتحقيق مستهدفك.`
-                : `You have ${actionableToday.length} high-priority commercial actions today with ${daysLeftInMonth} days left in the month.`}
-            </p>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        {/* Left: Rep Identity & Adaptive Target */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#77CE69] animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-[#8FC2F0]">
+              {isRTL ? 'مركز العمليات الميدانية للمبيعات' : 'SALES REP TACTICAL COCKPIT'}
+            </span>
           </div>
 
-          {/* Right: Personal Quota Attainment Ring & Metrics */}
-          <div className="flex items-center gap-4 bg-slate-50/90 dark:bg-[#141820]/90 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shrink-0">
-            {/* Circular Progress Gauge */}
-            <div className="relative w-16 h-16 flex items-center justify-center">
-              <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight">
+            {isRTL 
+              ? `مرحباً بك، يا ${currentUser.full_name.split(' ')[0]} 👋` 
+              : `Welcome back, ${currentUser.full_name.split(' ')[0]} 👋`}
+          </h2>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            {isRTL 
+              ? `لديك اليوم ${actionableToday.length} مهام ذات أولوية تجارية قصوى، ويتبقى ${daysLeftInMonth} يوماً على نهاية الشهر.`
+              : `You have ${actionableToday.length} high-priority commercial actions today with ${daysLeftInMonth} days left in the month.`}
+          </p>
+
+          {/* Dynamic Adaptive Quarterly Target Pill */}
+          <div className="pt-1.5 flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#8FC2F0]/15 dark:bg-[#8FC2F0]/10 border border-[#8FC2F0]/30 dark:border-[#8FC2F0]/20 text-[11px] font-bold text-[#292D32] dark:text-[#8FC2F0]">
+              <Target className="w-3.5 h-3.5 text-[#8FC2F0]" />
+              <span>
+                {isRTL 
+                  ? `المستهدف الفصلي (Q${currentQuarter}): ${formatCompactSAR(requiredQuarterlyTargetSAR)} ريال (موزع ديناميكياً)`
+                  : `Q${currentQuarter} Target Needed: ${formatCompactSAR(requiredQuarterlyTargetSAR)} (dynamically adjusted)`}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Date, Quota Progress Gauge, Fast Actions */}
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 shrink-0">
+          {/* Date pill */}
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-slate-50 dark:bg-[#141820]/70 border border-slate-200/80 dark:border-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <Calendar className="w-4 h-4 text-[#8FC2F0]" />
+            <span>{dateFormatted}</span>
+          </div>
+
+          {/* Monthly Quota Ring */}
+          <div className="flex items-center gap-3 px-3.5 py-2 rounded-2xl bg-slate-50 dark:bg-[#141820]/70 border border-slate-200/80 dark:border-slate-800">
+            <div className="relative w-11 h-11 flex items-center justify-center shrink-0">
+              <svg className="w-11 h-11 -rotate-90" viewBox="0 0 36 36">
                 <path
                   className="text-slate-200 dark:text-slate-700"
                   strokeWidth="3.5"
@@ -206,7 +196,7 @@ export function SalesRepCockpit({ showPriorityActions = false }: SalesRepCockpit
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
                 <path
-                  className="text-[#8FC2F0] dark:text-[#8FC2F0] transition-all duration-1000 ease-out"
+                  className="text-[#77CE69] transition-all duration-1000 ease-out"
                   strokeDasharray={`${quotaPercent}, 100`}
                   strokeWidth="3.5"
                   strokeLinecap="round"
@@ -215,92 +205,46 @@ export function SalesRepCockpit({ showPriorityActions = false }: SalesRepCockpit
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <div className="absolute text-center">
-                <span className="text-xs font-black font-urbanist text-[#292D32] dark:text-white">
-                  {quotaPercent}%
-                </span>
-              </div>
+              <span className="absolute text-[11px] font-black text-[#292D32] dark:text-white">
+                {quotaPercent}%
+              </span>
             </div>
-
-            {/* Quota details */}
-            <div className="space-y-1">
+            <div className="text-[11px] leading-tight">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 {isRTL ? 'إنجاز التارجت الشهري' : 'Monthly Quota'}
               </div>
-              <div className="text-sm font-black text-[#292D32] dark:text-white tracking-tight">
-                {formatCurrencySAR(wonTotalSAR)}
-              </div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium">
-                <span>{isRTL ? 'المستهدف:' : 'Goal:'}</span>
-                <span className="font-bold text-[#292D32] dark:text-slate-300">{formatCurrencySAR(myTargetSAR)}</span>
+              <div className="font-extrabold text-[#292D32] dark:text-white">
+                {formatCompactSAR(wonTotalSAR)} / {formatCompactSAR(myTargetSAR)}
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Tactical 4 Micro-Kpis Ribbon */}
-        <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {/* 1. Required Daily Velocity */}
-          <div className="p-3.5 rounded-2xl bg-[#8FC2F0]/10 border border-[#8FC2F0]/25">
-            <div className="flex items-center justify-between text-[#292D32] dark:text-[#8FC2F0] mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">{isRTL ? 'الركض اليومي المطلوب' : 'Daily Run-Rate Needed'}</span>
-              <TrendingUp className="w-3.5 h-3.5 text-[#8FC2F0]" />
+          {/* Task Pills */}
+          <div className="hidden sm:flex items-center gap-1.5">
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-[#141820]/70 border border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+              <span className="text-[#8FC2F0] font-black">{actionableToday.length}</span> {isRTL ? 'مهام اليوم' : "Today's Tasks"}
             </div>
-            <div className="text-sm font-black text-[#292D32] dark:text-white">
-              {formatCurrencySAR(requiredDailyVelocitySAR)}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-              {isRTL ? `للإغلاق خلال ${daysLeftInMonth} يوماً` : `to reach target in ${daysLeftInMonth}d`}
+            <div className="px-3 py-2 rounded-2xl bg-slate-50 dark:bg-[#141820]/70 border border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-300">
+              <span className="text-[#77CE69] font-black">{weekActivitiesCount}</span> {isRTL ? 'هذا الأسبوع' : 'This Week'}
             </div>
           </div>
 
-          {/* 2. Today's Logged Touches */}
-          <div className="p-3.5 rounded-2xl bg-[#77CE69]/10 border border-[#77CE69]/25">
-            <div className="flex items-center justify-between text-[#216817] dark:text-[#77CE69] mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">{isRTL ? 'إنجازك اليوم' : 'Logged Today'}</span>
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            </div>
-            <div className="text-sm font-black text-[#292D32] dark:text-white">
-              {todayActivities.length} {isRTL ? 'أنشطة' : 'Touches'}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-              {isRTL ? 'مكالمات وزيارات مسجلة' : 'Calls & visits logged today'}
-            </div>
-          </div>
-
-          {/* 3. Active Opportunities Count */}
-          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#141820]/60 border border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">{isRTL ? 'مشاريعك النشطة' : 'Active Pipeline'}</span>
-              <Briefcase className="w-3.5 h-3.5 text-[#8FC2F0]" />
-            </div>
-            <div className="text-sm font-black text-[#292D32] dark:text-white">
-              {myProjects.filter(p => !['won', 'lost', 'hold'].includes(p.pipeline_stage)).length} {isRTL ? 'مشروع' : 'Deals'}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-              {isRTL ? 'قيد المتابعة والتسعير' : 'In progress & pricing'}
-            </div>
-          </div>
-
-          {/* 4. Stale Deals Alert */}
-          <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-800/40">
-            <div className="flex items-center justify-between text-amber-700 dark:text-amber-400 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">{isRTL ? 'مشاريع راكدة' : 'Stale Warning'}</span>
-              <AlertTriangle className="w-3.5 h-3.5" />
-            </div>
-            <div className="text-sm font-black text-amber-700 dark:text-amber-400">
-              {staleDeals.length} {isRTL ? 'مشروع بحاجة لتواصل' : 'Dormant Deals'}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
-              {isRTL ? 'لم يتم التواصل منذ أسبوعين' : 'No contact in 14+ days'}
-            </div>
-          </div>
+          {/* Log Activity Button */}
+          <button
+            type="button"
+            onClick={() => openFastLog()}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-[#8FC2F0] hover:bg-[#7AB5E8] text-[#141820] text-xs font-black transition-all shadow-xs hover:shadow-md cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{isRTL ? 'تسجيل نشاط +' : '+ Log Activity'}</span>
+          </button>
         </div>
       </div>
 
-      {/* 2. Priority Actions Widget (Rendered here only if showPriorityActions is requested) */}
       {showPriorityActions && (
-        <PriorityActionsWidget />
+        <div className="mt-6">
+          <PriorityActionsWidget />
+        </div>
       )}
     </div>
   );

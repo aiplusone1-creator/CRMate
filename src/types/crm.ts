@@ -161,6 +161,7 @@ export interface Contact {
   is_hot_lead: boolean;
   notes?: string;
   owner_id?: string;
+  project_ids?: string[];
   last_contacted_at?: string;
   next_follow_up_at?: string;
   created_at: string;
@@ -184,6 +185,7 @@ export interface Project {
   primary_contact_id?: string;
   primary_contact_name?: string;
   primary_contact_phone?: string;
+  contact_ids?: string[];
   location: string;
   opportunity_type: OpportunityType;
   pipeline_stage: PipelineStage;
@@ -193,6 +195,7 @@ export interface Project {
   probability: number;
   weighted_value: number;
   expected_award_date?: string;
+  closing_date?: string; // YYYY-MM-DD - Mandatory for in_hand projects
   owner_id?: string;
   owner_name?: string;
   // Referral & Assignment System (Owner remains creator; referred_to is current assignee)
@@ -234,7 +237,9 @@ export interface Project {
   collection_records?: CollectionRecord[];
   // Stage Specific Workflow Fields (RFQ Packages, Submittal Status, Negotiation Targets)
   rfq_packages?: RFQPackage;
+  systems?: string[];
   submittal_status?: SubmittalStatus;
+  submittal_sent_at?: string; // Date when technical submittal was submitted to client
   client_target_price?: number;
   last_discount_pct?: number;
   last_discount_amount?: number;
@@ -275,6 +280,7 @@ export interface Activity {
   notes?: string; // Optional (Correction 2)
   location_name?: string;
   google_maps_url?: string;
+  priority?: ProjectPriority;
   next_action?: string;
   next_follow_up_at?: string;
   created_at: string;
@@ -307,6 +313,8 @@ export interface PlannedActivity {
   completed_activity_id?: string;
   skip_reason?: string;
   rescheduled_to_date?: string;
+  is_follow_up?: boolean;
+  follow_up_from_activity_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -475,6 +483,75 @@ export interface AppNotification {
   created_at: string;
   project_id?: string;
   project_name?: string;
+}
+
+// ═══════════════════════════════════════════════════════════
+// INTERNAL TEAM CHAT & COLLABORATION TYPES
+// ═══════════════════════════════════════════════════════════
+
+export interface ChatAttachment {
+  name: string;
+  url: string;
+  type: 'image' | 'pdf' | 'excel' | 'doc';
+  size?: number;
+}
+
+export interface ChatProjectCard {
+  project_id: string;
+  pr_number: string;
+  name: string;
+  company_name?: string;
+  estimated_value: number;
+  pipeline_stage: PipelineStage;
+  opportunity_type: OpportunityType;
+  closing_date?: string;
+  owner_id?: string;
+  owner_name?: string;
+}
+
+export interface ChatPlanTaskCard {
+  task_id: string;
+  title: string;
+  client_name?: string;
+  project_id?: string;
+  planned_date: string;
+  channel?: string;
+  assigned_to_id: string;
+  assigned_to_name: string;
+  assigned_by_id: string;
+  assigned_by_name: string;
+  manager_comment?: string;
+  status: 'pending' | 'acknowledged' | 'rescheduled' | 'completed';
+}
+
+export interface ChatMessage {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  sender_name: string;
+  sender_avatar?: string;
+  sender_role: UserRole;
+  content: string;
+  mentions?: string[]; // array of user IDs mentioned
+  project_card?: ChatProjectCard;
+  plan_task_card?: ChatPlanTaskCard;
+  attachments?: ChatAttachment[];
+  created_at: string;
+  read_by: string[]; // array of user IDs who have read this message
+}
+
+export interface ChatConversation {
+  id: string;
+  type: 'direct' | 'channel';
+  name?: string; // Channel name in English (e.g. "Western Region Projects")
+  name_ar?: string; // Channel name in Arabic (e.g. "مشاريع المنطقة الغربية")
+  description?: string;
+  participant_ids: string[];
+  last_message?: string;
+  last_message_at?: string;
+  last_sender_name?: string;
+  created_at: string;
+  created_by?: string;
 }
 
 

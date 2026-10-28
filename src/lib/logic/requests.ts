@@ -386,7 +386,25 @@ export function getAllNotifications(): AppNotification[] {
     return INITIAL_NOTIFICATIONS;
   }
   try {
-    return JSON.parse(saved);
+    const parsed = JSON.parse(saved);
+    if (!Array.isArray(parsed)) return INITIAL_NOTIFICATIONS;
+
+    // Self-healing deduplication to purge accumulated duplicate timer alerts
+    const seen = new Set<string>();
+    const deduplicated: AppNotification[] = [];
+    for (const n of parsed) {
+      const key = `${n.type}_${n.title}_${n.project_id || n.reference_id || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduplicated.push(n);
+      }
+    }
+
+    const cleaned = deduplicated.slice(0, 100);
+    if (cleaned.length !== parsed.length) {
+      saveNotifications(cleaned);
+    }
+    return cleaned;
   } catch (e) {
     console.error('Failed to parse notifications from storage', e);
     return INITIAL_NOTIFICATIONS;
@@ -399,17 +417,23 @@ export function saveNotifications(notifications: AppNotification[]): void {
 }
 
 export function createNotification(
-  data: Omit<AppNotification, 'id' | 'created_at' | 'is_read'>
+  data: Omit<AppNotification, 'id' | 'created_at' | 'is_read'> & { id?: string }
 ): AppNotification {
   const all = getAllNotifications();
+  const notifId = data.id || `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+  // If already exists with this exact ID, return existing
+  const existing = all.find(n => n.id === notifId);
+  if (existing) return existing;
+
   const newNotif: AppNotification = {
     ...data,
-    id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    id: notifId,
     is_read: false,
     created_at: new Date().toISOString()
   };
 
-  const updated = [newNotif, ...all];
+  const updated = [newNotif, ...all].slice(0, 100);
   saveNotifications(updated);
   return newNotif;
 }

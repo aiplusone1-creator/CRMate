@@ -8,6 +8,7 @@ node_modules/
 
 # next.js
 /.next/
+/.next-test/
 /out/
 
 # production
@@ -27,6 +28,9 @@ yarn-error.log*
 .env
 .env.local
 .env*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # cloud hosting
 .vercel
@@ -35,3 +39,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright Test Artifacts
+test-results/
+playwright-report/
+
+# Local Backups & Agent Scratchpads
+.backups/
+.agent/
+.agents/
+
+# Private Business Spreadsheets & Workbooks
+source-data/*.xlsx
+source-data/*.xls
+*.xlsx
+*.xls
+*.backup.xlsx
+!src/lib/templates/*.xlsx
+!public/templates/*.xlsx

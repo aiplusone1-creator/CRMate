@@ -89,7 +89,7 @@ export function WonCelebrationModal({ isOpen, project, onClose }: WonCelebration
   if (!isOpen || !project) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-300">
       
       {/* Confetti Rain Layer */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -128,7 +128,7 @@ export function WonCelebrationModal({ isOpen, project, onClose }: WonCelebration
       `}</style>
 
       {/* Main Celebration Card */}
-      <div className="relative glass-card max-w-lg w-full bg-white/95 dark:bg-[#1C2130]/95 rounded-3xl shadow-2xl border border-emerald-200/80 dark:border-emerald-500/30 overflow-hidden text-center p-6 sm:p-8 backdrop-blur-2xl animate-in zoom-in-95 duration-200 font-urbanist">
+      <div className="relative glass-card max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] overflow-y-auto bg-white/95 dark:bg-[#1C2130]/95 rounded-2xl sm:rounded-3xl shadow-2xl border border-emerald-200/80 dark:border-emerald-500/30 text-center p-4 sm:p-6 md:p-8 backdrop-blur-2xl animate-in zoom-in-95 duration-200 font-urbanist">
         
         {/* Glowing Ambient Halo */}
         <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 bg-gradient-to-br from-emerald-400/25 via-amber-300/20 to-transparent rounded-full blur-3xl pointer-events-none" />
@@ -143,26 +143,26 @@ export function WonCelebrationModal({ isOpen, project, onClose }: WonCelebration
         </button>
 
         {/* Trophy Icon Centerpiece */}
-        <div className="relative mx-auto w-24 h-24 mb-4">
+        <div className="relative mx-auto w-20 h-20 sm:w-24 sm:h-24 mb-4">
           <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-amber-400 to-emerald-400 opacity-20 blur-xl animate-pulse" />
-          <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-500 via-emerald-500 to-teal-400 p-0.5 shadow-xl flex items-center justify-center">
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-tr from-amber-500 via-emerald-500 to-teal-400 p-0.5 shadow-xl flex items-center justify-center">
             <div className="w-full h-full rounded-[22px] bg-white dark:bg-[#181D2A] flex items-center justify-center">
-              <Trophy className="w-12 h-12 text-amber-500 animate-bounce" />
+              <Trophy className="w-10 h-10 sm:w-12 sm:h-12 text-amber-500 animate-bounce" />
             </div>
           </div>
-          <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg border-2 border-white dark:border-[#1C2130]">
-            <Sparkles className="w-4 h-4" />
+          <div className="absolute -bottom-1 -right-1 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg border-2 border-white dark:border-[#1C2130]">
+            <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
         </div>
 
         {/* Congratulations Titles */}
-        <div className="space-y-1 mb-6">
+        <div className="space-y-1 mb-5 sm:mb-6">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-xs font-black uppercase tracking-wider mb-2">
             <Award className="w-3.5 h-3.5" />
             <span>{isRTL ? 'إنجاز استثنائي جديد' : 'Milestone Unlocked'}</span>
           </div>
 
-          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
             Congratulations! 🎉
           </h2>
           <p className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400">

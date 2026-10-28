@@ -38,6 +38,7 @@ import {
   ListFilter
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
+import { useSalesScope } from '@/lib/hooks/useSalesScope';
 import { 
   ACTIVITY_CHANNELS, 
   ACTIVITY_OUTCOMES, 
@@ -83,17 +84,28 @@ export default function ActivitiesPage() {
     setSelectedSalesFilter
   } = useCRM();
 
-  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin' || currentRole === 'sales_manager' || currentRole === 'admin';
+  const { isManager, scopedActivities } = useSalesScope();
 
   // View Mode: 'board' (Weekly Columns matching My Week) or 'list' (Audit Table)
-  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+  const [viewMode, setViewModeState] = useState<'board' | 'list'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('al_mespar_activities_view_mode');
+      if (saved === 'board' || saved === 'list') return saved;
+    }
+    return 'board';
+  });
+  const setViewMode = React.useCallback((mode: 'board' | 'list') => {
+    setViewModeState(mode);
+    try { sessionStorage.setItem('al_mespar_activities_view_mode', mode); } catch {}
+  }, []);
 
   // Week offset (reference Sunday: Sep 13, 2026)
   const [weekOffset, setWeekOffset] = useState(0);
   const [showWeekend, setShowWeekend] = useState(false);
 
-  // Filters
+  // Filters (with deferred search query for instant responsiveness)
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = React.useDeferredValue(searchQuery);
   const [selectedChannel, setSelectedChannel] = useState<string>('all');
   const [selectedOutcome, setSelectedOutcome] = useState<string>('all');
 
@@ -267,20 +279,14 @@ export default function ActivitiesPage() {
     setIsEditModalOpen(true);
   };
 
-  // Filtered Activities
+  // Filtered Activities (Using centralized scopedActivities & deferredSearchQuery)
   const filteredActivities = useMemo(() => {
-    return activities.filter(act => {
-      // Rep Scoping
-      const matchesOwner = isManager
-        ? (selectedSalesFilter === 'all' || act.user_id === selectedSalesFilter)
-        : (act.user_id === currentUser.id);
-      if (!matchesOwner) return false;
-
+    const q = deferredSearchQuery.trim().toLowerCase();
+    return scopedActivities.filter(act => {
       if (selectedChannel !== 'all' && act.channel !== selectedChannel) return false;
       if (selectedOutcome !== 'all' && act.outcome !== selectedOutcome) return false;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      if (q) {
         const matchProject = act.project_name?.toLowerCase().includes(q);
         const matchCompany = act.company_name?.toLowerCase().includes(q);
         const matchContact = act.contact_name?.toLowerCase().includes(q);
@@ -291,7 +297,7 @@ export default function ActivitiesPage() {
       }
       return true;
     });
-  }, [activities, isManager, selectedSalesFilter, currentUser.id, selectedChannel, selectedOutcome, searchQuery]);
+  }, [scopedActivities, selectedChannel, selectedOutcome, deferredSearchQuery]);
 
   // Activities this week
   const weekDateSet = useMemo(() => new Set(workDays.map(d => d.dateStr)), [workDays]);
@@ -311,44 +317,51 @@ export default function ActivitiesPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* HEADER: WEEK NAVIGATION & VIEW SWITCHER */}
+      {/* ALL-IN-ONE COMMAND HEADER: TITLE, WEEK NAVIGATION & ACTIONS */}
       {/* ========================================================================= */}
-      <div className="crm-card p-6 sm:p-7 flex flex-col md:flex-row md:items-center justify-between gap-4 font-urbanist">
+      <div className="crm-card p-3 sm:p-3.5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
-              <CalendarDays className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
+              <CalendarDays className="w-3 h-3" />
               <span>{isRTL ? 'جدول الأنشطة الأسبوعي الميداني' : 'Weekly Activities Board'}</span>
             </span>
-            <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-[#77CE69]/15 text-[#77CE69] border border-[#77CE69]/30">
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#77CE69]/15 text-[#77CE69] border border-[#77CE69]/30 font-mono">
               {thisWeekActivities.length} {isRTL ? 'نشاطاً هذا الأسبوع' : 'Activities This Week'}
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#292D32] dark:text-white tracking-tight">
-            {isRTL ? 'سجل الأنشطة والزيارات الميدانية' : 'Sales Activities & Execution Log'}
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
-            {isRTL ? 'سجل متابعات الاتصالات والاجتماعات مع المقاولين والاستشاريين والتحديثات الميدانية والخطوات التالية.' : 'Daily logs of client calls, consultant meetings, field hunting, and next action commitments.'}
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg sm:text-xl font-black text-[#292D32] dark:text-white tracking-tight">
+              {isRTL ? 'سجل الأنشطة والزيارات الميدانية' : 'Sales Activities & Execution Log'}
+            </h1>
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10.5px] font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <span className="font-mono text-[#0088FF] dark:text-[#8FC2F0]">W{weekNumber}</span>
+              <span>•</span>
+              <span className="font-mono">{currentWeekLabel}</span>
+              {weekOffset === 0 && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ltr:ml-1 rtl:mr-1" title={isRTL ? 'الأسبوع الحالي' : 'Current Week'} />
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Action Controls & Navigation in One Row */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* Week Navigation */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-full border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-full border border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setWeekOffset(prev => prev - 1)}
-              className="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center justify-center cursor-pointer"
+              className="w-7 h-7 rounded-full hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors flex items-center justify-center cursor-pointer"
               title={isRTL ? 'الأسبوع السابق' : 'Previous Week'}
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setWeekOffset(0)}
-              className={`px-3.5 py-1 text-xs font-bold rounded-full transition-colors cursor-pointer ${
+              className={`px-3 py-1 text-[11px] font-bold rounded-full transition-colors cursor-pointer ${
                 weekOffset === 0 
-                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs' 
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs' 
                   : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'
               }`}
             >
@@ -356,23 +369,37 @@ export default function ActivitiesPage() {
             </button>
             <button
               onClick={() => setWeekOffset(prev => prev + 1)}
-              className="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center justify-center cursor-pointer"
+              className="w-7 h-7 rounded-full hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors flex items-center justify-center cursor-pointer"
               title={isRTL ? 'الأسبوع القادم' : 'Next Week'}
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
+          {/* 6 vs 7 days toggle */}
+          <button
+            onClick={() => setShowWeekend(!showWeekend)}
+            className={`text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all cursor-pointer ${
+              showWeekend
+                ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] border-[#292D32] dark:border-white shadow-2xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            {showWeekend 
+              ? (isRTL ? '7 أيام (شامل الجمعة)' : '7 Days') 
+              : (isRTL ? '6 أيام (السبت - الخميس)' : '6 Days')}
+          </button>
+
           {/* Manager Rep Selector */}
           {isManager && (
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-full border border-slate-200 dark:border-slate-700 text-xs">
-              <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">{isRTL ? 'المندوب:' : 'Rep:'}</span>
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-full border border-slate-200 dark:border-slate-700 text-xs">
+              <span className="text-[10px] font-bold text-slate-400 px-1.5 uppercase">{isRTL ? 'المندوب:' : 'Rep:'}</span>
               <select
                 value={selectedSalesFilter}
                 onChange={(e) => setSelectedSalesFilter(e.target.value)}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full px-3 py-1 text-xs font-bold text-[#292D32] dark:text-slate-100 focus:outline-none cursor-pointer"
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full px-2.5 py-0.5 text-xs font-bold text-[#292D32] dark:text-slate-100 focus:outline-none cursor-pointer"
               >
-                <option value="all">{isRTL ? 'فريق المبيعات بالكامل' : 'All Sales Team'} ({teamMembers.filter(m => m.role === 'sales_engineer').length})</option>
+                <option value="all">{isRTL ? 'الكل' : 'All'} ({teamMembers.filter(m => m.role === 'sales_engineer').length})</option>
                 {teamMembers.filter(m => m.role === 'sales_engineer').map(m => (
                   <option key={m.id} value={m.id}>{m.full_name}</option>
                 ))}
@@ -381,121 +408,82 @@ export default function ActivitiesPage() {
           )}
 
           {/* View Switcher (Weekly Board vs Table) */}
-          <div className="rounded-full bg-white/90 dark:bg-slate-800/90 p-1.5 border border-slate-200/60 dark:border-slate-700/60 shadow-xs flex items-center font-urbanist">
+          <div className="rounded-full bg-white dark:bg-slate-800 p-0.5 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center">
             <button
               onClick={() => setViewMode('board')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'board'
-                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs'
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
               title="Weekly Board View"
             >
-              <Kanban className="w-3.5 h-3.5" />
-              <span>{isRTL ? 'اللوحة الأسبوعية' : 'Weekly Board'}</span>
+              <Kanban className="w-3 h-3" />
+              <span>{isRTL ? 'لوحة' : 'Board'}</span>
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'list'
-                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs'
+                  ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
               title="Audit List View"
             >
-              <ListFilter className="w-3.5 h-3.5" />
-              <span>{isRTL ? 'جدول المراجعة' : 'List Audit'}</span>
+              <ListFilter className="w-3 h-3" />
+              <span>{isRTL ? 'جدول' : 'Table'}</span>
             </button>
           </div>
 
-          {/* Log Activity & Voice Debrief Buttons */}
+          {/* Action buttons */}
           {currentRole !== 'viewer' && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
                   const todayDate = getTodayDateStr();
                   const currentDayConfig = workDays.find(d => d.dateStr === todayDate) || workDays[0];
                   handleOpenVoiceForDay(currentDayConfig.dateStr, currentDayConfig.arabic, currentDayConfig.name);
                 }}
-                className="crm-pill-dark flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-xs transition-all font-cairo cursor-pointer"
+                className="crm-pill-dark flex items-center gap-1 px-3 py-1.5 text-xs font-bold shadow-2xs transition-all cursor-pointer"
                 title="تسجيل صوتي ذكي لأنشطة اليوم"
               >
-                <Mic className="w-4 h-4 text-[#8FC2F0]" />
-                <span>{isRTL ? 'تسجيل صوتي لليوم' : 'Voice Log Today'}</span>
+                <Mic className="w-3.5 h-3.5 text-[#8FC2F0]" />
+                <span className="hidden sm:inline">{isRTL ? 'تسجيل صوتي' : 'Voice Log'}</span>
               </button>
 
               <button
                 onClick={() => setIsAddModalOpen(true)}
-                className="crm-pill-dark flex items-center gap-1.5 px-4 py-2 text-xs font-bold shadow-xs transition-all font-urbanist cursor-pointer"
+                className="crm-pill-dark flex items-center gap-1 px-3 py-1.5 text-xs font-bold shadow-2xs transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4 text-[#8FC2F0]" />
-                <span>{isRTL ? '+ تسجيل نشاط' : 'Log Activity'}</span>
+                <Plus className="w-3.5 h-3.5 text-[#8FC2F0]" />
+                <span>{isRTL ? '+ نشاط' : 'Log'}</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Week Date Banner & Workdays Toggle */}
-      <div className="crm-card p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-urbanist">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center font-extrabold text-sm">
-            W{weekNumber}
-          </div>
-          <div>
-            <div className="text-sm font-extrabold tracking-tight text-[#292D32] dark:text-white flex items-center gap-2">
-              <span>{currentWeekLabel}</span>
-              {weekOffset === 0 && (
-                <span className="text-[10px] bg-[#77CE69]/20 text-[#77CE69] border border-[#77CE69]/30 px-3 py-0.5 rounded-full font-bold">
-                  {isRTL ? 'الأسبوع الحالي' : 'Current Week'}
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-              {isRTL 
-                ? 'اسحب وأفلت أي بطاقة نشاط بين أعمدة الأيام لإعادة جدولتها بسهولة.' 
-                : 'Drag and drop any activity card between day columns to reschedule its execution date.'}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowWeekend(!showWeekend)}
-            className={`text-xs px-4 py-2 rounded-full border font-bold transition-all font-urbanist cursor-pointer ${
-              showWeekend
-                ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] border-[#292D32] dark:border-white shadow-xs'
-                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
-            }`}
-          >
-            {showWeekend 
-              ? (isRTL ? 'عرض 7 أيام (شامل الجمعة)' : 'Showing 7 Days (Inc. Friday)') 
-              : (isRTL ? '6 أيام عمل (السبت - الخميس)' : '6 Workdays (Sat–Thu)')}
-          </button>
-        </div>
-      </div>
-
       {/* Filters Bar */}
-      <div className="crm-card p-4 sm:p-5 flex flex-col md:flex-row items-center gap-3 font-urbanist">
+      <div className="crm-card p-2 sm:p-2.5 rounded-xl flex flex-col md:flex-row items-center gap-2 shadow-2xs">
         <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search activities by action, project name, company, contact or notes..."
+            placeholder={isRTL ? "بحث في الأنشطة، اسم المشروع، الشركة، الملاحظات..." : "Search activities by action, project, company, notes..."}
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 font-medium"
+            className="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 font-medium"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
+        <div className="flex items-center gap-1.5 w-full md:w-auto flex-wrap">
           {/* Channel Filter */}
           <select
             value={selectedChannel}
             onChange={e => setSelectedChannel(e.target.value)}
-            className="px-4 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
+            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
           >
-            <option value="all" className="dark:bg-[#1C2130] dark:text-white">All Channels</option>
+            <option value="all" className="dark:bg-[#1C2130] dark:text-white">{isRTL ? 'كافة القنوات' : 'All Channels'}</option>
             {ACTIVITY_CHANNELS.map(ch => (
               <option key={ch.value} value={ch.value} className="dark:bg-[#1C2130] dark:text-white">{ch.label}</option>
             ))}
@@ -505,9 +493,9 @@ export default function ActivitiesPage() {
           <select
             value={selectedOutcome}
             onChange={e => setSelectedOutcome(e.target.value)}
-            className="px-4 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
+            className="px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
           >
-            <option value="all" className="dark:bg-[#1C2130] dark:text-white">All Outcomes</option>
+            <option value="all" className="dark:bg-[#1C2130] dark:text-white">{isRTL ? 'كافة النتائج' : 'All Outcomes'}</option>
             {ACTIVITY_OUTCOMES.map(o => (
               <option key={o.value} value={o.value} className="dark:bg-[#1C2130] dark:text-white">{o.label}</option>
             ))}

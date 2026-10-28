@@ -8,6 +8,7 @@ interface CRMateSymbolProps {
   className?: string;
   size?: number;
   variant?: 'color' | 'monochrome' | 'white' | 'auto';
+  theme?: 'light' | 'dark';
 }
 
 /**
@@ -24,8 +25,10 @@ export function CRMateSymbol({
   className = '',
   size = 36,
   variant = 'auto',
+  theme,
 }: CRMateSymbolProps) {
-  const { isDark } = useTheme();
+  const { isDark: contextIsDark } = useTheme();
+  const isDark = theme !== undefined ? theme === 'dark' : contextIsDark;
 
   // Pure White Monochrome (e.g. on dark badges, inversions)
   if (variant === 'white') {
@@ -150,7 +153,7 @@ export function CRMateHorizontalLogo({
     <div dir="ltr" className={`flex items-center gap-3 select-none text-left ${className}`}>
       {/* Brand Flat Symbol */}
       <div className="shrink-0 flex items-center justify-center">
-        <CRMateSymbol size={symbolSize} />
+        <CRMateSymbol size={symbolSize} theme={theme} />
       </div>
 
       {/* Wordmark */}
@@ -173,7 +176,7 @@ export function CRMateHorizontalLogo({
 
         {showSubtitle && (
           <span
-            className={`text-[9px] font-bold uppercase tracking-[0.25em] mt-1 transition-colors duration-200 font-urbanist text-left ${
+            className={`text-[10px] font-bold uppercase tracking-[0.25em] mt-1 transition-colors duration-200 font-urbanist text-left ${
               isDark ? 'text-slate-400' : 'text-slate-400'
             }`}
           >

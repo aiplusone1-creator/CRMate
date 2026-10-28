@@ -35,6 +35,7 @@ export interface ParsedExcelResult {
     totalQuotations: number;
     totalEstimatedValueSAR: number;
     totalWonValueSAR: number;
+    internalDuplicatesFound: number;
     warnings: string[];
   };
 }
@@ -238,16 +239,26 @@ function findHeaderRow(rows: any[][], keywords: string[]): { headerRowIdx: numbe
 }
 
 function getCell(row: any[], headerMap: Record<string, number>, possibleNames: string[]): any {
+  // 1. Direct exact match
   for (const name of possibleNames) {
-    const key = name.toLowerCase();
-    // Direct exact match
+    const key = name.toLowerCase().trim();
     if (headerMap[key] !== undefined) {
       return row[headerMap[key]];
     }
-    // Partial inclusion
+  }
+  
+  // 2. Strict pattern match (prevents 'pr' from accidentally matching 'project stage' or 'price')
+  for (const name of possibleNames) {
+    const key = name.toLowerCase().trim();
     for (const [hKey, idx] of Object.entries(headerMap)) {
-      if (hKey.includes(key) || key.includes(hKey)) {
-        return row[idx];
+      if (key === 'pr' || key === '#pr') {
+        if (hKey === '#pr' || hKey === 'pr' || hKey === 'pr#' || hKey === '# pr' || hKey === 'pr number' || hKey === 'pr code' || hKey.startsWith('pr ') || hKey.startsWith('#pr')) {
+          return row[idx];
+        }
+      } else if (key.length >= 4) {
+        if (hKey.includes(key) || key.includes(hKey)) {
+          return row[idx];
+        }
       }
     }
   }
@@ -269,6 +280,7 @@ export function parseExcelWorkbook(
   const sheetNames = wb.SheetNames;
 
   const projects: Project[] = [];
+  const projectsMap = new Map<string, Project>();
   const companiesMap = new Map<string, Company>();
   const contactsMap = new Map<string, Contact>();
   const activities: Activity[] = [];
@@ -277,6 +289,7 @@ export function parseExcelWorkbook(
 
   let totalEstimatedValueSAR = 0;
   let totalWonValueSAR = 0;
+  let internalDuplicatesFound = 0;
 
   // Helper to ensure company exists
   const getOrCreateCompany = (rawName: string, defaults?: Partial<Company>): Company => {
@@ -364,6 +377,8 @@ export function parseExcelWorkbook(
       'pr', 'opportunity', 'client', 'company', 'stage', 'status'
     ]);
 
+    let autoPrCounter = 1081;
+
     for (let r = headerRowIdx + 1; r < rows.length; r++) {
       const row = rows[r];
       if (!row || !Array.isArray(row) || row.length === 0) continue;
@@ -386,7 +401,8 @@ export function parseExcelWorkbook(
       // Require at least project name or PR number
       if (!rawOpp && !rawPr) continue;
 
-      const prNumber = rawPr ? String(rawPr).trim() : `PR-${1000 + projects.length}`;
+      const hasValidPr = rawPr && String(rawPr).trim() !== '' && String(rawPr).trim() !== '0' && !String(rawPr).trim().startsWith('0');
+      const prNumber = hasValidPr ? String(rawPr).trim() : `PR-${autoPrCounter++}`;
       const projectName = rawOpp ? String(rawOpp).trim() : `Project ${prNumber}`;
 
       // Skip summary / KPI rows that might be in the sheet
@@ -462,8 +478,26 @@ export function parseExcelWorkbook(
       project.calculated_health = health;
       project.days_overdue = daysOverdue;
 
-      projects.push(project);
-      totalEstimatedValueSAR += estValue;
+      // Internal Deduplication Check: Prevent duplicate PRs / Project Names within the same sheet
+      const projKey = prNumber.toLowerCase().replace(/[^a-z0-9]/g, '') || projectName.toLowerCase();
+      if (projectsMap.has(projKey)) {
+        internalDuplicatesFound++;
+        const existingProj = projectsMap.get(projKey)!;
+        if (estValue > 0 && existingProj.estimated_value === 0) {
+          existingProj.estimated_value = estValue;
+          existingProj.weighted_value = weightedValue;
+          totalEstimatedValueSAR += estValue;
+        }
+        if (actionDone && !existingProj.internal_notes?.includes(actionDone)) {
+          existingProj.internal_notes = `${existingProj.internal_notes || ''}\n[Log]: ${actionDone}`.trim();
+        }
+        if (nextFollowUp) existingProj.next_action = nextFollowUp;
+        if (nextFollowUpDate) existingProj.next_follow_up_at = nextFollowUpDate;
+      } else {
+        projectsMap.set(projKey, project);
+        projects.push(project);
+        totalEstimatedValueSAR += estValue;
+      }
 
       // Also create an Activity log if Action Done exists
       if (actionDone && actionDate) {
@@ -806,6 +840,7 @@ export function parseExcelWorkbook(
       totalQuotations: quotations.length,
       totalEstimatedValueSAR,
       totalWonValueSAR,
+      internalDuplicatesFound,
       warnings
     }
   };

@@ -25,9 +25,17 @@ import {
   Lock,
   Archive,
   RotateCcw,
-  FileCheck
+  FileCheck,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Filter
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store/crm-context';
 import { 
   PIPELINE_STAGES, 
@@ -36,17 +44,107 @@ import {
   SAUDI_LOCATIONS,
   canEditCommercialValue
 } from '@/lib/constants';
-import { Project, OpportunityType, PipelineStage, ProjectPriority } from '@/types/crm';
-import { formatCurrencySAR, formatDateString } from '@/lib/utils';
+import { Project, OpportunityType, PipelineStage, ProjectPriority, CompanyType } from '@/types/crm';
+import { formatCurrencySAR, formatDateString, cn } from '@/lib/utils';
 import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 import { calculatePipelineForecast, getStageAgingInfo, STAGE_PROBABILITIES } from '@/lib/logic/pipeline-analytics';
 import { ProjectCard } from '@/components/projects/project-card';
 import { LostReasonModal } from '@/components/modals/lost-reason-modal';
 import { WonCelebrationModal } from '@/components/modals/won-celebration-modal';
 import { ArchiveProjectModal } from '@/components/modals/archive-project-modal';
+import { AddProjectModal } from '@/components/modals/add-project-modal';
+import { EditProjectModal } from '@/components/modals/edit-project-modal';
 import { scopeProjects, canUserAccessProjectCockpit } from '@/lib/logic/scope';
+import { useSalesScope } from '@/lib/hooks/useSalesScope';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { ContextualHelp } from '@/components/guide/contextual-help';
+
+interface MonthColumnDef {
+  monthNum: string; // '01' to '12'
+  monthIndex: number; // 0 to 11
+  labelEn: string;
+  labelAr: string;
+  shortEn: string;
+  shortAr: string;
+  quarterId: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+}
+
+interface QuarterDef {
+  id: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  titleEn: string;
+  titleAr: string;
+  subtitleEn: string;
+  subtitleAr: string;
+  colorBorder: string;
+  colorBg: string;
+  colorBadge: string;
+  months: MonthColumnDef[];
+}
+
+const CLOSING_QUARTERS: QuarterDef[] = [
+  {
+    id: 'Q1',
+    titleEn: 'Q1 (Jan - Mar)',
+    titleAr: 'Q1 (الربع الأول)',
+    subtitleEn: 'January · February · March',
+    subtitleAr: 'يناير · فبراير · مارس',
+    colorBorder: 'border-blue-300 dark:border-blue-900/60',
+    colorBg: 'bg-blue-50/25 dark:bg-blue-950/15',
+    colorBadge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 border-blue-200 dark:border-blue-800',
+    months: [
+      { monthNum: '01', monthIndex: 0, labelEn: 'January', labelAr: 'يناير', shortEn: 'Jan', shortAr: 'يناير', quarterId: 'Q1' },
+      { monthNum: '02', monthIndex: 1, labelEn: 'February', labelAr: 'فبراير', shortEn: 'Feb', shortAr: 'فبراير', quarterId: 'Q1' },
+      { monthNum: '03', monthIndex: 2, labelEn: 'March', labelAr: 'مارس', shortEn: 'Mar', shortAr: 'مارس', quarterId: 'Q1' },
+    ]
+  },
+  {
+    id: 'Q2',
+    titleEn: 'Q2 (Apr - Jun)',
+    titleAr: 'Q2 (الربع الثاني)',
+    subtitleEn: 'April · May · June',
+    subtitleAr: 'أبريل · مايو · يونيو',
+    colorBorder: 'border-purple-300 dark:border-purple-900/60',
+    colorBg: 'bg-purple-50/25 dark:bg-purple-950/15',
+    colorBadge: 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+    months: [
+      { monthNum: '04', monthIndex: 3, labelEn: 'April', labelAr: 'أبريل', shortEn: 'Apr', shortAr: 'أبريل', quarterId: 'Q2' },
+      { monthNum: '05', monthIndex: 4, labelEn: 'May', labelAr: 'مايو', shortEn: 'May', shortAr: 'مايو', quarterId: 'Q2' },
+      { monthNum: '06', monthIndex: 5, labelEn: 'June', labelAr: 'يونيو', shortEn: 'Jun', shortAr: 'يونيو', quarterId: 'Q2' },
+    ]
+  },
+  {
+    id: 'Q3',
+    titleEn: 'Q3 (Jul - Sep)',
+    titleAr: 'Q3 (الربع الثالث)',
+    subtitleEn: 'July · August · September',
+    subtitleAr: 'يوليو · أغسطس · سبتمبر',
+    colorBorder: 'border-amber-300 dark:border-amber-900/60',
+    colorBg: 'bg-amber-50/25 dark:bg-amber-950/15',
+    colorBadge: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+    months: [
+      { monthNum: '07', monthIndex: 6, labelEn: 'July', labelAr: 'يوليو', shortEn: 'Jul', shortAr: 'يوليو', quarterId: 'Q3' },
+      { monthNum: '08', monthIndex: 7, labelEn: 'August', labelAr: 'أغسطس', shortEn: 'Aug', shortAr: 'أغسطس', quarterId: 'Q3' },
+      { monthNum: '09', monthIndex: 8, labelEn: 'September', labelAr: 'سبتمبر', shortEn: 'Sep', shortAr: 'سبتمبر', quarterId: 'Q3' },
+    ]
+  },
+  {
+    id: 'Q4',
+    titleEn: 'Q4 (Oct - Dec)',
+    titleAr: 'Q4 (الربع الرابع)',
+    subtitleEn: 'October · November · December',
+    subtitleAr: 'أكتوبر · نوفمبر · ديسمبر',
+    colorBorder: 'border-emerald-300 dark:border-emerald-900/60',
+    colorBg: 'bg-emerald-50/25 dark:bg-emerald-950/15',
+    colorBadge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    months: [
+      { monthNum: '10', monthIndex: 9, labelEn: 'October', labelAr: 'أكتوبر', shortEn: 'Oct', shortAr: 'أكتوبر', quarterId: 'Q4' },
+      { monthNum: '11', monthIndex: 10, labelEn: 'November', labelAr: 'نوفمبر', shortEn: 'Nov', shortAr: 'نوفمبر', quarterId: 'Q4' },
+      { monthNum: '12', monthIndex: 11, labelEn: 'December', labelAr: 'ديسمبر', shortEn: 'Dec', shortAr: 'ديسمبر', quarterId: 'Q4' },
+    ]
+  }
+];
+
+const ALL_MONTHS = CLOSING_QUARTERS.flatMap(q => q.months);
 
 export default function ProjectsPage() {
   const { language, t } = useLanguage();
@@ -58,6 +156,8 @@ export default function ProjectsPage() {
     contacts, 
     quotations,
     addProject, 
+    addCompany,
+    addContact, 
     updateProject, 
     deleteProject, 
     archiveProject,
@@ -66,13 +166,36 @@ export default function ProjectsPage() {
     currentUser,
     teamMembers,
     selectedSalesFilter,
-    setSelectedSalesFilter
+    setSelectedSalesFilter,
+    isSyncingExcel,
+    lastExcelSyncTime,
+    syncExcelNow
   } = useCRM();
 
-  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin' || currentRole === 'sales_manager' || currentRole === 'admin';
-  const isSalesRep = currentUser.role === 'sales_engineer' || (currentUser.role as string) === 'sales_rep';
+  const { 
+    isManager, 
+    isSalesRep, 
+    scopedProjects: scopedBaseProjects, 
+    scopedArchivedProjects 
+  } = useSalesScope();
 
-  const [viewMode, setViewMode] = useState<'kanban' | 'table' | 'archive'>('kanban');
+  const router = useRouter();
+
+  const [viewMode, setViewModeState] = useState<'kanban' | 'table' | 'archive'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = sessionStorage.getItem('al_mespar_projects_view_mode');
+      if (saved === 'table' || saved === 'kanban' || saved === 'archive') return saved;
+    }
+    return 'kanban';
+  });
+
+  const setViewMode = React.useCallback((mode: 'kanban' | 'table' | 'archive') => {
+    setViewModeState(mode);
+    try {
+      sessionStorage.setItem('al_mespar_projects_view_mode', mode);
+    } catch {}
+  }, []);
+
   const [projectToArchive, setProjectToArchive] = useState<Project | null>(null);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [archiveSearchTerm, setArchiveSearchTerm] = useState('');
@@ -81,6 +204,10 @@ export default function ProjectsPage() {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedHealth, setSelectedHealth] = useState<string>('all');
   const [selectedCity, setSelectedCity] = useState<string>('all');
+
+  // Deferred search values for responsive, non-blocking UI
+  const deferredSearchTerm = React.useDeferredValue(searchTerm);
+  const deferredArchiveSearchTerm = React.useDeferredValue(archiveSearchTerm);
 
   const [activeDrilldownLabel, setActiveDrilldownLabel] = useState<string | null>(null);
   const [activeFilterScope, setActiveFilterScope] = useState<'all' | 'active' | 'critical_aging'>('all');
@@ -91,7 +218,7 @@ export default function ProjectsPage() {
       const params = new URLSearchParams(window.location.search);
       const targetId = params.get('id');
       if (targetId) {
-        window.location.href = `/projects/${targetId}`;
+        router.push(`/projects/${targetId}`);
         return;
       }
       const q = params.get('search');
@@ -110,6 +237,14 @@ export default function ProjectsPage() {
         setActiveDrilldownLabel(isRTL ? `مرحلة: ${stageObj?.labelAr || s}` : `Stage: ${stageObj?.label || s}`);
       }
 
+      const t = params.get('type');
+      if (t) {
+        setSelectedType(t);
+        const typeObj = OPPORTUNITY_TYPES.find(ot => ot.value === t);
+        const typeLabelAr = t === 'tender' ? 'مناقصة' : t === 'in_hand' ? 'مشروع جاري' : t === 'upgrade_retrofit' ? 'تطوير / ترقية' : (typeObj?.label || t);
+        setActiveDrilldownLabel(isRTL ? `نوع الفرصة: ${typeLabelAr}` : `Opportunity Type: ${typeObj?.label || t}`);
+      }
+
       const v = params.get('view') || params.get('tab');
       if (v === 'table' || v === 'kanban' || v === 'archive') setViewMode(v);
 
@@ -117,14 +252,15 @@ export default function ProjectsPage() {
       if (f === 'active') {
         setActiveFilterScope('active');
         setActiveDrilldownLabel(isRTL ? 'كافة الصفقات النشطة في المسار' : 'All Active Pipeline Deals');
-      } else if (f === 'aging' || f === 'critical') {
+      } else if (f === 'aging' || f === 'critical' || f === 'stale') {
         setActiveFilterScope('critical_aging');
         setActiveDrilldownLabel(isRTL ? 'الصفقات المتعثرة في مرحلتها الحالية (Stage SLA Alert)' : 'Critical Stage Aging Deals');
       }
     }
   }, [isRTL]);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [projectForLostModal, setProjectForLostModal] = useState<Project | null>(null);
   const [projectForWonCelebration, setProjectForWonCelebration] = useState<Project | null>(null);
@@ -133,6 +269,13 @@ export default function ProjectsPage() {
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Grouping Mode: 'stage' (by Pipeline Stage) or 'closing_date' (by 4 Quarters & 12 Months)
+  const [groupByMode, setGroupByMode] = useState<'stage' | 'closing_date'>('stage');
+  const [selectedClosingYear, setSelectedClosingYear] = useState<number>(2026);
+  const [selectedQuarterFilter, setSelectedQuarterFilter] = useState<'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4'>('all');
+  const [showUnassignedClosing, setShowUnassignedClosing] = useState<boolean>(true);
+  const [dragOverClosingKey, setDragOverClosingKey] = useState<string | null>(null);
 
   // Kanban Stage Columns (Exact 7-Stage Contracting Lifecycle)
   const kanbanStages: { stage: PipelineStage; label: string; labelAr: string; headerColor: string }[] = [
@@ -188,128 +331,70 @@ export default function ProjectsPage() {
     setProjectForLostModal(null);
   };
 
-  // Form State
-  const [prNumber, setPrNumber] = useState('');
-  const [name, setName] = useState('');
-  const [companyId, setCompanyId] = useState('');
-  const [primaryContactId, setPrimaryContactId] = useState('');
-  const [location, setLocation] = useState('Jeddah');
-  const [opportunityType, setOpportunityType] = useState<OpportunityType>('in_hand');
-  const [pipelineStage, setPipelineStage] = useState<PipelineStage>('quotation_sent');
-  const [priority, setPriority] = useState<ProjectPriority>('medium');
-  const [estimatedValue, setEstimatedValue] = useState<number>(100000);
-  const [probability, setProbability] = useState<number>(60);
-  const [nextAction, setNextAction] = useState('');
-  const [nextFollowUpAt, setNextFollowUpAt] = useState('');
-  const [coEngineer, setCoEngineer] = useState('');
+  const handleClosingDateDrop = async (projectId: string, targetYearMonth: string) => {
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return;
+    if (!canUserAccessProjectCockpit(proj, currentUser)) return;
+
+    const [yearStr, monthStr] = targetYearMonth.split('-');
+    const y = parseInt(yearStr, 10);
+    const m = parseInt(monthStr, 10);
+
+    let day = 15;
+    if (proj.closing_date) {
+      const parts = proj.closing_date.split('-');
+      if (parts.length >= 3) {
+        const parsedDay = parseInt(parts[2], 10);
+        if (!isNaN(parsedDay) && parsedDay >= 1 && parsedDay <= 31) {
+          day = parsedDay;
+        }
+      }
+    }
+
+    const maxDays = new Date(y, m, 0).getDate();
+    if (day > maxDays) day = maxDays;
+
+    const dayStr = String(day).padStart(2, '0');
+    const newClosingDate = `${yearStr}-${monthStr}-${dayStr}`;
+
+    if (proj.closing_date === newClosingDate) return;
+
+    await updateProject(projectId, { closing_date: newClosingDate });
+
+    const monthObj = ALL_MONTHS.find(mon => mon.monthNum === monthStr);
+    const monthName = isRTL ? monthObj?.labelAr : monthObj?.labelEn;
+    setToastMessage(
+      isRTL 
+        ? `تم ترحيل موعد إغلاق مشروع "${proj.name}" إلى ${monthName} ${yearStr} (${newClosingDate})`
+        : `Rescheduled "${proj.name}" closing date to ${monthName} ${yearStr} (${newClosingDate})`
+    );
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleUnassignedDrop = async (projectId: string) => {
+    const proj = projects.find(p => p.id === projectId);
+    if (!proj) return;
+    if (!canUserAccessProjectCockpit(proj, currentUser)) return;
+
+    if (proj.opportunity_type === 'in_hand') {
+      setToastMessage(isRTL ? 'تنبيه: مشاريع In Hand تتطلب تاريخ إغلاق إلزامي ولا يمكن إزالته' : 'Notice: In Hand projects require a mandatory Closing Date');
+      setTimeout(() => setToastMessage(null), 3500);
+      return;
+    }
+
+    await updateProject(projectId, { closing_date: undefined });
+    setToastMessage(isRTL ? `تمت إزالة تاريخ الإغلاق للمشروع "${proj.name}"` : `Cleared closing date for "${proj.name}"`);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const openCreateModal = () => {
-    setEditingProject(null);
-    const nextPr = `PR${1045 + projects.length}`;
-    setPrNumber(nextPr);
-    setName('');
-    const firstComp = companies[0]?.id || '';
-    setCompanyId(firstComp);
-    const firstContact = contacts.find(c => c.company_id === firstComp)?.id || '';
-    setPrimaryContactId(firstContact);
-    setLocation('Jeddah');
-    setOpportunityType('in_hand');
-    setPipelineStage('quotation_sent');
-    setPriority('medium');
-    setEstimatedValue(150000);
-    setProbability(60);
-    setNextAction('');
-    setNextFollowUpAt('');
-    setCoEngineer('');
-    setIsModalOpen(true);
+    setIsAddModalOpen(true);
   };
 
   const openEditModal = (proj: Project) => {
     if (!canUserAccessProjectCockpit(proj, currentUser)) return;
     setEditingProject(proj);
-    setPrNumber(proj.pr_number);
-    setName(proj.name);
-    setCompanyId(proj.company_id);
-    setPrimaryContactId(proj.primary_contact_id || '');
-    setLocation(proj.location);
-    setOpportunityType(proj.opportunity_type);
-    setPipelineStage(proj.pipeline_stage);
-    setPriority(proj.priority);
-    setEstimatedValue(proj.estimated_value);
-    setProbability(proj.probability);
-    setNextAction(proj.next_action || '');
-    setNextFollowUpAt(proj.next_follow_up_at ? proj.next_follow_up_at.split('T')[0] : '');
-    setCoEngineer(proj.members?.[0]?.user_name || '');
-    setIsModalOpen(true);
-  };
-
-  const handleCompanyChange = (newCompId: string) => {
-    setCompanyId(newCompId);
-    const matchingContact = contacts.find(c => c.company_id === newCompId);
-    setPrimaryContactId(matchingContact?.id || '');
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !prNumber.trim()) return;
-
-    const matchedComp = companies.find(c => c.id === companyId);
-    const matchedContact = contacts.find(c => c.id === primaryContactId);
-
-    const members = coEngineer.trim() ? [
-      {
-        project_id: editingProject?.id || '',
-        user_id: 'u2',
-        user_name: coEngineer.trim(),
-        role: 'co_sales_engineer' as const,
-        assigned_at: new Date().toISOString()
-      }
-    ] : [];
-
-    if (editingProject) {
-      await updateProject(editingProject.id, {
-        pr_number: prNumber,
-        name,
-        company_id: companyId,
-        company_name: matchedComp?.name,
-        primary_contact_id: primaryContactId || undefined,
-        primary_contact_name: matchedContact?.full_name,
-        primary_contact_phone: matchedContact?.phone,
-        location,
-        opportunity_type: opportunityType,
-        pipeline_stage: pipelineStage,
-        priority,
-        estimated_value: Number(estimatedValue),
-        probability: Number(probability),
-        weighted_value: (Number(estimatedValue) * Number(probability)) / 100,
-        next_action: nextAction || undefined,
-        next_follow_up_at: nextFollowUpAt || undefined,
-        members,
-      });
-    } else {
-      await addProject({
-        pr_number: prNumber,
-        name,
-        company_id: companyId,
-        company_name: matchedComp?.name,
-        primary_contact_id: primaryContactId || undefined,
-        primary_contact_name: matchedContact?.full_name,
-        primary_contact_phone: matchedContact?.phone,
-        location,
-        opportunity_type: opportunityType,
-        pipeline_stage: pipelineStage,
-        priority,
-        estimated_value: Number(estimatedValue),
-        probability: Number(probability),
-        next_action: nextAction || undefined,
-        next_follow_up_at: nextFollowUpAt || undefined,
-        owner_id: currentUser.id || 'u1',
-        owner_name: currentUser.full_name || 'Eslam Mohandes',
-        members,
-      });
-    }
-
-    setIsModalOpen(false);
+    setIsEditModalOpen(true);
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -328,19 +413,9 @@ export default function ProjectsPage() {
     }
   };
 
-  // Centralized Scoped Base Projects (Active only)
-  const scopedBaseProjects = useMemo(() => {
-    return scopeProjects(projects, currentUser, selectedSalesFilter);
-  }, [projects, currentUser, selectedSalesFilter]);
-
-  // Centralized Scoped Archived Projects
-  const scopedArchivedProjects = useMemo(() => {
-    return scopeProjects(projects, currentUser, selectedSalesFilter, true).filter(p => p.is_archived);
-  }, [projects, currentUser, selectedSalesFilter]);
-
   const filteredArchivedProjects = useMemo(() => {
-    if (!archiveSearchTerm.trim()) return scopedArchivedProjects;
-    const term = archiveSearchTerm.toLowerCase();
+    if (!deferredArchiveSearchTerm.trim()) return scopedArchivedProjects;
+    const term = deferredArchiveSearchTerm.toLowerCase();
     return scopedArchivedProjects.filter(p => 
       p.name.toLowerCase().includes(term) ||
       p.pr_number.toLowerCase().includes(term) ||
@@ -348,7 +423,7 @@ export default function ProjectsPage() {
       (p.archived_by_name && p.archived_by_name.toLowerCase().includes(term)) ||
       (p.archive_reason && p.archive_reason.toLowerCase().includes(term))
     );
-  }, [scopedArchivedProjects, archiveSearchTerm]);
+  }, [scopedArchivedProjects, deferredArchiveSearchTerm]);
 
   const archivedMetrics = useMemo(() => {
     const totalVal = scopedArchivedProjects.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
@@ -362,40 +437,332 @@ export default function ProjectsPage() {
     return calculatePipelineForecast(scopedBaseProjects, quotations);
   }, [scopedBaseProjects, quotations]);
 
-  // Filter logic - Ordered from most recently entered this stage to oldest
-  const filteredProjects = scopedBaseProjects.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          p.pr_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (p.company_name && p.company_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                          (p.primary_contact_name && p.primary_contact_name.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStage = selectedStage === 'all' || p.pipeline_stage === selectedStage;
-    const matchesType = selectedType === 'all' || p.opportunity_type === selectedType;
-    const matchesHealth = selectedHealth === 'all' || p.calculated_health === selectedHealth;
-    const matchesCity = selectedCity === 'all' || p.location === selectedCity;
+  // Filter logic - Ordered from most recently entered this stage to oldest (Debounced deferred search)
+  const filteredProjects = useMemo(() => {
+    const term = deferredSearchTerm.toLowerCase().trim();
+    return scopedBaseProjects.filter(p => {
+      const matchesSearch = !term ||
+                            p.name.toLowerCase().includes(term) ||
+                            p.pr_number.toLowerCase().includes(term) ||
+                            (p.company_name && p.company_name.toLowerCase().includes(term)) ||
+                            (p.primary_contact_name && p.primary_contact_name.toLowerCase().includes(term));
+      const matchesStage = selectedStage === 'all' || p.pipeline_stage === selectedStage;
+      const matchesType = selectedType === 'all' || p.opportunity_type === selectedType;
+      const matchesHealth = selectedHealth === 'all' || p.calculated_health === selectedHealth;
+      const matchesCity = selectedCity === 'all' || p.location === selectedCity;
 
-    let matchesScope = true;
-    if (activeFilterScope === 'active') {
-      matchesScope = p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost';
-    } else if (activeFilterScope === 'critical_aging') {
-      const aging = getStageAgingInfo(p);
-      matchesScope = aging.isCritical || aging.isStale;
-    }
+      let matchesScope = true;
+      if (activeFilterScope === 'active') {
+        matchesScope = p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost';
+      } else if (activeFilterScope === 'critical_aging') {
+        const aging = getStageAgingInfo(p);
+        matchesScope = aging.isCritical || aging.isStale;
+      }
 
-    return matchesSearch && matchesStage && matchesType && matchesHealth && matchesCity && matchesScope;
-  }).sort((a, b) => {
-    const timeA = new Date(a.stage_entered_at || a.updated_at || a.created_at).getTime();
-    const timeB = new Date(b.stage_entered_at || b.updated_at || b.created_at).getTime();
-    return timeB - timeA; // Descending: Most recently entered stage first
-  });
+      return matchesSearch && matchesStage && matchesType && matchesHealth && matchesCity && matchesScope;
+    }).sort((a, b) => {
+      const timeA = new Date(a.stage_entered_at || a.updated_at || a.created_at).getTime();
+      const timeB = new Date(b.stage_entered_at || b.updated_at || b.created_at).getTime();
+      return timeB - timeA; // Descending: Most recently entered stage first
+    });
+  }, [scopedBaseProjects, deferredSearchTerm, selectedStage, selectedType, selectedHealth, selectedCity, activeFilterScope]);
+
+  // Current calendar month string (e.g. "2026-10" or "2026-11")
+  const currentYearMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+  // Closing Date metrics & grouping
+  const closingDateStats = useMemo(() => {
+    const yStr = String(selectedClosingYear);
+    const unassigned: Project[] = [];
+    const byMonth: Record<string, Project[]> = {};
+    ALL_MONTHS.forEach(m => {
+      byMonth[`${yStr}-${m.monthNum}`] = [];
+    });
+
+    filteredProjects.forEach(p => {
+      if (p.closing_date && p.closing_date.startsWith(`${yStr}-`)) {
+        const monthKey = p.closing_date.substring(0, 7); // e.g. "2026-11"
+        if (byMonth[monthKey]) {
+          byMonth[monthKey].push(p);
+          return;
+        }
+      }
+      unassigned.push(p);
+    });
+
+    // Calculate quarterly totals
+    const quarterTotals: Record<string, { count: number; totalValue: number }> = {};
+    CLOSING_QUARTERS.forEach(q => {
+      let qCount = 0;
+      let qVal = 0;
+      q.months.forEach(m => {
+        const mKey = `${yStr}-${m.monthNum}`;
+        const projs = byMonth[mKey] || [];
+        qCount += projs.length;
+        qVal += projs.reduce((sum, item) => sum + (item.estimated_value || 0), 0);
+      });
+      quarterTotals[q.id] = { count: qCount, totalValue: qVal };
+    });
+
+    const totalAssignedValue = Object.values(quarterTotals).reduce((sum, q) => sum + q.totalValue, 0);
+    const totalAssignedCount = Object.values(quarterTotals).reduce((sum, q) => sum + q.count, 0);
+
+    return {
+      byMonth,
+      unassigned,
+      quarterTotals,
+      totalAssignedValue,
+      totalAssignedCount
+    };
+  }, [filteredProjects, selectedClosingYear]);
+
+  const displayedQuarters = useMemo(() => {
+    if (selectedQuarterFilter === 'all') return CLOSING_QUARTERS;
+    return CLOSING_QUARTERS.filter(q => q.id === selectedQuarterFilter);
+  }, [selectedQuarterFilter]);
+
+  const renderProjectTableRow = (p: Project) => {
+    const isAccessible = canUserAccessProjectCockpit(p, currentUser);
+    const stageConfig = PIPELINE_STAGES.find(s => s.value === p.pipeline_stage);
+    const latestQuote = quotations
+      ?.filter(q => q.project_id === p.id && !q.is_archived)
+      ?.sort((a, b) => b.version - a.version)[0];
+
+    return (
+      <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+        <td className="py-4 px-4 whitespace-nowrap">
+          <span className="font-mono text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-[#232A38] text-slate-800 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700">
+            {p.pr_number}
+          </span>
+        </td>
+        <td className="py-4 px-4 min-w-[220px]">
+          {canUserAccessProjectCockpit(p, currentUser) ? (
+            <Link 
+              href={`/projects/${p.id}`}
+              className="font-semibold text-slate-900 dark:text-white leading-tight hover:text-[#8FC2F0] hover:underline transition-colors block"
+            >
+              {p.name}
+            </Link>
+          ) : (
+            <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 leading-tight">
+              <span>{p.name}</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+                <Lock className="w-2.5 h-2.5" />
+                <span>{isRTL ? 'للاطلاع فقط' : 'View only'}</span>
+              </span>
+            </div>
+          )}
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+            <span className="text-blue-600 dark:text-[#8FC2F0] font-medium flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              {p.company_name}
+            </span>
+            {p.primary_contact_name && (
+              <span className="text-slate-400 dark:text-slate-500">&bull; {p.primary_contact_name}</span>
+            )}
+            <span className="text-slate-400 dark:text-slate-500">&bull; {p.location}</span>
+          </div>
+        </td>
+        <td className="py-4 px-4 whitespace-nowrap">
+          <div className="flex flex-col gap-1">
+            <span className={`text-[11px] font-black px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 shadow-2xs w-fit ${
+              p.opportunity_type === 'in_hand'
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                p.opportunity_type === 'in_hand' ? 'bg-emerald-500 animate-pulse' : 'bg-indigo-500'
+              }`} />
+              <span>
+                {p.opportunity_type === 'in_hand'
+                  ? (isRTL ? 'In Hand (في اليد)' : 'In Hand')
+                  : (isRTL ? 'Tender (مناقصة)' : 'Tender')}
+              </span>
+            </span>
+            {p.opportunity_type === 'in_hand' && p.closing_date && (
+              <span 
+                className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono font-bold flex items-center gap-1"
+                title={isRTL ? `تاريخ الإغلاق المتوقع: ${formatDateString(p.closing_date)}` : `Expected Closing Date: ${formatDateString(p.closing_date)}`}
+              >
+                <Calendar className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{isRTL ? 'إغلاق:' : 'Close:'} {formatDateString(p.closing_date)}</span>
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="py-4 px-4 whitespace-nowrap">
+          {isAccessible ? (
+            <div className="space-y-1">
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border inline-block ${stageConfig?.badgeClass || 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700'}`}>
+                {isRTL ? (kanbanStages.find(ks => ks.stage === p.pipeline_stage)?.labelAr || stageConfig?.labelAr || p.pipeline_stage) : (stageConfig?.label || p.pipeline_stage)}
+              </span>
+              {p.pipeline_stage === 'won' && (
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  {p.po_attachment_url || p.po_number ? (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold flex items-center gap-1">
+                      <FileCheck className="w-2.5 h-2.5" />
+                      <span>{p.po_number || 'PO'}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 font-bold">
+                      {isRTL ? 'بلا PO' : 'No PO'}
+                    </span>
+                  )}
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-600 text-white font-black">
+                    {p.collected_percentage || 0}% {isRTL ? 'محصل' : 'Coll.'}
+                  </span>
+                </div>
+              )}
+              {p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost' && (() => {
+                const aging = getStageAgingInfo(p);
+                return (
+                  <div className="flex items-center gap-1">
+                    <span 
+                      className={`text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 font-urbanist ${aging.badgeClass}`}
+                      title={isRTL ? `المشروع في هذه المرحلة منذ ${aging.daysInStage} يوماً (الحد المعياري: ${aging.slaDays} يوم)` : `Project in stage for ${aging.daysInStage} days (Target SLA: ${aging.slaDays}d)`}
+                    >
+                      <Clock className="w-2.5 h-2.5" />
+                      <span>{isRTL ? aging.labelAr : aging.labelEn}</span>
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1.5">
+              <Lock className="w-3 h-3 text-amber-500" />
+              <span>{isRTL ? 'المرحلة محجوبة للمالك' : 'Stage locked'}</span>
+            </span>
+          )}
+        </td>
+        <td className="py-4 px-4 whitespace-nowrap">
+          {isAccessible ? (
+            <>
+              {p.calculated_health === 'red' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                  <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">
+                    {p.days_overdue ? `${p.days_overdue}d late` : 'Needs Action'}
+                  </span>
+                </div>
+              )}
+              {p.calculated_health === 'yellow' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Approaching</span>
+                </div>
+              )}
+              {p.calculated_health === 'green' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Healthy</span>
+                </div>
+              )}
+              {p.calculated_health === 'neutral' && (
+                <span className="text-xs text-slate-400">Closed</span>
+              )}
+            </>
+          ) : (
+            <span className="text-xs text-slate-400 italic">—</span>
+          )}
+        </td>
+        <td className="py-4 px-4 text-right whitespace-nowrap font-urbanist">
+          {isAccessible ? (
+            <>
+              <div className="font-extrabold text-slate-900 dark:text-white">
+                {formatCurrencySAR(p.estimated_value)}
+              </div>
+              {latestQuote && (
+                <div className="text-[11px] font-bold text-blue-600 dark:text-[#8FC2F0] mt-0.5">
+                  {isRTL ? 'عرض:' : 'Quote:'} {formatCompactSAR(latestQuote.amount)} (V{latestQuote.version})
+                </div>
+              )}
+              <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 mt-0.5 flex items-center justify-end gap-1">
+                <span>{isRTL ? 'الموزون:' : 'Weighted:'}</span>
+                <span>{formatCompactSAR((latestQuote?.amount || p.estimated_value) * (STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1))}</span>
+                <span className="text-[10px] opacity-75">({Math.round((STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1) * 100)}%)</span>
+              </div>
+            </>
+          ) : (
+            <div className="font-bold text-xs text-amber-600 dark:text-amber-400 flex items-center justify-end gap-1">
+              <Lock className="w-3 h-3 text-amber-500" />
+              <span>{isRTL ? 'القيمة محجوبة للمالك' : 'Value locked'}</span>
+            </div>
+          )}
+        </td>
+        <td className="py-4 px-4 min-w-[200px]">
+          {isAccessible ? (
+            p.next_action ? (
+              <div>
+                <div className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-1">
+                  {p.next_action}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  <span>Due: {formatDateString(p.next_follow_up_at)}</span>
+                </div>
+              </div>
+            ) : (
+              <span className="text-xs text-rose-600 dark:text-rose-400 font-medium italic">
+                No next action set!
+              </span>
+            )
+          ) : (
+            <span className="text-xs text-slate-400 italic">—</span>
+          )}
+        </td>
+        <td className="py-4 px-4 whitespace-nowrap">
+          <div className="text-xs font-medium text-slate-800 dark:text-slate-200">
+            {p.owner_name || 'Eslam M.'}
+          </div>
+          {p.members && p.members.length > 0 && (
+            <div className="text-[11px] text-blue-600 dark:text-[#8FC2F0] flex items-center gap-1 mt-0.5">
+              <Users2 className="w-3 h-3" />
+              <span>+ {p.members[0].user_name}</span>
+            </div>
+          )}
+        </td>
+        <td className="py-4 px-4 text-right whitespace-nowrap">
+          {currentRole !== 'viewer' && (
+            canUserAccessProjectCockpit(p, currentUser) ? (
+              <div className="flex items-center justify-end gap-1.5">
+                <button
+                  onClick={() => openEditModal(p)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Edit Project"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                </button>
+                {currentRole !== 'estimator' && (
+                  <button
+                    onClick={() => handleDelete(p.id, p.name)}
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                    title="Delete Project"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                <Lock className="w-3 h-3 text-amber-500" />
+                <span>{isRTL ? `مسند إلى: ${p.referred_to_name || p.owner_name || 'سيلز آخر'}` : 'Locked'}</span>
+              </div>
+            )
+          )}
+        </td>
+      </tr>
+    );
+  };
 
   return (
-    <div className="space-y-6 w-full mx-auto">
+    <div className="space-y-2.5 sm:space-y-3 w-full mx-auto">
       {/* Header with View Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-[#292D32] dark:text-white tracking-tight flex items-center gap-3 font-urbanist">
-            <div className="w-11 h-11 rounded-full bg-[#8FC2F0]/15 dark:bg-[#8FC2F0]/25 flex items-center justify-center text-[#292D32] dark:text-[#8FC2F0]">
-              <Briefcase className="w-6 h-6 text-[#292D32] dark:text-[#8FC2F0]" />
+          <h1 className="text-lg sm:text-xl md:text-2xl font-black text-[#292D32] dark:text-white tracking-tight flex items-center gap-2 sm:gap-2.5">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#8FC2F0]/15 dark:bg-[#8FC2F0]/25 flex items-center justify-center text-[#292D32] dark:text-[#8FC2F0] shrink-0">
+              <Briefcase className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#292D32] dark:text-[#8FC2F0]" />
             </div>
             <span>{isRTL ? 'مسار المشاريع والصفقات' : 'Project Pipeline & Deals'}</span>
             <ContextualHelp 
@@ -406,19 +773,19 @@ export default function ProjectsPage() {
               size="sm"
             />
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium font-urbanist">
+          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
             {isRTL 
               ? `مسار المبيعات التفاعلي لمنطقة الغربية (${filteredProjects.length} مشروع مشمول في النطاق)` 
               : `Visual sales pipeline for Al Mespar Western Region (${filteredProjects.length} projects in scope)`}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 self-start sm:self-auto">
           {/* View Toggle */}
-          <div className="rounded-full bg-white/90 dark:bg-slate-800/90 p-1.5 flex items-center border border-slate-200/60 dark:border-slate-700/60 shadow-xs font-urbanist">
+          <div className="rounded-full bg-white/90 dark:bg-slate-800/90 p-1 flex items-center border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
             <button
               onClick={() => setViewMode('kanban')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 viewMode === 'kanban' 
                   ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-sm' 
                   : 'text-slate-600 dark:text-slate-400 hover:text-[#292D32] dark:hover:text-white'
@@ -449,7 +816,7 @@ export default function ProjectsPage() {
               <Archive className="w-3.5 h-3.5" />
               <span>{isRTL ? 'الأرشيف' : 'Archive'}</span>
               {scopedArchivedProjects.length > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
                   viewMode === 'archive'
                     ? 'bg-white text-rose-600'
                     : 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300'
@@ -459,6 +826,66 @@ export default function ProjectsPage() {
               )}
             </button>
           </div>
+
+          {/* Group By Switcher: Pipeline Stages vs Closing Date (Quarters) */}
+          {viewMode !== 'archive' && (
+            <div className="rounded-full bg-slate-100/90 dark:bg-slate-800/90 p-1 flex items-center border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setGroupByMode('stage')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  groupByMode === 'stage' 
+                    ? 'bg-blue-600 text-white shadow-sm' 
+                    : 'text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400'
+                }`}
+                title={isRTL ? 'تجميع حسب مراحل خطة الصفقات (Stage Pipeline)' : 'Group by pipeline stages'}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>{isRTL ? 'المراحل' : 'Stage'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupByMode('closing_date')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  groupByMode === 'closing_date' 
+                    ? 'bg-emerald-600 text-white shadow-sm' 
+                    : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400'
+                }`}
+                title={isRTL ? 'تجميع حسب موعد الإغلاق (4 أرباع و 12 شهراً)' : 'Group by Closing Date (Quarters & Months)'}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{isRTL ? 'موعد الإغلاق (Quarters)' : 'Closing Date'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Real-time Excel Autosave / Sync Indicator */}
+          <button
+            onClick={async () => {
+              const res = await syncExcelNow();
+              setToastMessage(res.message);
+              setTimeout(() => setToastMessage(null), 3500);
+            }}
+            disabled={isSyncingExcel}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+              isSyncingExcel
+                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700 animate-pulse'
+                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 shadow-xs'
+            }`}
+            title={isRTL ? 'حفظ تلقائي لكافة التعديلات في ملف الإكسيل مباشرة (يمكنك أيضاً الضغط للمزامنة الفورية)' : 'Excel autosave active. Click to trigger instant sync.'}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingExcel ? 'animate-spin text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`} />
+            <span className="hidden sm:inline">
+              {isSyncingExcel
+                ? (isRTL ? 'جاري الحفظ التلقائي للإكسيل...' : 'Autosaving to Excel...')
+                : (isRTL ? '✓ محفوظ تلقائياً للإكسيل' : '✓ Excel Autosaved')}
+            </span>
+            {lastExcelSyncTime && !isSyncingExcel && (
+              <span className="text-[10px] opacity-80 hidden md:inline ltr:ml-1 rtl:mr-1">
+                ({lastExcelSyncTime})
+              </span>
+            )}
+          </button>
 
           {currentRole !== 'viewer' && currentRole !== 'estimator' && (
             <button
@@ -474,13 +901,13 @@ export default function ProjectsPage() {
 
       {/* Active Drilldown Banner */}
       {activeDrilldownLabel && (
-        <div className="crm-card p-3.5 bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/80 flex items-center justify-between flex-wrap gap-2 text-xs font-urbanist animate-in fade-in">
+        <div className="crm-card px-3 py-1.5 bg-blue-50/90 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800/80 flex items-center justify-between flex-wrap gap-2 text-xs animate-in fade-in">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
-            <span className="font-bold text-blue-950 dark:text-blue-200">
+            <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shrink-0" />
+            <span className="font-bold text-blue-950 dark:text-blue-200 text-xs">
               {isRTL ? 'تصفية نشطة من لوحة التحكم:' : 'Active Dashboard Drilldown:'}
             </span>
-            <span className="px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/70 text-blue-900 dark:text-blue-200 font-extrabold text-xs shadow-2xs">
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/70 text-blue-900 dark:text-blue-200 font-extrabold text-[11px] shadow-2xs">
               {activeDrilldownLabel}
             </span>
           </div>
@@ -497,7 +924,7 @@ export default function ProjectsPage() {
                 window.history.replaceState({}, '', '/projects');
               }
             }}
-            className="px-3 py-1.5 bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-slate-800 rounded-xl border border-blue-200 dark:border-blue-700 font-bold transition-all text-xs cursor-pointer flex items-center gap-1 shadow-2xs"
+            className="px-2.5 py-1 bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-slate-800 rounded-lg border border-blue-200 dark:border-blue-700 font-bold transition-all text-xs cursor-pointer flex items-center gap-1 shadow-2xs"
           >
             <X className="w-3.5 h-3.5" />
             <span>{isRTL ? 'إلغاء التصفية وعرض الكل' : 'Clear Filter & Show All'}</span>
@@ -505,73 +932,48 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Executive Commercial Pipeline & Weighted Forecast KPI Ribbon */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-urbanist">
+      {/* Executive Commercial Pipeline & Weighted Forecast KPI Strip */}
+      <div className="crm-card px-2.5 py-1.5 rounded-xl shadow-2xs grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-slate-800 rtl:divide-x-reverse items-center">
         {/* Gross Pipeline */}
         <div 
           onClick={() => {
             setActiveFilterScope('active');
             setActiveDrilldownLabel(isRTL ? 'كافة الصفقات النشطة' : 'All Active Deals');
           }}
-          className="crm-card p-4 flex flex-col justify-between hover:border-blue-300 dark:hover:border-blue-700 transition-all cursor-pointer shadow-xs group"
+          className="px-2.5 py-1 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-lg transition-colors cursor-pointer group"
           title={isRTL ? "اضغط لعرض كافة الصفقات النشطة" : "Click to view active pipeline"}
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                {isRTL ? 'إجمالي قيمة الصفقات (Gross)' : 'Gross Pipeline Value'}
-              </span>
-              <ContextualHelp
-                title={isRTL ? 'إجمالي قيمة الصفقات (Gross)' : 'Gross Pipeline Value'}
-                description={isRTL ? 'المجموع الكلي لقيم جميع الصفقات النشطة في خط المبيعات دون أي ترجيح لاحتماليات الفوز.' : 'Unweighted gross total sum of all active opportunities currently in the sales pipeline.'}
-                tip={isRTL ? 'يساعدك على قياس حجم الفرص المطروحة الإجمالي في السوق المستهدف.' : 'Measures the total top-of-funnel market opportunity.'}
-                moduleId="projects"
-                size="xs"
-              />
-            </div>
-            <span className="w-2 h-2 rounded-full bg-blue-500 group-hover:scale-125 transition-transform" />
-          </div>
-          <div>
-            <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+              {isRTL ? 'إجمالي الصفقات:' : 'Gross:'}
+            </span>
+            <span className="text-xs sm:text-sm font-black font-mono text-[#292D32] dark:text-white">
               {formatCompactSAR(pipelineForecast.totalGrossPipeline)}
-            </div>
-            <div className="text-[11px] font-bold text-slate-400 mt-0.5">
-              {pipelineForecast.activeDealsCount} {isRTL ? 'صفقة جارية في المسار' : 'active deals in pipeline'}
-            </div>
+            </span>
           </div>
+          <span className="text-[10px] font-bold text-slate-400 font-mono shrink-0 ltr:ml-1 rtl:mr-1">
+            {pipelineForecast.activeDealsCount} {isRTL ? 'صفقة' : 'deals'}
+          </span>
         </div>
 
         {/* Weighted Forecast */}
         <div 
-          className="crm-card p-4 flex flex-col justify-between border-purple-200/80 dark:border-purple-800/60 bg-gradient-to-br from-purple-50/40 to-transparent dark:from-purple-950/20 shadow-xs"
-          title={isRTL ? "القيمة المتوقعة مرجحة بنسب احتمالية كل مرحلة" : "Weighted expected revenue by stage probabilities"}
+          className="px-2.5 py-1 flex items-center justify-between hover:bg-purple-50/50 dark:hover:bg-purple-950/20 rounded-lg transition-colors"
+          title={isRTL ? "القيمة المتوقعة مرجحة بنسب احتمالية كل مرحلة" : "Weighted expected revenue"}
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-extrabold text-purple-700 dark:text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                <span>{isRTL ? 'التوقع المالي الموزون' : 'Weighted Forecast'}</span>
-              </span>
-              <ContextualHelp
-                title={isRTL ? 'التوقع المالي الموزون' : 'Weighted Pipeline Forecast'}
-                description={isRTL ? 'القيمة المتوقعة بعد ضرب قيمة كل صفقة في نسبة احتمالية مرحلتها (مثال: تقديم العرض 60%، التفاوض 80%).' : 'Calculated by multiplying each deal value by its stage probability (e.g., Quote Sent 60%, Negotiation 80%).'}
-                tip={isRTL ? 'المؤشر الأصدق للتوقع المالي والتدفق النقدي المتوقع إغلاقه خلال الشهر.' : 'The most reliable indicator for realistic cashflow and monthly closing.'}
-                moduleId="projects"
-                size="xs"
-              />
-            </div>
-            <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 text-[10px] font-black">
-              ~{pipelineForecast.weightedProbabilityAvg}%
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Sparkles className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+            <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 truncate">
+              {isRTL ? 'الموزون:' : 'Weighted:'}
+            </span>
+            <span className="text-xs sm:text-sm font-black font-mono text-purple-900 dark:text-purple-100">
+              {formatCompactSAR(pipelineForecast.totalWeightedPipeline)}
             </span>
           </div>
-          <div>
-            <div className="text-xl sm:text-2xl font-black text-purple-900 dark:text-purple-100 tracking-tight">
-              {formatCompactSAR(pipelineForecast.totalWeightedPipeline)}
-            </div>
-            <div className="text-[11px] font-semibold text-purple-600/80 dark:text-purple-300/80 mt-0.5">
-              {isRTL ? 'المبيعات المتوقعة الفعالة' : 'Realistic expected sales cashflow'}
-            </div>
-          </div>
+          <span className="px-1.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200 text-[10px] font-black font-mono shrink-0 ltr:ml-1 rtl:mr-1">
+            ~{pipelineForecast.weightedProbabilityAvg}%
+          </span>
         </div>
 
         {/* Closed Won */}
@@ -580,23 +982,21 @@ export default function ProjectsPage() {
             setSelectedStage('won');
             setActiveDrilldownLabel(isRTL ? 'الصفقات الرابحة (Won)' : 'Won Deals');
           }}
-          className="crm-card p-4 flex flex-col justify-between hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer shadow-xs group"
+          className="px-2.5 py-1 flex items-center justify-between hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 rounded-lg transition-colors cursor-pointer group"
           title={isRTL ? "اضغط لعرض الصفقات الرابحة" : "Click to view won deals"}
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
-              {isRTL ? 'الصفقات الرابحة المعتمدة' : 'Closed Won Revenue'}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+            <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 truncate">
+              {isRTL ? 'الرابحة:' : 'Won:'}
             </span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 group-hover:scale-125 transition-transform" />
-          </div>
-          <div>
-            <div className="text-xl sm:text-2xl font-black text-emerald-900 dark:text-emerald-300 tracking-tight">
+            <span className="text-xs sm:text-sm font-black font-mono text-emerald-900 dark:text-emerald-300">
               {formatCompactSAR(pipelineForecast.wonTotalValue)}
-            </div>
-            <div className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
-              {isRTL ? 'عقود مغلقة بنجاح' : 'Closed signed agreements'}
-            </div>
+            </span>
           </div>
+          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 font-mono shrink-0 ltr:ml-1 rtl:mr-1">
+            ✓ {isRTL ? 'معتمد' : 'Signed'}
+          </span>
         </div>
 
         {/* Stage Aging Health */}
@@ -605,70 +1005,59 @@ export default function ProjectsPage() {
             setActiveFilterScope('critical_aging');
             setActiveDrilldownLabel(isRTL ? 'تنبيهات عمر المراحل المتأخرة' : 'Stage Aging Alerts');
           }}
-          className={`crm-card p-4 flex flex-col justify-between transition-all cursor-pointer shadow-xs group ${
+          className={`px-2.5 py-1 flex items-center justify-between rounded-lg transition-colors cursor-pointer ${
             pipelineForecast.criticalAgingCount > 0 
-              ? 'border-rose-300 dark:border-rose-800 bg-rose-50/40 dark:bg-rose-950/20' 
-              : 'border-slate-200 dark:border-slate-800'
+              ? 'bg-rose-50/50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400' 
+              : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
           }`}
           title={isRTL ? "اضغط لعرض الصفقات التي تجاوزت الحد الزمني للمرحلة" : "Click to filter stale & overdue stage aging deals"}
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
-              <span className={`text-[11px] font-bold uppercase tracking-wider ${pipelineForecast.criticalAgingCount > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-slate-500'}`}>
-                {isRTL ? 'عمر المراحل والركود' : 'Stage Aging Health'}
-              </span>
-              <ContextualHelp
-                title={isRTL ? 'مؤشر ركود وعمر الصفقات (Stage Aging SLA)' : 'Stage Aging SLA Alerts'}
-                description={isRTL ? 'ينبهك عندما يبقى المشروع في مرحلة واحدة أكثر من الحد الأقصى المسموح به (مثلاً التسعير أكثر من 7 أيام أو إرسال العرض أكثر من 14 يوماً).' : 'Flags projects that remain in a single stage longer than acceptable company SLA benchmarks.'}
-                tip={isRTL ? 'الصفقات الراكدة أكثر عرضة للخسارة؛ قم بجدولة اتصال فوري أو زيارة متابعة لإعادة تحريكها.' : 'Stale deals carry high risk of loss; schedule immediate follow-up to revive velocity.'}
-                moduleId="projects"
-                size="xs"
-              />
-            </div>
-            <Clock className={`w-3.5 h-3.5 ${pipelineForecast.criticalAgingCount > 0 ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`} />
-          </div>
-          <div>
-            <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Clock className={`w-2.5 h-2.5 ${pipelineForecast.criticalAgingCount > 0 ? 'text-rose-600 animate-pulse' : 'text-slate-400'} shrink-0`} />
+            <span className={`text-[11px] font-bold truncate ${pipelineForecast.criticalAgingCount > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-slate-500'}`}>
+              {isRTL ? 'سلامة المراحل:' : 'Stage Aging:'}
+            </span>
+            <span className="text-xs sm:text-sm font-black font-mono">
               {pipelineForecast.criticalAgingCount > 0 ? (
-                <span className="text-rose-600 dark:text-rose-400 font-black">
+                <span className="text-rose-600 dark:text-rose-400">
                   {pipelineForecast.criticalAgingCount} {isRTL ? 'حرجة' : 'Critical'}
                 </span>
               ) : (
-                <span className="text-emerald-600 dark:text-emerald-400 text-base font-bold">
-                  {isRTL ? 'كافة المراحل منتظمة' : 'All stages within SLA'}
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {isRTL ? 'منتظمة' : 'Healthy'}
                 </span>
               )}
-            </div>
-            <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
-              {pipelineForecast.staleAgingCount} {isRTL ? 'صفقة تقترب من حد المرحلة' : 'stale approaching limit'}
-            </div>
+            </span>
           </div>
+          <span className="text-[10px] font-bold text-slate-400 font-mono shrink-0 ltr:ml-1 rtl:mr-1">
+            {pipelineForecast.staleAgingCount} {isRTL ? 'تنبيه' : 'stale'}
+          </span>
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="crm-card p-5 sm:p-6 space-y-3 font-urbanist">
+      {/* Compact Apple-style Filter Toolbar */}
+      <div className="crm-card p-1.5 sm:p-2 rounded-2xl shadow-2xs space-y-1.5">
         {/* Manager Scope Pill Bar */}
         {isManager && (
-          <div className="flex items-center justify-between p-3.5 bg-purple-50/70 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-800/40 rounded-2xl flex-wrap gap-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-purple-900 dark:text-purple-200 font-urbanist flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-purple-600" />
+          <div className="flex items-center justify-between px-2.5 py-1 bg-purple-50/60 dark:bg-purple-950/25 border border-purple-100 dark:border-purple-900/30 rounded-xl flex-wrap gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <span className="text-[11px] font-bold text-purple-900 dark:text-purple-200">
                 {t('salesRepScope')}:
               </span>
-              <span className="text-[11px] text-purple-700 dark:text-purple-300 font-medium">
+              <span className="text-[10px] text-purple-700 dark:text-purple-300 font-medium hidden sm:inline">
                 {selectedSalesFilter === 'all' 
-                  ? (isRTL ? `عرض كافة المشاريع (${projects.length} مشروع)` : `Viewing all projects (${projects.length} deals)`)
-                  : (isRTL ? `تصفية للمهندس: ${teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || ''}` : `Filtered to: ${teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || 'Selected Rep'}`)}
+                  ? (isRTL ? `كافة المشاريع (${projects.length})` : `All (${projects.length})`)
+                  : (teamMembers.find(m => m.id === selectedSalesFilter)?.full_name || '')}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1 flex-wrap">
               <button
                 onClick={() => setSelectedSalesFilter('all')}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                   selectedSalesFilter === 'all'
-                    ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs'
+                    ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs'
                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                 }`}
               >
@@ -681,16 +1070,14 @@ export default function ProjectsPage() {
                   <button
                     key={rep.id}
                     onClick={() => setSelectedSalesFilter(rep.id)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
                       selectedSalesFilter === rep.id
-                        ? 'bg-[#8FC2F0] text-[#292D32] shadow-xs'
+                        ? 'bg-[#8FC2F0] text-[#292D32] shadow-2xs'
                         : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                     }`}
                   >
                     <span>{rep.full_name}</span>
-                    <span className="text-[10px] opacity-75">
-                      ({repCount})
-                    </span>
+                    <span className="text-[10px] opacity-75 font-mono">({repCount})</span>
                   </button>
                 );
               })}
@@ -700,44 +1087,44 @@ export default function ProjectsPage() {
 
         {/* Sales Rep Scope Pill Bar */}
         {isSalesRep && (
-          <div className="flex items-center justify-between p-3.5 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-800/40 rounded-2xl flex-wrap gap-2 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sky-900 dark:text-sky-200 font-urbanist flex items-center gap-1.5">
-                <Briefcase className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                {isRTL ? 'نطاق عرض المشاريع:' : 'Project View Scope:'}
+          <div className="flex items-center justify-between px-2.5 py-1 bg-sky-50/60 dark:bg-sky-950/25 border border-sky-100 dark:border-sky-900/30 rounded-xl flex-wrap gap-1.5 text-xs">
+            <div className="flex items-center gap-1.5">
+              <Briefcase className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+              <span className="text-[11px] font-bold text-sky-900 dark:text-sky-200">
+                {isRTL ? 'نطاق المشاريع:' : 'Scope:'}
               </span>
-              <span className="text-[11px] text-sky-700 dark:text-sky-300 font-medium">
+              <span className="text-[10px] text-sky-700 dark:text-sky-300 hidden sm:inline">
                 {selectedSalesFilter === 'all'
-                  ? (isRTL ? '🌐 كافة مشاريع الفريق (للاطلاع على الأسماء والشركات - الكروت مغلقة)' : '🌐 All Team Projects (Names & Companies preview only - Cards locked)')
-                  : (isRTL ? `👤 مشاريعي الخاصة فقط (${scopedBaseProjects.length} مشروع مسند إليك)` : `👤 My Assigned Projects Only (${scopedBaseProjects.length} deals)`)}
+                  ? (isRTL ? 'كافة المشاريع (للاطلاع)' : 'All Team (View Only)')
+                  : (isRTL ? `مشاريعي (${scopedBaseProjects.length})` : `My Projects (${scopedBaseProjects.length})`)}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1 bg-slate-200/50 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
               <button
                 onClick={() => setSelectedSalesFilter(currentUser.id)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
                   selectedSalesFilter !== 'all'
-                    ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                    ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <span>👤 {isRTL ? 'مشاريعي فقط (المثبت الافتراضي)' : 'My Projects Only'}</span>
-                <span className="text-[10px] opacity-75">
+                <span>👤 {isRTL ? 'مشاريعي' : 'My Projects'}</span>
+                <span className="text-[10px] font-mono opacity-80">
                   ({projects.filter(p => !p.is_archived && ((p.referred_to_id || p.owner_id) === currentUser.id)).length})
                 </span>
               </button>
 
               <button
                 onClick={() => setSelectedSalesFilter('all')}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
                   selectedSalesFilter === 'all'
-                    ? 'bg-[#8FC2F0] text-[#292D32] shadow-xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                    ? 'bg-[#8FC2F0] text-[#292D32] shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <span>🌐 {isRTL ? 'كافة مشاريع الفريق (إلغاء الفلتر للاطلاع)' : 'All Team Projects (Unfiltered)'}</span>
-                <span className="text-[10px] opacity-75">
+                <span>🌐 {isRTL ? 'كافة مشاريع الفريق' : 'All Team'}</span>
+                <span className="text-[10px] font-mono opacity-80">
                   ({projects.filter(p => !p.is_archived).length})
                 </span>
               </button>
@@ -745,36 +1132,36 @@ export default function ProjectsPage() {
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row items-center gap-3">
+        <div className="flex flex-col md:flex-row items-center gap-1.5">
           <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder={isRTL ? 'البحث برقم PR، اسم المشروع، المقاول، جهة الاتصال...' : 'Search by #PR, project name, contractor, contact...'}
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-900 dark:text-slate-100 font-medium shadow-2xs"
+              className="w-full ltr:pl-8.5 rtl:pr-8.5 px-3 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0] text-slate-900 dark:text-slate-100 font-medium shadow-2xs placeholder:text-slate-400"
             />
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+          <div className="flex items-center gap-1.5 flex-wrap w-full md:w-auto">
             {/* Health Filter */}
             <select
               value={selectedHealth}
               onChange={e => setSelectedHealth(e.target.value)}
-              className="px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
+              className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
             >
               <option value="all">{isRTL ? 'الحالة: الكل' : 'Health: All'}</option>
-              <option value="red">{isRTL ? '🔴 أحمر (يحتاج متابعة)' : '🔴 Red (Attention)'}</option>
-              <option value="yellow">{isRTL ? '🟡 أصفر (يقترب من الموعد)' : '🟡 Yellow (Approaching)'}</option>
-              <option value="green">{isRTL ? '🟢 أخضر (منتظم)' : '🟢 Green (Healthy)'}</option>
+              <option value="red">{isRTL ? '🔴 يحتاج متابعة' : '🔴 Attention'}</option>
+              <option value="yellow">{isRTL ? '🟡 يقترب' : '🟡 Warning'}</option>
+              <option value="green">{isRTL ? '🟢 منتظم' : '🟢 Healthy'}</option>
             </select>
 
             {/* Stage Filter */}
             <select
               value={selectedStage}
               onChange={e => setSelectedStage(e.target.value)}
-              className="px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
+              className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
             >
               <option value="all">{isRTL ? 'كافة المراحل' : 'All Stages'}</option>
               {PIPELINE_STAGES.map(s => (
@@ -788,7 +1175,7 @@ export default function ProjectsPage() {
             <select
               value={selectedType}
               onChange={e => setSelectedType(e.target.value)}
-              className="px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
+              className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
             >
               <option value="all">{isRTL ? 'كافة الأنواع' : 'All Types'}</option>
               {OPPORTUNITY_TYPES.map(t => (
@@ -800,7 +1187,7 @@ export default function ProjectsPage() {
             <select
               value={selectedCity}
               onChange={e => setSelectedCity(e.target.value)}
-              className="px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
+              className="px-2.5 py-1 text-[11px] font-bold bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-1.5 focus:ring-[#8FC2F0] text-slate-700 dark:text-slate-200 cursor-pointer shadow-2xs"
             >
               <option value="all">{isRTL ? 'كافة المدن' : 'All Cities'}</option>
               {SAUDI_LOCATIONS.map(loc => (
@@ -811,133 +1198,485 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* VIEW 1: KANBAN PIPELINE BOARD (Matching reference image & Odoo drag & drop) */}
+      {/* Closing Date Navigation Toolbar (Shown when Group By Closing Date is selected) */}
+      {viewMode !== 'archive' && groupByMode === 'closing_date' && (
+        <div className="crm-card p-3 rounded-2xl shadow-xs space-y-3 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/80 dark:from-slate-900/60 dark:via-slate-800/40 dark:to-slate-900/60 border border-slate-200/80 dark:border-slate-800 animate-in fade-in">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            {/* Year Selector + Quarter Filter Tabs */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Year Switcher */}
+              <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-full px-2 py-1 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedClosingYear(prev => prev - 1)}
+                  className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                  title={isRTL ? 'السنة السابقة' : 'Previous Year'}
+                >
+                  <ChevronLeft className="w-4 h-4 rtl:rotate-180" />
+                </button>
+                <div className="px-2.5 font-mono font-black text-xs sm:text-sm text-[#292D32] dark:text-white flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>{selectedClosingYear}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClosingYear(prev => prev + 1)}
+                  className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
+                  title={isRTL ? 'السنة التالية' : 'Next Year'}
+                >
+                  <ChevronRight className="w-4 h-4 rtl:rotate-180" />
+                </button>
+              </div>
+
+              {/* Quarter Filter Tabs */}
+              <div className="flex items-center bg-slate-100/90 dark:bg-slate-800/90 p-1 rounded-full border border-slate-200/60 dark:border-slate-700/60 shadow-2xs flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setSelectedQuarterFilter('all')}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                    selectedQuarterFilter === 'all'
+                      ? 'bg-[#292D32] dark:bg-white text-white dark:text-[#292D32] shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-[#292D32] dark:hover:text-white'
+                  }`}
+                >
+                  <span>{isRTL ? 'كافة الأرباع (12 شهراً)' : 'All Quarters (12 Months)'}</span>
+                </button>
+
+                {CLOSING_QUARTERS.map(q => {
+                  const qStat = closingDateStats.quarterTotals[q.id] || { count: 0, totalValue: 0 };
+                  const isSelected = selectedQuarterFilter === q.id;
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => setSelectedQuarterFilter(q.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-emerald-700 dark:hover:text-emerald-300'
+                      }`}
+                    >
+                      <span>{q.id}</span>
+                      <span className="hidden sm:inline text-[11px] opacity-80">
+                        ({isRTL ? q.subtitleAr : q.subtitleEn})
+                      </span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-extrabold ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}>
+                        {qStat.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Unassigned Toggle + Summary KPI */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Unassigned Column Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setShowUnassignedClosing(prev => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+                  showUnassignedClosing
+                    ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-2xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                }`}
+                title={isRTL ? 'إظهار أو إخفاء عمود المشاريع التي لم يُحدد لها موعد إغلاق بعد' : 'Toggle column for projects without closing date'}
+              >
+                {showUnassignedClosing ? <EyeOff className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <Eye className="w-3.5 h-3.5 text-slate-500" />}
+                <span>
+                  {showUnassignedClosing 
+                    ? (isRTL ? 'إخفاء غير المجدول' : 'Hide Unassigned') 
+                    : (isRTL ? 'عرض غير المجدول' : 'Show Unassigned')}
+                </span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                  showUnassignedClosing
+                    ? 'bg-amber-200/70 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                }`}>
+                  {closingDateStats.unassigned.length}
+                </span>
+              </button>
+
+              {/* Total Assigned Projects & Value in Selected Year */}
+              <div className="flex items-center gap-2 bg-emerald-50/80 dark:bg-emerald-950/50 border border-emerald-200/80 dark:border-emerald-800 px-3 py-1.5 rounded-full text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{isRTL ? 'مجدول لسنة' : 'Scheduled'} {selectedClosingYear}:</span>
+                <span className="font-mono font-black text-emerald-950 dark:text-white">{formatCompactSAR(closingDateStats.totalAssignedValue)}</span>
+                <span className="text-[10px] opacity-75 font-mono font-bold">({closingDateStats.totalAssignedCount} {isRTL ? 'مشروع' : 'projects'})</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 1: KANBAN BOARD */}
       {viewMode === 'kanban' && (
         <div className="space-y-2">
-          {/* Odoo Style Drag & Drop Helper Badge */}
-          {currentRole !== 'viewer' && (
-            <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1 font-urbanist">
-              <span className="flex items-center gap-1.5 font-bold text-slate-600 dark:text-slate-300 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm px-3.5 py-1.5 rounded-full border border-slate-200/60 dark:border-slate-700/60 shadow-2xs">
-                <GripVertical className="w-3.5 h-3.5 text-[#8FC2F0]" />
-                <span>{isRTL ? 'اسحب وأفلت أي صفقة لتحديث مرحلتها فورياً' : 'Drag & drop any deal card to instantly update its pipeline stage'}</span>
+          {/* Odoo Style Drag & Drop Helper Badge - Floating only when dragging */}
+          {currentRole !== 'viewer' && draggedProjectId && (
+            <div className="flex items-center justify-end text-xs text-slate-500 dark:text-slate-400 px-1">
+              <span className="text-[#292D32] dark:text-[#8FC2F0] font-black animate-pulse text-[11px] bg-[#8FC2F0]/20 px-3 py-1 rounded-full border border-[#8FC2F0]/30 shadow-2xs">
+                {groupByMode === 'stage'
+                  ? (isRTL ? 'حرر البطاقة فوق أي مرحلة لنقلها' : 'Release card on any column to move')
+                  : (isRTL ? 'اسحب المشروع وأفلته في أي شهر لتحديث موعد الإغلاق فوراً' : 'Drag project and drop into any month to reschedule closing date')}
               </span>
-              {draggedProjectId && (
-                <span className="text-[#292D32] dark:text-[#8FC2F0] font-black animate-pulse text-[11px] bg-[#8FC2F0]/20 px-3 py-1 rounded-full border border-[#8FC2F0]/30">
-                  {isRTL ? 'حرر البطاقة فوق أي مرحلة لنقلها' : 'Release card on any column to move'}
-                </span>
-              )}
             </div>
           )}
 
-          <div className="overflow-x-auto pb-6">
-            <div className="flex gap-5 min-w-[1700px]">
-              {kanbanStages.map(col => {
-                const stageProjects = filteredProjects.filter(p => {
-                  if (col.stage === 'rfq_processing') return p.pipeline_stage === 'rfq_processing' || (p.pipeline_stage as string) === 'pricing';
-                  if (col.stage === 'negotiation') return p.pipeline_stage === 'negotiation' || (p.pipeline_stage as string) === 'technically_approved';
-                  return p.pipeline_stage === col.stage;
-                }).sort((a, b) => {
-                  const timeA = new Date(a.stage_entered_at || a.updated_at || a.created_at).getTime();
-                  const timeB = new Date(b.stage_entered_at || b.updated_at || b.created_at).getTime();
-                  return timeB - timeA; // Descending: Most recently moved first
-                });
-                const stageValue = stageProjects.reduce((sum, p) => sum + p.estimated_value, 0);
-                const isColumnTargeted = dragOverStage === col.stage;
+          {/* Sub-View A: Group by Pipeline Stages */}
+          {groupByMode === 'stage' && (
+            <div className="overflow-x-auto pb-6">
+              <div className="flex gap-5 min-w-[1700px]">
+                {kanbanStages.map(col => {
+                  const stageProjects = filteredProjects.filter(p => {
+                    if (col.stage === 'rfq_processing') return p.pipeline_stage === 'rfq_processing' || (p.pipeline_stage as string) === 'pricing';
+                    if (col.stage === 'negotiation') return p.pipeline_stage === 'negotiation' || (p.pipeline_stage as string) === 'technically_approved';
+                    return p.pipeline_stage === col.stage;
+                  }).sort((a, b) => {
+                    const timeA = new Date(a.stage_entered_at || a.updated_at || a.created_at).getTime();
+                    const timeB = new Date(b.stage_entered_at || b.updated_at || b.created_at).getTime();
+                    return timeB - timeA;
+                  });
+                  const stageValue = stageProjects.reduce((sum, p) => sum + p.estimated_value, 0);
+                  const isColumnTargeted = dragOverStage === col.stage;
 
-                return (
-                  <div 
-                    key={col.stage}
-                    onDragOver={(e) => {
-                      if (currentRole === 'viewer') return;
-                      e.preventDefault();
-                      e.dataTransfer.dropEffect = 'move';
-                      if (dragOverStage !== col.stage) {
-                        setDragOverStage(col.stage);
-                      }
-                    }}
-                    onDragLeave={(e) => {
-                      if (currentRole === 'viewer') return;
-                      e.preventDefault();
-                      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                      if (dragOverStage === col.stage) {
+                  return (
+                    <div 
+                      key={col.stage}
+                      onDragOver={(e) => {
+                        if (currentRole === 'viewer') return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dragOverStage !== col.stage) {
+                          setDragOverStage(col.stage);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (currentRole === 'viewer') return;
+                        e.preventDefault();
+                        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                        if (dragOverStage === col.stage) {
+                          setDragOverStage(null);
+                        }
+                      }}
+                      onDrop={async (e) => {
+                        if (currentRole === 'viewer') return;
+                        e.preventDefault();
+                        const projId = e.dataTransfer.getData('text/plain') || draggedProjectId;
+                        if (projId) {
+                          await handleStageDrop(projId, col.stage);
+                        }
                         setDragOverStage(null);
-                      }
-                    }}
-                    onDrop={async (e) => {
-                      if (currentRole === 'viewer') return;
-                      e.preventDefault();
-                      const projId = e.dataTransfer.getData('text/plain') || draggedProjectId;
-                      if (projId) {
-                        await handleStageDrop(projId, col.stage);
-                      }
-                      setDragOverStage(null);
-                      setDraggedProjectId(null);
-                    }}
-                    className={`flex-1 min-w-[360px] p-4 flex flex-col max-h-[84vh] transition-all duration-150 ${
-                      isColumnTargeted
-                        ? 'bg-[#8FC2F0]/20 border-[#8FC2F0] border-2 border-dashed ring-4 ring-[#8FC2F0]/20 shadow-md scale-[1.01] rounded-[28px]'
-                        : 'crm-kanban-column'
-                    }`}
-                  >
-                    {/* Column Header */}
-                    <div className="flex items-center justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800 mb-3 px-1 font-urbanist">
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-[#292D32] dark:text-white text-sm">
-                          {isRTL ? col.labelAr : col.label}
-                        </span>
-                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full shadow-2xs">
-                          {stageProjects.length}
+                        setDraggedProjectId(null);
+                      }}
+                      className={`flex-1 min-w-[280px] sm:min-w-[320px] md:min-w-[360px] max-w-[360px] p-3 sm:p-4 flex flex-col max-h-[84vh] transition-all duration-150 ${
+                        isColumnTargeted
+                          ? 'bg-[#8FC2F0]/20 border-[#8FC2F0] border-2 border-dashed ring-4 ring-[#8FC2F0]/20 shadow-md scale-[1.01] rounded-[28px]'
+                          : 'crm-kanban-column'
+                      }`}
+                    >
+                      {/* Column Header */}
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200/70 dark:border-slate-800 mb-2 px-0.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-black text-[#292D32] dark:text-white text-xs sm:text-sm truncate">
+                            {isRTL ? col.labelAr : col.label}
+                          </span>
+                          <span className="text-[10px] font-bold font-mono text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-full shadow-2xs shrink-0">
+                            {stageProjects.length}
+                          </span>
+                        </div>
+                        <span className="text-[10px] sm:text-[10.5px] font-black font-mono text-[#0088FF] dark:text-[#8FC2F0] shrink-0 bg-blue-50/80 dark:bg-blue-950/50 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-900/40">
+                          {formatCompactSAR(stageValue)}
                         </span>
                       </div>
-                      <span className="text-xs font-extrabold text-[#292D32] dark:text-[#8FC2F0]">
-                        {formatCurrencySAR(stageValue)}
+
+                      {/* Drop Target Indicator when dragging over this column */}
+                      {isColumnTargeted && (
+                        <div className="p-3 mb-2 rounded-2xl border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] text-xs font-bold text-center flex items-center justify-center gap-1.5 animate-pulse shadow-xs shrink-0">
+                          <ArrowDown className="w-4 h-4 text-[#8FC2F0] animate-bounce" />
+                          <span>Drop here to move to {col.label}</span>
+                        </div>
+                      )}
+
+                      {/* Cards List */}
+                      <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                        {stageProjects.length === 0 ? (
+                          <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                            {col.stage === 'lost' ? 'No lost projects yet. Great job! 🥳' : 'No projects in this stage'}
+                          </div>
+                        ) : (
+                          stageProjects.map(proj => {
+                            const isAccessible = canUserAccessProjectCockpit(proj, currentUser);
+                            return (
+                              <ProjectCard 
+                                key={proj.id} 
+                                project={proj}
+                                isReadOnlyForSalesRep={!isAccessible}
+                                isDraggable={currentRole !== 'viewer' && isAccessible}
+                                isDragging={draggedProjectId === proj.id}
+                                onDragStart={(e) => {
+                                  if (currentRole === 'viewer' || !isAccessible) return;
+                                  e.dataTransfer.setData('text/plain', proj.id);
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  setDraggedProjectId(proj.id);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedProjectId(null);
+                                  setDragOverStage(null);
+                                }}
+                              />
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Sub-View B: Group by Closing Date (4 Quarters, 12 Months + Unassigned) */}
+          {groupByMode === 'closing_date' && (
+            <div className="overflow-x-auto pb-6">
+              <div className="flex gap-6 items-start">
+                {displayedQuarters.map(quarter => {
+                  const qStat = closingDateStats.quarterTotals[quarter.id] || { count: 0, totalValue: 0 };
+
+                  return (
+                    <div 
+                      key={quarter.id}
+                      className="flex flex-col gap-2.5 bg-slate-100/60 dark:bg-slate-900/40 p-3 sm:p-3.5 rounded-[32px] border border-slate-200/80 dark:border-slate-800 shadow-2xs shrink-0"
+                    >
+                      {/* Quarter Header Banner */}
+                      <div className="flex items-center justify-between px-3.5 py-2 bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs" />
+                          <span className="font-black text-sm text-[#292D32] dark:text-white">
+                            {quarter.id} {selectedClosingYear} — {isRTL ? quarter.titleAr : quarter.titleEn}
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">
+                            ({isRTL ? quarter.subtitleAr : quarter.subtitleEn})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700/60 px-2 py-0.5 rounded-full shadow-2xs">
+                            {qStat.count} {isRTL ? 'مشروع' : 'deals'}
+                          </span>
+                          <span className="text-xs font-mono font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                            {formatCompactSAR(qStat.totalValue)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 3 Months Columns in this Quarter */}
+                      <div className="flex gap-4">
+                        {quarter.months.map(mon => {
+                          const monthKey = `${selectedClosingYear}-${mon.monthNum}`;
+                          const monthProjs = closingDateStats.byMonth[monthKey] || [];
+                          const monthVal = monthProjs.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
+                          const isCurrent = currentYearMonth === monthKey;
+                          const isTargeted = dragOverClosingKey === monthKey;
+
+                          return (
+                            <div
+                              key={monthKey}
+                              onDragOver={(e) => {
+                                if (currentRole === 'viewer') return;
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                if (dragOverClosingKey !== monthKey) {
+                                  setDragOverClosingKey(monthKey);
+                                }
+                              }}
+                              onDragLeave={(e) => {
+                                if (currentRole === 'viewer') return;
+                                e.preventDefault();
+                                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                                if (dragOverClosingKey === monthKey) {
+                                  setDragOverClosingKey(null);
+                                }
+                              }}
+                              onDrop={async (e) => {
+                                if (currentRole === 'viewer') return;
+                                e.preventDefault();
+                                const projId = e.dataTransfer.getData('text/plain') || draggedProjectId;
+                                if (projId) {
+                                  await handleClosingDateDrop(projId, monthKey);
+                                }
+                                setDragOverClosingKey(null);
+                                setDraggedProjectId(null);
+                              }}
+                              className={`w-[300px] sm:w-[320px] md:w-[340px] p-3 flex flex-col max-h-[82vh] transition-all duration-150 ${
+                                isTargeted
+                                  ? 'bg-emerald-500/20 border-emerald-500 border-2 border-dashed ring-4 ring-emerald-500/20 shadow-md scale-[1.01] rounded-[26px]'
+                                  : isCurrent
+                                    ? 'crm-kanban-column border-blue-400/70 dark:border-blue-600/60 ring-2 ring-blue-400/20 shadow-xs'
+                                    : 'crm-kanban-column'
+                              }`}
+                            >
+                              {/* Month Header */}
+                              <div className="flex items-center justify-between pb-2 border-b border-slate-200/70 dark:border-slate-800 mb-2 px-0.5">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <Calendar className={`w-3.5 h-3.5 ${isCurrent ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'} shrink-0`} />
+                                  <span className="font-black text-[#292D32] dark:text-white text-xs sm:text-sm truncate">
+                                    {isRTL ? mon.labelAr : mon.labelEn}
+                                  </span>
+                                  {isCurrent && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 shrink-0">
+                                      {isRTL ? 'الحالي' : 'Now'}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-bold font-mono text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.2 rounded-full shadow-2xs shrink-0">
+                                    {monthProjs.length}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] sm:text-[10.5px] font-black font-mono text-emerald-700 dark:text-emerald-400 shrink-0 bg-emerald-50/80 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-100 dark:border-emerald-900/40">
+                                  {formatCompactSAR(monthVal)}
+                                </span>
+                              </div>
+
+                              {/* Drop Target Indicator */}
+                              {isTargeted && (
+                                <div className="p-2.5 mb-2 rounded-2xl border-2 border-dashed border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold text-center flex items-center justify-center gap-1.5 animate-pulse shadow-xs shrink-0">
+                                  <ArrowDown className="w-4 h-4 text-emerald-600 animate-bounce" />
+                                  <span>{isRTL ? `إفلات لنقل تاريخ الإغلاق إلى ${mon.labelAr}` : `Drop to set closing to ${mon.labelEn}`}</span>
+                                </div>
+                              )}
+
+                              {/* Cards List */}
+                              <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                                {monthProjs.length === 0 ? (
+                                  <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-white/40 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                                    {isRTL ? `لا توجد مشاريع مجدولة لشهر ${mon.labelAr}` : `No projects scheduled for ${mon.labelEn}`}
+                                  </div>
+                                ) : (
+                                  monthProjs.map(proj => {
+                                    const isAccessible = canUserAccessProjectCockpit(proj, currentUser);
+                                    return (
+                                      <ProjectCard 
+                                        key={proj.id} 
+                                        project={proj}
+                                        isReadOnlyForSalesRep={!isAccessible}
+                                        isDraggable={currentRole !== 'viewer' && isAccessible}
+                                        isDragging={draggedProjectId === proj.id}
+                                        onDragStart={(e) => {
+                                          if (currentRole === 'viewer' || !isAccessible) return;
+                                          e.dataTransfer.setData('text/plain', proj.id);
+                                          e.dataTransfer.effectAllowed = 'move';
+                                          setDraggedProjectId(proj.id);
+                                        }}
+                                        onDragEnd={() => {
+                                          setDraggedProjectId(null);
+                                          setDragOverClosingKey(null);
+                                        }}
+                                      />
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Optional Unassigned Column */}
+                {showUnassignedClosing && (
+                  <div className="flex flex-col gap-2.5 bg-amber-50/50 dark:bg-amber-950/20 p-3 sm:p-3.5 rounded-[32px] border border-amber-200/80 dark:border-amber-900/50 shadow-2xs shrink-0">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-3.5 py-2 bg-white dark:bg-slate-800/90 rounded-2xl border border-amber-200 dark:border-amber-800/70 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="font-black text-sm text-amber-900 dark:text-amber-200">
+                          {isRTL ? 'بدون تاريخ إغلاق' : 'Unassigned Closing'}
+                        </span>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full shadow-2xs">
+                        {closingDateStats.unassigned.length}
                       </span>
                     </div>
 
-                    {/* Drop Target Indicator when dragging over this column */}
-                    {isColumnTargeted && (
-                      <div className="p-3 mb-2 rounded-2xl border-2 border-dashed border-[#8FC2F0] bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] text-xs font-bold text-center flex items-center justify-center gap-1.5 animate-pulse shadow-xs shrink-0">
-                        <ArrowDown className="w-4 h-4 text-[#8FC2F0] animate-bounce" />
-                        <span>Drop here to move to {col.label}</span>
-                      </div>
-                    )}
-
-                    {/* Cards List */}
-                    <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-                      {stageProjects.length === 0 ? (
-                        <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-                          {col.stage === 'lost' ? 'No lost projects yet. Great job! 🥳' : 'No projects in this stage'}
+                    {/* Column */}
+                    <div
+                      onDragOver={(e) => {
+                        if (currentRole === 'viewer') return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dragOverClosingKey !== 'unassigned') {
+                          setDragOverClosingKey('unassigned');
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (currentRole === 'viewer') return;
+                        e.preventDefault();
+                        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                        if (dragOverClosingKey === 'unassigned') {
+                          setDragOverClosingKey(null);
+                        }
+                      }}
+                      onDrop={async (e) => {
+                        if (currentRole === 'viewer') return;
+                        e.preventDefault();
+                        const projId = e.dataTransfer.getData('text/plain') || draggedProjectId;
+                        if (projId) {
+                          await handleUnassignedDrop(projId);
+                        }
+                        setDragOverClosingKey(null);
+                        setDraggedProjectId(null);
+                      }}
+                      className={`w-[300px] sm:w-[320px] max-w-[340px] p-3 flex flex-col max-h-[82vh] transition-all duration-150 ${
+                        dragOverClosingKey === 'unassigned'
+                          ? 'bg-amber-500/20 border-amber-500 border-2 border-dashed ring-4 ring-amber-500/20 shadow-md scale-[1.01] rounded-[26px]'
+                          : 'crm-kanban-column border-amber-200/60 dark:border-amber-900/30'
+                      }`}
+                    >
+                      {dragOverClosingKey === 'unassigned' && (
+                        <div className="p-2.5 mb-2 rounded-2xl border-2 border-dashed border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs font-bold text-center flex items-center justify-center gap-1.5 animate-pulse shadow-xs shrink-0">
+                          <ArrowDown className="w-4 h-4 text-amber-600 animate-bounce" />
+                          <span>{isRTL ? 'إفلات لإزالة موعد الإغلاق' : 'Drop to clear closing date'}</span>
                         </div>
-                      ) : (
-                        stageProjects.map(proj => {
-                          const isAccessible = canUserAccessProjectCockpit(proj, currentUser);
-                          return (
-                            <ProjectCard 
-                              key={proj.id} 
-                              project={proj}
-                              isReadOnlyForSalesRep={!isAccessible}
-                              isDraggable={currentRole !== 'viewer' && isAccessible}
-                              isDragging={draggedProjectId === proj.id}
-                              onDragStart={(e) => {
-                                if (currentRole === 'viewer' || !isAccessible) return;
-                                e.dataTransfer.setData('text/plain', proj.id);
-                                e.dataTransfer.effectAllowed = 'move';
-                                setDraggedProjectId(proj.id);
-                              }}
-                              onDragEnd={() => {
-                                setDraggedProjectId(null);
-                                setDragOverStage(null);
-                              }}
-                            />
-                          );
-                        })
                       )}
+
+                      <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+                        {closingDateStats.unassigned.length === 0 ? (
+                          <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs italic bg-white/40 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                            {isRTL ? 'جميع المشاريع مجدولة بتواريخ إغلاق! 👍' : 'All projects have scheduled closing dates!'}
+                          </div>
+                        ) : (
+                          closingDateStats.unassigned.map(proj => {
+                            const isAccessible = canUserAccessProjectCockpit(proj, currentUser);
+                            return (
+                              <ProjectCard 
+                                key={proj.id} 
+                                project={proj}
+                                isReadOnlyForSalesRep={!isAccessible}
+                                isDraggable={currentRole !== 'viewer' && isAccessible}
+                                isDragging={draggedProjectId === proj.id}
+                                onDragStart={(e) => {
+                                  if (currentRole === 'viewer' || !isAccessible) return;
+                                  e.dataTransfer.setData('text/plain', proj.id);
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  setDraggedProjectId(proj.id);
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedProjectId(null);
+                                  setDragOverClosingKey(null);
+                                }}
+                              />
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -949,250 +1688,132 @@ export default function ProjectsPage() {
               <thead className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase tracking-wider font-urbanist font-black text-[10px]">
                 <tr>
                   <th className="py-3.5 px-4">#PR</th>
-                  <th className="py-3.5 px-4">Project &amp; Organization</th>
-                  <th className="py-3.5 px-4">Type</th>
-                  <th className="py-3.5 px-4">Pipeline Stage</th>
-                  <th className="py-3.5 px-4">Health</th>
+                  <th className="py-3.5 px-4">{isRTL ? 'المشروع والجهة' : 'Project & Organization'}</th>
+                  <th className="py-3.5 px-4">{isRTL ? 'النوع' : 'Type'}</th>
+                  <th className="py-3.5 px-4">{isRTL ? 'المرحلة' : 'Pipeline Stage'}</th>
+                  <th className="py-3.5 px-4">{isRTL ? 'الحالة' : 'Health'}</th>
                   <th className="py-3.5 px-4 text-right">
                     <div>{isRTL ? 'القيمة التقديرية' : 'Est. Value'}</div>
-                    <div className="text-[9px] text-blue-500 lowercase font-normal">{isRTL ? 'أحدث عرض سعر' : 'latest quotation'}</div>
+                    <div className="text-[10px] text-blue-500 lowercase font-normal">{isRTL ? 'أحدث عرض سعر' : 'latest quotation'}</div>
                   </th>
-                  <th className="py-3.5 px-4">Next Action</th>
-                  <th className="py-3.5 px-4">Owner / Members</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
+                  <th className="py-3.5 px-4">{isRTL ? 'الإجراء التالي' : 'Next Action'}</th>
+                  <th className="py-3.5 px-4">{isRTL ? 'المسؤول' : 'Owner / Members'}</th>
+                  <th className="py-3.5 px-4 text-right">{isRTL ? 'إجراءات' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredProjects.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
-                      No projects found matching the selected filters.
-                    </td>
-                  </tr>
+                {groupByMode === 'stage' ? (
+                  /* Standard flat table */
+                  filteredProjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
+                        {isRTL ? 'لم يتم العثور على مشاريع تطابق الفلاتر المحددة.' : 'No projects found matching the selected filters.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProjects.map(p => renderProjectTableRow(p))
+                  )
                 ) : (
-                  filteredProjects.map(p => {
-                    const isAccessible = canUserAccessProjectCockpit(p, currentUser);
-                    const stageConfig = PIPELINE_STAGES.find(s => s.value === p.pipeline_stage);
-                    const typeConfig = OPPORTUNITY_TYPES.find(t => t.value === p.opportunity_type);
-                    const latestQuote = quotations
-                      ?.filter(q => q.project_id === p.id && !q.is_archived)
-                      ?.sort((a, b) => b.version - a.version)[0];
-
-                    return (
-                      <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          <span className="font-mono text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-[#232A38] text-slate-800 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700">
-                            {p.pr_number}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 min-w-[220px]">
-                          {canUserAccessProjectCockpit(p, currentUser) ? (
-                            <Link 
-                              href={`/projects/${p.id}`}
-                              className="font-semibold text-slate-900 dark:text-white leading-tight hover:text-[#8FC2F0] hover:underline transition-colors block"
-                            >
-                              {p.name}
-                            </Link>
-                          ) : (
-                            <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 leading-tight">
-                              <span>{p.name}</span>
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5" />
-                                <span>{isRTL ? 'للاطلاع فقط' : 'View only'}</span>
-                              </span>
-                            </div>
-                          )}
-                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
-                            <span className="text-blue-600 dark:text-[#8FC2F0] font-medium flex items-center gap-1">
-                              <Building2 className="w-3 h-3" />
-                              {p.company_name}
-                            </span>
-                            {p.primary_contact_name && (
-                              <span className="text-slate-400 dark:text-slate-500">&bull; {p.primary_contact_name}</span>
-                            )}
-                            <span className="text-slate-400 dark:text-slate-500">&bull; {p.location}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          <span className={`text-[11px] font-black px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 shadow-2xs ${
-                            p.opportunity_type === 'in_hand'
-                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                              : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              p.opportunity_type === 'in_hand' ? 'bg-emerald-500 animate-pulse' : 'bg-indigo-500'
-                            }`} />
-                            <span>
-                              {p.opportunity_type === 'in_hand'
-                                ? (isRTL ? 'In Hand (في اليد)' : 'In Hand')
-                                : (isRTL ? 'Tender (مناقصة)' : 'Tender')}
-                            </span>
-                          </span>
-                        </td>
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          {isAccessible ? (
-                            <div className="space-y-1">
-                              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border inline-block ${stageConfig?.badgeClass || 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700'}`}>
-                                {isRTL ? (kanbanStages.find(ks => ks.stage === p.pipeline_stage)?.labelAr || stageConfig?.labelAr || p.pipeline_stage) : (stageConfig?.label || p.pipeline_stage)}
-                              </span>
-                              {p.pipeline_stage === 'won' && (
-                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                                  {p.po_attachment_url || p.po_number ? (
-                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold flex items-center gap-1">
-                                      <FileCheck className="w-2.5 h-2.5" />
-                                      <span>{p.po_number || 'PO'}</span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 font-bold">
-                                      {isRTL ? 'بلا PO' : 'No PO'}
-                                    </span>
-                                  )}
-                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-600 text-white font-black">
-                                    {p.collected_percentage || 0}% {isRTL ? 'محصل' : 'Coll.'}
-                                  </span>
-                                </div>
-                              )}
-                              {p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost' && (() => {
-                                const aging = getStageAgingInfo(p);
-                                return (
-                                  <div className="flex items-center gap-1">
-                                    <span 
-                                      className={`text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 font-urbanist ${aging.badgeClass}`}
-                                      title={isRTL ? `المشروع في هذه المرحلة منذ ${aging.daysInStage} يوماً (الحد المعياري: ${aging.slaDays} يوم)` : `Project in stage for ${aging.daysInStage} days (Target SLA: ${aging.slaDays}d)`}
-                                    >
-                                      <Clock className="w-2.5 h-2.5" />
-                                      <span>{isRTL ? aging.labelAr : aging.labelEn}</span>
-                                    </span>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          ) : (
-                            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1.5">
-                              <Lock className="w-3 h-3 text-amber-500" />
-                              <span>{isRTL ? 'المرحلة محجوبة للمالك' : 'Stage locked'}</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          {isAccessible ? (
-                            <>
-                              {p.calculated_health === 'red' && (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                                  <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">
-                                    {p.days_overdue ? `${p.days_overdue}d late` : 'Needs Action'}
-                                  </span>
-                                </div>
-                              )}
-                              {p.calculated_health === 'yellow' && (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Approaching</span>
-                                </div>
-                              )}
-                              {p.calculated_health === 'green' && (
-                                <div className="flex items-center gap-1.5">
+                  /* Grouped table by Quarters & Months */
+                  <>
+                    {displayedQuarters.map(quarter => {
+                      const qStat = closingDateStats.quarterTotals[quarter.id] || { count: 0, totalValue: 0 };
+                      return (
+                        <React.Fragment key={quarter.id}>
+                          {/* Quarter Header Row */}
+                          <tr className="bg-slate-100/90 dark:bg-slate-800/90 border-y-2 border-slate-300 dark:border-slate-700">
+                            <td colSpan={9} className="py-2.5 px-4">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <div className="flex items-center gap-2">
                                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Healthy</span>
+                                  <span className="font-black text-sm text-[#292D32] dark:text-white">
+                                    {quarter.id} {selectedClosingYear} — {isRTL ? quarter.titleAr : quarter.titleEn}
+                                  </span>
+                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                    ({isRTL ? quarter.subtitleAr : quarter.subtitleEn})
+                                  </span>
                                 </div>
-                              )}
-                              {p.calculated_health === 'neutral' && (
-                                <span className="text-xs text-slate-400">Closed</span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">—</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-4 text-right whitespace-nowrap font-urbanist">
-                          {isAccessible ? (
-                            <>
-                              <div className="font-extrabold text-slate-900 dark:text-white">
-                                {formatCurrencySAR(p.estimated_value)}
-                              </div>
-                              {latestQuote && (
-                                <div className="text-[11px] font-bold text-blue-600 dark:text-[#8FC2F0] mt-0.5">
-                                  {isRTL ? 'عرض:' : 'Quote:'} {formatCompactSAR(latestQuote.amount)} (V{latestQuote.version})
-                                </div>
-                              )}
-                              <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 mt-0.5 flex items-center justify-end gap-1">
-                                <span>{isRTL ? 'الموزون:' : 'Weighted:'}</span>
-                                <span>{formatCompactSAR((latestQuote?.amount || p.estimated_value) * (STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1))}</span>
-                                <span className="text-[9px] opacity-75">({Math.round((STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1) * 100)}%)</span>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="font-bold text-xs text-amber-600 dark:text-amber-400 flex items-center justify-end gap-1">
-                              <Lock className="w-3 h-3 text-amber-500" />
-                              <span>{isRTL ? 'القيمة محجوبة للمالك' : 'Value locked'}</span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-4 px-4 min-w-[200px]">
-                          {isAccessible ? (
-                            p.next_action ? (
-                              <div>
-                                <div className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-1">
-                                  {p.next_action}
-                                </div>
-                                <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                                  <Calendar className="w-3 h-3 text-slate-400" />
-                                  <span>Due: {formatDateString(p.next_follow_up_at)}</span>
+                                <div className="flex items-center gap-3 font-mono text-xs">
+                                  <span className="text-slate-600 dark:text-slate-300 font-bold">
+                                    {qStat.count} {isRTL ? 'مشروع' : 'deals'}
+                                  </span>
+                                  <span className="text-emerald-700 dark:text-emerald-400 font-black bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                    {formatCompactSAR(qStat.totalValue)}
+                                  </span>
                                 </div>
                               </div>
-                            ) : (
-                              <span className="text-xs text-rose-600 dark:text-rose-400 font-medium italic">
-                                No next action set!
-                              </span>
-                            )
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">—</span>
-                          )}
-                        </td>
-                        <td className="py-4 px-4 whitespace-nowrap">
-                          <div className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                            {p.owner_name || 'Eslam M.'}
-                          </div>
-                          {p.members && p.members.length > 0 && (
-                            <div className="text-[11px] text-blue-600 dark:text-[#8FC2F0] flex items-center gap-1 mt-0.5">
-                              <Users2 className="w-3 h-3" />
-                              <span>+ {p.members[0].user_name}</span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-4 px-4 text-right whitespace-nowrap">
-                          {currentRole !== 'viewer' && (
-                            canUserAccessProjectCockpit(p, currentUser) ? (
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button
-                                  onClick={() => openEditModal(p)}
-                                  className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                  title="Edit Project"
-                                >
-                                  <Edit className="w-3.5 h-3.5" />
-                                </button>
-                                {currentRole !== 'estimator' && (
-                                  <button
-                                    onClick={() => handleDelete(p.id, p.name)}
-                                    className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                                    title="Delete Project"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                            </td>
+                          </tr>
+
+                          {quarter.months.map(mon => {
+                            const monthKey = `${selectedClosingYear}-${mon.monthNum}`;
+                            const monthProjs = closingDateStats.byMonth[monthKey] || [];
+                            const monthVal = monthProjs.reduce((sum, p) => sum + (p.estimated_value || 0), 0);
+                            const isCurrent = currentYearMonth === monthKey;
+
+                            return (
+                              <React.Fragment key={monthKey}>
+                                {/* Month Subheader Row */}
+                                <tr className={`border-b ${isCurrent ? 'bg-blue-50/60 dark:bg-blue-950/30' : 'bg-slate-50/70 dark:bg-slate-900/40'}`}>
+                                  <td colSpan={9} className="py-2 px-6">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <Calendar className={`w-3.5 h-3.5 ${isCurrent ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`} />
+                                        <span className={`text-xs font-bold ${isCurrent ? 'text-blue-900 dark:text-blue-200' : 'text-slate-700 dark:text-slate-300'}`}>
+                                          {isRTL ? mon.labelAr : mon.labelEn} {selectedClosingYear}
+                                        </span>
+                                        {isCurrent && (
+                                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+                                            {isRTL ? 'الشهر الحالي' : 'Current Month'}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2 text-[11px] font-mono">
+                                        <span className="text-slate-500 font-medium">({monthProjs.length} {isRTL ? 'مشروع' : 'deals'})</span>
+                                        <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatCompactSAR(monthVal)}</span>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+
+                                {monthProjs.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={9} className="py-2.5 px-8 text-xs text-slate-400 dark:text-slate-500 italic">
+                                      {isRTL ? `لا توجد مشاريع مجدولة لشهر ${mon.labelAr}` : `No projects scheduled for ${mon.labelEn}`}
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  monthProjs.map(p => renderProjectTableRow(p))
                                 )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </React.Fragment>
+                      );
+                    })}
+
+                    {/* Unassigned Projects Section */}
+                    {showUnassignedClosing && closingDateStats.unassigned.length > 0 && (
+                      <React.Fragment>
+                        <tr className="bg-amber-50/80 dark:bg-amber-950/40 border-y-2 border-amber-300 dark:border-amber-800">
+                          <td colSpan={9} className="py-2.5 px-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                <span className="font-black text-sm text-amber-900 dark:text-amber-200">
+                                  {isRTL ? 'مشاريع بدون موعد إغلاق محدد' : 'Projects Without Scheduled Closing Date'}
+                                </span>
                               </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                                <Lock className="w-3 h-3 text-amber-500" />
-                                <span>{isRTL ? `مسند إلى: ${p.referred_to_name || p.owner_name || 'سيلز آخر'}` : 'Locked'}</span>
-                              </div>
-                            )
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
+                              <span className="text-xs font-mono font-bold text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full">
+                                {closingDateStats.unassigned.length} {isRTL ? 'مشروع' : 'deals'}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {closingDateStats.unassigned.map(p => renderProjectTableRow(p))}
+                      </React.Fragment>
+                    )}
+                  </>
                 )}
               </tbody>
             </table>
@@ -1397,239 +2018,20 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Create / Edit Project Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-[#1C2130] rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 dark:border-[#8FC2F0]/15 overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#232A38] shrink-0">
-              <h2 className="font-bold text-slate-900 dark:text-white text-lg">
-                {editingProject ? 'Edit Project' : 'Create New Project'}
-              </h2>
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Modular Add & Edit Project Modals */}
+      <AddProjectModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+      />
 
-            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto">
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">#PR Number *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="PR10XX"
-                    value={prNumber}
-                    onChange={e => setPrNumber(e.target.value)}
-                    className="w-full px-3 py-2 text-sm font-mono border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Project Name *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. IMC Obhur Hospital"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Company / Account *</label>
-                  <select
-                    required
-                    value={companyId}
-                    onChange={e => handleCompanyChange(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  >
-                    {companies.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Primary Contact</label>
-                  <select
-                    value={primaryContactId}
-                    onChange={e => setPrimaryContactId(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  >
-                    <option value="">-- Select Contact --</option>
-                    {contacts.filter(cnt => !companyId || cnt.company_id === companyId).map(cnt => (
-                      <option key={cnt.id} value={cnt.id}>{cnt.full_name} ({cnt.job_title || 'Contact'})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Location (City)</label>
-                  <select
-                    value={location}
-                    onChange={e => setLocation(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  >
-                    {SAUDI_LOCATIONS.map(loc => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Opportunity Type</label>
-                  <select
-                    value={opportunityType}
-                    onChange={e => setOpportunityType(e.target.value as OpportunityType)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  >
-                    {OPPORTUNITY_TYPES.map(t => (
-                      <option key={t.value} value={t.value}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Pipeline Stage</label>
-                  <select
-                    value={pipelineStage}
-                    onChange={e => setPipelineStage(e.target.value as PipelineStage)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  >
-                    {PIPELINE_STAGES.map(s => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">Estimated Value (SAR)</label>
-                    {!canEditCommercialValue(pipelineStage) && (
-                      <span className="text-[10px] font-bold text-amber-600 flex items-center gap-0.5">
-                        <Lock className="w-2.5 h-2.5" /> Locked
-                      </span>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="0"
-                      step="1000"
-                      disabled={!canEditCommercialValue(pipelineStage)}
-                      value={canEditCommercialValue(pipelineStage) ? estimatedValue : 0}
-                      onChange={e => setEstimatedValue(Number(e.target.value))}
-                      className={`w-full px-3 py-2 text-sm font-semibold border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                        canEditCommercialValue(pipelineStage)
-                          ? 'bg-white dark:bg-[#141820] border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white'
-                          : 'bg-slate-100 dark:bg-[#232A38] border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed'
-                      }`}
-                      placeholder={canEditCommercialValue(pipelineStage) ? "SAR Amount" : "Unlocked at Quotation"}
-                    />
-                    {!canEditCommercialValue(pipelineStage) && (
-                      <Lock className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
-                    )}
-                  </div>
-                  {!canEditCommercialValue(pipelineStage) && (
-                    <p className="text-[10px] text-amber-600 mt-1">
-                      ينشط السعر بمجرد وصول المشروع لمرحلة Quotation Sent
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Probability (%)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={probability}
-                    onChange={e => setProbability(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Priority</label>
-                  <select
-                    value={priority}
-                    onChange={e => setPriority(e.target.value as ProjectPriority)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  >
-                    {PROJECT_PRIORITIES.map(p => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Co-Sales Engineer / Project Member */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Co-Sales Engineer / Project Member (Optional Collaboration)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Abdelrahman Al-Shibi"
-                  value={coEngineer}
-                  onChange={e => setCoEngineer(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                />
-              </div>
-
-              {/* Next Action & Date */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Next Action</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Follow up on procurement revised BOQ"
-                    value={nextAction}
-                    onChange={e => setNextAction(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Next Follow-up Date</label>
-                  <input
-                    type="date"
-                    value={nextFollowUpAt}
-                    onChange={e => setNextFollowUpAt(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#141820] text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-[#232A38] hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors"
-                >
-                  {editingProject ? 'Save Changes' : 'Create Project'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <EditProjectModal
+        project={editingProject}
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingProject(null);
+        }}
+      />
 
       {/* Lost Reason Modal for Kanban Drag-Drop */}
       <LostReasonModal
