@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { 
   X, 
@@ -51,16 +52,31 @@ export function CompanyDetailModal({
   const { projects, contacts, activities, openFastLog, currentRole, currentUser, teamMembers } = useCRM();
   const [activeTab, setActiveTab] = useState<'projects' | 'contacts' | 'activities' | 'overview'>(initialTab);
   const [contactSearch, setContactSearch] = useState<string>('');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Sync tab if initialTab changes when opening
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen && initialTab) {
       setActiveTab(initialTab);
       setContactSearch('');
     }
   }, [isOpen, initialTab]);
 
-  if (!isOpen || !company) return null;
+  // Handle Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !company || !mounted) return null;
 
   // Filter linked data
   const linkedProjects = projects.filter(p => p.company_id === company.id);
@@ -100,9 +116,15 @@ export function CompanyDetailModal({
   const mapsUrl = company.google_maps_url || 
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${company.name} ${company.city || 'Jeddah'} Saudi Arabia`)}`;
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-5 z-50 animate-in fade-in duration-200">
-      <div className="glass-card rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[92vh] shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 flex flex-col overflow-hidden backdrop-blur-2xl">
+  const modalContent = (
+    <div 
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-5 z-50 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="glass-card rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[92vh] shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 flex flex-col overflow-hidden backdrop-blur-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* CRMate Frosted Header */}
         <div className="px-4 py-3.5 sm:px-6 sm:py-5 bg-white/40 dark:bg-[#232A38]/70 backdrop-blur-md border-b border-slate-100/80 dark:border-slate-800 shrink-0">
@@ -811,7 +833,7 @@ export function CompanyDetailModal({
 
           <button
             onClick={onClose}
-            className="px-5 py-2 text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+            className="px-5 py-2 text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
           >
             Close
           </button>
@@ -820,4 +842,6 @@ export function CompanyDetailModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

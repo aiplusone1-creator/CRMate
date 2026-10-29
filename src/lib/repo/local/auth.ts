@@ -87,33 +87,7 @@ export class LocalAuthRepository {
       // Check localStorage first (remember me) then sessionStorage (session-only)
       const raw = localStorage.getItem(this.sessionKey) || sessionStorage.getItem(this.sessionKey);
       if (!raw) {
-        // If the user deliberately clicked logout, respect that state
-        const isExplicitlyLoggedOut = localStorage.getItem('crmate_explicit_logout') === 'true';
-        if (isExplicitlyLoggedOut) {
-          return null;
-        }
-
-        // Auto-seed active session for default user (u1 - Eslam Al-Mohandes) in local environment
-        const defaultUser = SEEDED_USERS[0];
-        const expiresDate = new Date();
-        expiresDate.setDate(expiresDate.getDate() + 30);
-        const autoSession: AuthSession = {
-          user_id: defaultUser.id,
-          token: `auto_session_${Date.now()}`,
-          expires_at: expiresDate.toISOString(),
-          remember_me: true
-        };
-        localStorage.setItem(this.sessionKey, JSON.stringify(autoSession));
-        localStorage.setItem('crmate_is_authenticated', 'true');
-        localStorage.setItem('crmate_auth_user', JSON.stringify({
-          id: defaultUser.id,
-          email: defaultUser.email,
-          full_name: defaultUser.name,
-          name: defaultUser.name,
-          role: defaultUser.role,
-          avatar_initials: 'EM'
-        }));
-        return autoSession;
+        return null;
       }
 
       const session: AuthSession = JSON.parse(raw);
@@ -155,6 +129,10 @@ export class LocalAuthRepository {
 
     if (!user.is_active) {
       throw new AuthError('INACTIVE_USER', 'Account is deactivated, please contact administrator');
+    }
+
+    if (!user.password_hash) {
+      throw new AuthError('INVALID_PASSWORD', 'Local password verification not available for this account. Please authenticate via Supabase Auth.');
     }
 
     const isValid = await verifyPassword(password, user.password_hash);
@@ -313,6 +291,9 @@ export class LocalAuthRepository {
     }
 
     const user = users[userIndex];
+    if (!user.password_hash) {
+      throw new AuthError('INVALID_PASSWORD', 'Current password is not stored locally.');
+    }
     const isValid = await verifyPassword(currentPassword, user.password_hash);
     if (!isValid) {
       throw new AuthError('INVALID_PASSWORD', 'Current password is incorrect');

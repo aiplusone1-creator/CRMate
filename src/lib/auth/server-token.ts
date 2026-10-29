@@ -277,3 +277,114 @@ export function authenticateRequest(
 
   return { success: true, user: verifyResult.user };
 }
+
+/**
+ * Async server-side route handler authorization check.
+ * Validates either CRMate session token (HMAC-SHA256) or Supabase Auth session,
+ * resolving the authenticated profile and checking role permissions.
+ */
+export async function authenticateRequestAsync(
+  req: Request,
+  allowedRoles?: UserRole[]
+): Promise<AuthResult> {
+  // 1. Try CRMate session token first
+  const syncResult = authenticateRequest(req, allowedRoles);
+  if (syncResult.success) {
+    return syncResult;
+  }
+
+  // 2. Fallback to Supabase Auth token
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (supabaseUrl && (supabaseAnonKey || serviceRoleKey)) {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const authHeader = req.headers.get('authorization') || '';
+      const cookiesMap = parseCookieHeader(cookieHeader);
+
+      let supaUserId: string | null = null;
+      let supaEmail: string | null = null;
+
+      // Check Bearer token with Supabase admin client
+      if (authHeader.toLowerCase().startsWith('bearer ')) {
+        const token = authHeader.slice(7).trim();
+        if (token.split('.').length === 3 && serviceRoleKey) {
+          const { createClient: createSupabaseJsClient } = require('@supabase/supabase-js');
+          const sb = createSupabaseJsClient(supabaseUrl, serviceRoleKey);
+          const { data } = await sb.auth.getUser(token);
+          if (data?.user) {
+            supaUserId = data.user.id;
+            supaEmail = data.user.email || null;
+          }
+        }
+      }
+
+      // Check cookie-based Supabase session
+      if (!supaUserId && supabaseAnonKey) {
+        const { createServerClient } = require('@supabase/ssr');
+        const ssrSb = createServerClient(supabaseUrl, supabaseAnonKey, {
+          cookies: {
+            getAll() {
+              return Object.entries(cookiesMap).map(([name, value]) => ({ name, value }));
+            },
+            setAll() {}
+          }
+        });
+        const { data } = await ssrSb.auth.getUser();
+        if (data?.user) {
+          supaUserId = data.user.id;
+          supaEmail = data.user.email || null;
+        }
+      }
+
+      if (supaUserId || supaEmail) {
+        const { createAdminClient } = require('@/lib/supabase/server');
+        const adminSb = createAdminClient();
+        if (adminSb) {
+          let query = adminSb.from('profiles').select('id, email, role, full_name');
+          if (supaUserId) {
+            query = query.or(`auth_user_id.eq.${supaUserId},email.eq.${supaEmail || ''}`);
+          } else if (supaEmail) {
+            query = query.eq('email', supaEmail);
+          }
+          const { data: profile } = await query.maybeSingle();
+
+          if (profile) {
+            if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(profile.role)) {
+              return {
+                success: false,
+                response: NextResponse.json(
+                  { error: 'Forbidden: Insufficient permissions for this resource', code: 'FORBIDDEN' },
+                  {
+                    status: 403,
+                    headers: {
+                      'Cache-Control': 'no-store, max-age=0',
+                      'X-Content-Type-Options': 'nosniff'
+                    }
+                  }
+                )
+              };
+            }
+
+            return {
+              success: true,
+              user: {
+                id: profile.id,
+                email: profile.email,
+                role: profile.role,
+                name: profile.full_name
+              }
+            };
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Supabase auth fallback error in authenticateRequestAsync:', e);
+  }
+
+  // Return the original 401 response if neither authenticated
+  return syncResult;
+}

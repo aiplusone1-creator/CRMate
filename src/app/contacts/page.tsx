@@ -257,9 +257,6 @@ export default function ContactsPage() {
               <Users className="w-3 h-3" />
               <span>{isRTL ? 'سجل العلاقات المؤسسية' : 'Executive Rolodex'}</span>
             </span>
-            <span className="text-[10.5px] text-slate-400 font-bold">
-              {isRTL ? 'المنطقة الغربية • المملكة العربية السعودية' : 'Western Region • Saudi Arabia'}
-            </span>
           </div>
           <h1 className="text-lg sm:text-xl md:text-2xl font-black text-[#292D32] dark:text-white tracking-tight">
             {t('contactsTitle')}

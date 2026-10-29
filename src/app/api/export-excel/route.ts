@@ -39,9 +39,16 @@ export async function POST(req: Request) {
     const body = await req.json();
     const buffer = buildCompleteLiveExcelWorkbook(body);
 
-    // Save back to disk to keep live file in sync
-    const filePath = path.join(process.cwd(), 'source-data', 'Saudi Projects Follow UP - Eslam Mohandes(1).xlsx');
-    fs.writeFileSync(filePath, buffer);
+    // Save back to disk to keep live file in sync (when local filesystem is writable)
+    try {
+      const filePath = path.join(process.cwd(), 'source-data', 'Saudi Projects Follow UP - Eslam Mohandes(1).xlsx');
+      if (fs.existsSync(path.dirname(filePath))) {
+        fs.writeFileSync(filePath, buffer);
+      }
+    } catch (fsErr: any) {
+      // In serverless / Vercel environments, disk writes fail (EROFS). Gracefully proceed.
+      console.warn('Serverless environment: disk sync skipped:', fsErr?.message);
+    }
 
     const dateStr = new Date().toISOString().split('T')[0];
 

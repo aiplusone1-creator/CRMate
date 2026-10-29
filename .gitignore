@@ -46,6 +46,7 @@ playwright-report/
 
 # Local Backups & Agent Scratchpads
 .backups/
+backups/
 .agent/
 .agents/
 

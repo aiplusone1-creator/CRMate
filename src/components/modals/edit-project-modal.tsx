@@ -204,7 +204,6 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
       : project.created_at;
 
     const updates: Partial<Project> = {
-      pr_number: prNumber.trim().toUpperCase(),
       name: name.trim(),
       created_at: selectedDateTime,
       company_id: companyId,
@@ -292,17 +291,17 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Project Code / #PR *
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span>Project Code / #PR</span>
+                <span className="text-[10px] text-slate-400 font-normal">Locked</span>
               </label>
-              <input
-                type="text"
-                required
-                value={prNumber}
-                onChange={e => setPrNumber(e.target.value)}
-                placeholder="e.g. PR1004"
-                className="w-full px-3 py-2 text-sm font-mono font-bold bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-              />
+              <div 
+                title="Project PR numbers are immutable once created"
+                className="w-full px-3 py-2 text-sm font-mono font-bold bg-slate-100 dark:bg-slate-800/60 border border-slate-300/80 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 flex items-center justify-between cursor-not-allowed select-none"
+              >
+                <span>{project?.pr_number || prNumber}</span>
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+              </div>
             </div>
 
             <div className="sm:col-span-2">

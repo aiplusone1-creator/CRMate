@@ -11,16 +11,18 @@ import {
   ArrowRight, 
   MapPin, 
   Phone,
-  CornerDownLeft
+  CornerDownLeft,
+  Lock
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
+import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
 import { formatCurrencySAR } from '@/lib/utils';
 import { PIPELINE_STAGES, COMPANY_TYPES } from '@/lib/constants';
 import { useLanguage } from '@/lib/i18n/language-context';
 
 export function GlobalSearch() {
   const router = useRouter();
-  const { projects, companies, contacts } = useCRM();
+  const { projects, companies, contacts, currentUser } = useCRM();
   const { language, isRTL } = useLanguage();
 
   const [query, setQuery] = useState('');
@@ -84,15 +86,23 @@ export function GlobalSearch() {
 
   const matchingProjects = useMemo(() => {
     if (!trimmedQuery) return [];
-    return projects.filter(p => 
-      p.name.toLowerCase().includes(trimmedQuery) ||
-      p.pr_number.toLowerCase().includes(trimmedQuery) ||
-      (p.company_name && p.company_name.toLowerCase().includes(trimmedQuery)) ||
-      p.location.toLowerCase().includes(trimmedQuery) ||
-      (p.internal_notes && p.internal_notes.toLowerCase().includes(trimmedQuery)) ||
-      (p.next_action && p.next_action.toLowerCase().includes(trimmedQuery))
-    ).slice(0, 5);
-  }, [projects, trimmedQuery]);
+    return projects.filter(p => {
+      const isAccessible = canUserAccessProjectCockpit(p, currentUser);
+      const matchesPublic = 
+        p.name.toLowerCase().includes(trimmedQuery) ||
+        p.pr_number.toLowerCase().includes(trimmedQuery) ||
+        (p.company_name && p.company_name.toLowerCase().includes(trimmedQuery)) ||
+        (p.location && p.location.toLowerCase().includes(trimmedQuery));
+
+      if (matchesPublic) return true;
+      if (!isAccessible) return false;
+
+      return (
+        (p.internal_notes && p.internal_notes.toLowerCase().includes(trimmedQuery)) ||
+        (p.next_action && p.next_action.toLowerCase().includes(trimmedQuery))
+      );
+    }).slice(0, 5);
+  }, [projects, currentUser, trimmedQuery]);
 
   const matchingCompanies = useMemo(() => {
     if (!trimmedQuery) return [];
@@ -244,6 +254,7 @@ export function GlobalSearch() {
                     </div>
                     <div className="space-y-1 mt-1">
                       {matchingProjects.map((p) => {
+                        const isAccessible = canUserAccessProjectCockpit(p, currentUser);
                         const stageInfo = PIPELINE_STAGES.find(s => s.value === p.pipeline_stage);
                         const isSelected = flatResults.findIndex(r => r.type === 'project' && r.id === p.id) === selectedIndex;
 
@@ -265,22 +276,48 @@ export function GlobalSearch() {
                                 <span className="text-xs font-bold text-[#292D32] dark:text-white truncate font-urbanist group-hover:text-blue-600 dark:group-hover:text-[#8FC2F0] transition-colors">
                                   {p.name}
                                 </span>
+                                {!isAccessible && (
+                                  <span 
+                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-900/60 inline-flex items-center gap-1 shrink-0 font-urbanist"
+                                    title={isRTL ? 'مشروع مسجل لمهندس آخر في الفريق' : 'Project registered to another teammate'}
+                                  >
+                                    <Lock className="w-2.5 h-2.5" />
+                                    <span>{isRTL ? 'زميل آخر' : 'Other rep'}</span>
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                                 <span className="truncate">{p.company_name || (isRTL ? 'عميل' : 'Client')}</span>
-                                <span className="flex items-center gap-0.5 text-slate-400 dark:text-slate-500">
-                                  <MapPin className="w-2.5 h-2.5" />
-                                  {p.location}
-                                </span>
+                                {p.location && (
+                                  <span className="flex items-center gap-0.5 text-slate-400 dark:text-slate-500">
+                                    <MapPin className="w-2.5 h-2.5" />
+                                    {p.location}
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            <div className={`${isRTL ? 'text-left' : 'text-right'} shrink-0`}>
-                              <div className="text-xs font-bold text-[#292D32] dark:text-white font-mono">
-                                {formatCurrencySAR(p.estimated_value)}
-                              </div>
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#232A38] text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
-                                {isRTL ? (stageInfo?.labelAr || stageInfo?.label) : (stageInfo?.label || p.pipeline_stage)}
-                              </span>
+                            <div className={`flex flex-col ${isRTL ? 'items-start text-left' : 'items-end text-right'} shrink-0 gap-1`}>
+                              {isAccessible ? (
+                                <>
+                                  <div className="text-xs font-bold text-[#292D32] dark:text-white font-mono">
+                                    {formatCurrencySAR(p.estimated_value)}
+                                  </div>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#232A38] text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
+                                    {isRTL ? (stageInfo?.labelAr || stageInfo?.label) : (stageInfo?.label || p.pipeline_stage)}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="text-xs font-bold text-amber-600 dark:text-amber-400 font-mono inline-flex items-center gap-1">
+                                    <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                                    <span>{isRTL ? 'القيمة محجوبة' : 'Confidential'}</span>
+                                  </div>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80 inline-flex items-center gap-1">
+                                    <Lock className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                                    <span>{isRTL ? 'المرحلة محجوبة' : 'Stage locked'}</span>
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </button>
                         );

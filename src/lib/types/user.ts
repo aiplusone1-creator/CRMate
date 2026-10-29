@@ -10,7 +10,7 @@ export interface User {
   name: string;
   name_ar: string;
   email: string;
-  password_hash: string;
+  password_hash?: string;
   role: UserRole;
   avatar_color: string;
   is_active: boolean;

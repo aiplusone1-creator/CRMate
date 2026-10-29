@@ -33,23 +33,23 @@ export function SalesRepCockpit({ showPriorityActions = false }: SalesRepCockpit
 
   const isEngineer = currentUser.role === 'sales_engineer';
 
-  // Scoped to target rep or all
+  // Scoped to target rep or all (Engineers are strictly locked to their own records)
   const targetProjects = useMemo(() => {
-    if (selectedSalesFilter && selectedSalesFilter !== 'all') {
-      return projects.filter(p => p.owner_id === selectedSalesFilter);
-    }
     if (isEngineer) {
-      return projects.filter(p => p.owner_id === currentUser.id);
+      return projects.filter(p => p.owner_id === currentUser.id || p.referred_to_id === currentUser.id);
+    }
+    if (selectedSalesFilter && selectedSalesFilter !== 'all') {
+      return projects.filter(p => p.owner_id === selectedSalesFilter || p.referred_to_id === selectedSalesFilter);
     }
     return projects;
   }, [projects, currentUser.id, selectedSalesFilter, isEngineer]);
 
   const targetActivities = useMemo(() => {
-    if (selectedSalesFilter && selectedSalesFilter !== 'all') {
-      return activities.filter(a => a.user_id === selectedSalesFilter);
-    }
     if (isEngineer) {
       return activities.filter(a => a.user_id === currentUser.id);
+    }
+    if (selectedSalesFilter && selectedSalesFilter !== 'all') {
+      return activities.filter(a => a.user_id === selectedSalesFilter);
     }
     return activities;
   }, [activities, currentUser.id, selectedSalesFilter, isEngineer]);

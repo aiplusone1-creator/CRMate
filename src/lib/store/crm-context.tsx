@@ -6,7 +6,8 @@ import {
   Quotation, QuotationStatus, SalesTarget, UserRole, Profile, ProjectHealth,
   Reminder, ReminderUrgency, ApprovalRequest, AppNotification, PipelineStage,
   ActivityChannel, VisitPurpose, ProjectPriority,
-  ChatConversation, ChatMessage, ChatProjectCard, ChatPlanTaskCard, ChatAttachment, ProjectMember
+  ChatConversation, ChatMessage, ChatProjectCard, ChatPlanTaskCard, ChatAttachment, ProjectMember,
+  VIPItem, VIPCategory, VIPStatus, VIPPriority
 } from '@/types/crm';
 import {
   getStoredConversations,
@@ -52,6 +53,9 @@ export interface ReminderModalState {
 }
 
 interface CRMContextType {
+  isDataLoading: boolean;
+  dataLoadError: string | null;
+  refreshData: () => Promise<void>;
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
   currentUser: Profile;
@@ -99,7 +103,7 @@ interface CRMContextType {
   addActivity: (activity: Omit<Activity, 'id' | 'created_at'>) => Promise<Activity>;
   updateActivity: (id: string, updates: Partial<Activity>) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
-  addProject: (project: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'> & { created_at?: string }) => Promise<Project>;
+  addProject: (project: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value' | 'pr_number'> & { created_at?: string; pr_number?: string }) => Promise<Project>;
   updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
   referProject: (projectId: string, targetUserId: string) => Promise<void>;
   addContact: (contact: Omit<Contact, 'id' | 'created_at' | 'updated_at'>) => Promise<Contact>;
@@ -133,6 +137,21 @@ interface CRMContextType {
   toggleReminderCompleted: (id: string) => Promise<void>;
   completeAllReminders: () => Promise<void>;
   completeAllPastPlannedActivities: () => Promise<void>;
+  // VIP Module (Isolated from Pipeline)
+  vipItems: VIPItem[];
+  addVIPItem: (item: Omit<VIPItem, 'id' | 'created_at' | 'updated_at' | 'created_by' | 'status'> & { status?: VIPStatus; created_by?: string }) => Promise<VIPItem>;
+  updateVIPItem: (id: string, updates: Partial<VIPItem>) => Promise<void>;
+  deleteVIPItem: (id: string) => Promise<void>;
+  completeVIPItem: (params: {
+    vipId: string;
+    channel: ActivityChannel;
+    activityDate: string;
+    activityTime?: string;
+    completionNotes: string;
+    nextAction?: string;
+    nextFollowUpDate?: string;
+    priority?: ProjectPriority;
+  }) => Promise<{ activity: Activity; plannedActivity?: PlannedActivity; vipItem: VIPItem }>;
   // Import Sales Data
   importSalesData: (
     data: {
@@ -244,6 +263,7 @@ interface CRMContextType {
 
 import migratedData from '@/lib/data/migrated_data.json';
 import { quotationsService } from '@/lib/supabase/quotations-service';
+import { crmService } from '@/lib/supabase/crm-service';
 
 // Acceptance Example Project (Section 42): Al Tahlia Business Park
 const SEED_TAHLIA_PROJECT: Project = {
@@ -592,8 +612,21 @@ const INITIAL_PLANNED_ACTIVITIES: PlannedActivity[] = [
 import { SEEDED_USERS } from '@/lib/constants/users';
 import { authRepository } from '@/lib/repo/local/auth';
 import { User } from '@/lib/types/user';
+import { createClient } from '@/lib/supabase/client';
 
 export const INITIAL_TEAM_MEMBERS: Profile[] = [
+  {
+    id: 'u0',
+    email: 'adel.nasr@almespar.com',
+    full_name: 'Adel Nasr',
+    title: 'Sales Engineer',
+    role: 'sales_engineer',
+    phone: '966500000000',
+    territory: 'Central Region (Riyadh)',
+    monthly_target_sar: 450000,
+    created_at: '2026-01-01',
+    avatar_initials: 'AN'
+  },
   {
     id: 'u1',
     email: 'eslam.almohandes@almespar.com',
@@ -789,12 +822,27 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.auth.signOut().catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Supabase signOut error:', e);
+    }
     authRepository.logout();
     setIsAuthenticated(false);
   };
 
   const switchUser = (userId: string) => {
     const devUser = authRepository.switchUserDev(userId);
+    if (typeof window !== 'undefined') {
+      fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ switchUserId: userId })
+      }).catch(() => {});
+    }
     const member = teamMembers.find(m => m.id === userId);
     if (member) {
       setCurrentUser(member);
@@ -820,6 +868,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateUserProfile = (userId: string, updates: Partial<Profile>) => {
+    crmService.updateProfile(userId, updates).catch(console.warn);
     try {
       authRepository.updateProfile(userId, {
         ...(updates.full_name ? { name: updates.full_name } : {}),
@@ -1019,7 +1068,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
     const session = authRepository.getSession();
     const isExplicitlyLoggedOut = localStorage.getItem('crmate_explicit_logout') === 'true';
-    if (!isExplicitlyLoggedOut && (!session?.token || session.token.startsWith('auto_session_') || session.token.startsWith('token_'))) {
+    if (!isExplicitlyLoggedOut && session?.token && (session.token.startsWith('auto_session_') || session.token.startsWith('token_'))) {
       fetch('/api/auth/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1052,20 +1101,14 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       }
     }, 350);
 
-    // Avoid autosaving to Excel on initial mount
+    // Avoid autosaving to storage on initial mount
     if (isInitialProjectsMount.current) {
       isInitialProjectsMount.current = false;
       return () => clearTimeout(lsTimer);
     }
 
-    // Debounced Excel sync (2500ms)
-    const excelTimer = setTimeout(() => {
-      syncExcelNow(projects).catch(() => {});
-    }, 2500);
-
     return () => {
       clearTimeout(lsTimer);
-      clearTimeout(excelTimer);
     };
   }, [projects]);
 
@@ -1331,6 +1374,31 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   const remindersRef = React.useRef(reminders);
   remindersRef.current = reminders;
 
+  // --- VIP Module State (Strictly Isolated from Pipeline) ---
+  const [vipItems, setVipItems] = useState<VIPItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('al_mespar_vip_items');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (e) { /* fallback */ }
+      }
+    }
+    return [];
+  });
+
+  const vipItemsRef = React.useRef(vipItems);
+  vipItemsRef.current = vipItems;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const timer = setTimeout(() => {
+        try {
+          localStorage.setItem('al_mespar_vip_items', JSON.stringify(vipItems));
+        } catch (e) {}
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [vipItems]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const timer = setTimeout(() => {
@@ -1355,6 +1423,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         if (quotationsRef.current) localStorage.setItem('al_mespar_quotations', JSON.stringify(quotationsRef.current));
         if (salesTargetsRef.current) localStorage.setItem('al_mespar_sales_targets', JSON.stringify(salesTargetsRef.current));
         if (remindersRef.current) localStorage.setItem('al_mespar_reminders', JSON.stringify(remindersRef.current));
+        if (vipItemsRef.current) localStorage.setItem('al_mespar_vip_items', JSON.stringify(vipItemsRef.current));
       } catch (e) {
         console.warn('Failed to flush storage on unload:', e);
       }
@@ -1526,12 +1595,14 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
   const createRequest = async (data: Omit<ApprovalRequest, 'id' | 'created_at' | 'updated_at' | 'comments' | 'status'>): Promise<ApprovalRequest> => {
     const { request: newReq } = createApprovalRequest(data);
+    crmService.createApprovalRequest(newReq).catch(console.warn);
     setRequests(getAllRequests());
     setNotifications(getAllNotifications());
     return newReq;
   };
 
   const updateRequest = async (id: string, updates: Partial<ApprovalRequest>): Promise<void> => {
+    crmService.updateApprovalRequest(id, updates).catch(console.warn);
     updateApprovalRequest(id, updates);
     setRequests(getAllRequests());
   };
@@ -1540,6 +1611,16 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     id: string, 
     resolution: { resolved_by: string; resolver_name?: string; status: 'approved' | 'rejected'; final_value?: number; reject_reason?: string }
   ): Promise<void> => {
+    crmService.updateApprovalRequest(id, {
+      status: resolution.status,
+      resolution: {
+        resolved_at: new Date().toISOString(),
+        resolved_by: resolution.resolved_by,
+        resolver_name: resolution.resolver_name || '',
+        final_value: resolution.final_value,
+        reject_reason: resolution.reject_reason
+      }
+    }).catch(console.warn);
     resolveApprovalRequest(id, resolution);
     setRequests(getAllRequests());
     setNotifications(getAllNotifications());
@@ -1565,6 +1646,68 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     setNotifications(getAllNotifications());
   };
   // --- End Approval Requests System State ---
+
+  // --- Supabase Remote CRM Synchronization ---
+  const [isDataLoading, setIsDataLoading] = useState<boolean>(true);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+
+  const refreshData = React.useCallback(async () => {
+    setIsDataLoading(true);
+    setDataLoadError(null);
+    try {
+      const res = await crmService.fetchAllData();
+      if (res.success && res.data) {
+        const d = res.data;
+        if (d.profiles && d.profiles.length > 0) {
+          setTeamMembers(d.profiles);
+          const currentMatch = d.profiles.find(p => p.id === currentUser.id);
+          if (currentMatch) {
+            setCurrentUser(currentMatch);
+            setCurrentRole(currentMatch.role);
+          }
+        }
+        if (d.companies) setCompanies(d.companies);
+        if (d.contacts) setContacts(d.contacts);
+        if (d.projects) {
+          const hydrated = d.projects.map(p => {
+            const { health, daysOverdue } = computeProjectHealth(p);
+            return {
+              ...p,
+              calculated_health: health,
+              days_overdue: daysOverdue,
+              card_color: p.card_color || 'default',
+              base_card_color: p.base_card_color || 'default'
+            };
+          });
+          setProjects(hydrated);
+        }
+        if (d.activities) setActivities(d.activities);
+        if (d.plannedActivities) setPlannedActivities(d.plannedActivities);
+        if (d.quotations) setQuotations(d.quotations);
+        if (d.salesTargets) setSalesTargets(d.salesTargets);
+        if (d.approvalRequests) setRequests(d.approvalRequests);
+        if (d.reminders) setReminders(d.reminders);
+        if (Array.isArray(d.vipItems)) setVipItems(d.vipItems);
+        if (d.notifications) {
+          setNotifications(d.notifications as unknown as AppNotification[]);
+        }
+      } else if (!res.success) {
+        setDataLoadError(res.error);
+      }
+    } catch (err: any) {
+      console.error('CRMate refreshData exception:', err);
+      setDataLoadError(err?.message || 'Failed to load remote CRM data');
+    } finally {
+      setIsDataLoading(false);
+    }
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshData();
+    }
+  }, [isAuthenticated, refreshData]);
+  // --- End Supabase Remote CRM Synchronization ---
 
   const openNewProjectModal = () => setIsNewProjectModalOpen(true);
   const closeNewProjectModal = () => setIsNewProjectModalOpen(false);
@@ -1626,6 +1769,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     };
 
     setActivities(prev => [newActivity, ...prev]);
+    crmService.createActivity(newActivity).catch(console.warn);
 
     // Update Project with Timestamp Integrity (Correction 1)
     if (newActivity.project_id) {
@@ -1724,6 +1868,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateActivity = async (id: string, updates: Partial<Activity>) => {
+    crmService.updateActivity(id, updates).catch(console.warn);
     let updatedAct: Activity | undefined;
     setActivities(prev => {
       const next = prev.map(a => {
@@ -1813,6 +1958,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteActivity = async (id: string) => {
+    crmService.deleteActivity(id).catch(console.warn);
     setActivities(prev => prev.filter(a => a.id !== id));
     setPlannedActivities(prev => {
       const updated = prev.filter(p => p.follow_up_from_activity_id !== id);
@@ -1823,7 +1969,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const addProject = async (projData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value'> & { created_at?: string }): Promise<Project> => {
+  const addProject = async (projData: Omit<Project, 'id' | 'created_at' | 'updated_at' | 'weighted_value' | 'pr_number'> & { created_at?: string; pr_number?: string }): Promise<Project> => {
     const weighted = (projData.estimated_value * projData.probability) / 100;
     const stageColor = projData.pipeline_stage === 'won' ? 'emerald' : projData.pipeline_stage === 'lost' ? 'rose' : (projData.card_color || 'default');
     
@@ -1844,6 +1990,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
     const newProj: Project = {
       ...projData,
+      pr_number: projData.pr_number && projData.pr_number !== 'AUTO' ? projData.pr_number : 'PR...',
       rfq_packages,
       systems: projData.systems || (rfq_packages === 'lc' ? ['Lighting Control'] : rfq_packages === 'bms' ? ['BMS / BAS'] : rfq_packages === 'both' ? ['BMS / BAS', 'Lighting Control'] : []),
       submittal_status,
@@ -1858,18 +2005,24 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       created_at: initialCreatedAt,
       updated_at: nowIso,
     };
-    const { health, daysOverdue } = computeProjectHealth(newProj);
-    const hydrated = { ...newProj, calculated_health: health, days_overdue: daysOverdue };
+
+    const persisted = await crmService.createProject(newProj);
+    const targetProj = persisted || newProj;
+
+    const { health, daysOverdue } = computeProjectHealth(targetProj);
+    const hydrated = { ...targetProj, calculated_health: health, days_overdue: daysOverdue };
     setProjects(prev => [hydrated, ...prev]);
 
     // Bidirectional sync: link assigned contacts to this new project
-    if (newProj.contact_ids && newProj.contact_ids.length > 0) {
-      const assignedIds = new Set(newProj.contact_ids);
+    if (targetProj.contact_ids && targetProj.contact_ids.length > 0) {
+      const assignedIds = new Set(targetProj.contact_ids);
       setContacts(prev => prev.map(c => {
         if (!assignedIds.has(c.id)) return c;
         const currentProjects = new Set(c.project_ids || []);
         currentProjects.add(hydrated.id);
-        return { ...c, project_ids: Array.from(currentProjects) };
+        const nextIds = Array.from(currentProjects);
+        crmService.updateContact(c.id, { project_ids: nextIds }).catch(console.warn);
+        return { ...c, project_ids: nextIds };
       }));
     }
 
@@ -1877,6 +2030,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateProject = async (id: string, updates: Partial<Project>) => {
+    crmService.updateProject(id, updates).catch(console.warn);
     setProjects(prev => prev.map(p => {
       if (p.id !== id) return p;
       const stageChanged = Boolean(updates.pipeline_stage && updates.pipeline_stage !== p.pipeline_stage);
@@ -2034,9 +2188,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     const newContact: Contact = {
       ...contactData,
       id: 'cnt_' + Date.now(),
+      created_by: currentUser.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    crmService.createContact(newContact).catch(console.warn);
     setContacts(prev => [newContact, ...prev]);
 
     // Bidirectional sync: link assigned projects to this new contact
@@ -2046,7 +2202,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         if (!assignedProjectIds.has(p.id)) return p;
         const currentContacts = new Set(p.contact_ids || (p.primary_contact_id ? [p.primary_contact_id] : []));
         currentContacts.add(newContact.id);
-        return { ...p, contact_ids: Array.from(currentContacts) };
+        const nextIds = Array.from(currentContacts);
+        crmService.updateProject(p.id, { contact_ids: nextIds }).catch(console.warn);
+        return { ...p, contact_ids: nextIds };
       }));
     }
 
@@ -2057,9 +2215,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     const newCompany: Company = {
       ...companyData,
       id: 'c_' + Date.now(),
+      created_by: currentUser.id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    crmService.createCompany(newCompany).catch(console.warn);
     setCompanies(prev => [newCompany, ...prev]);
     return newCompany;
   };
@@ -2072,6 +2232,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    crmService.createPlannedActivity(newPlan).catch(console.warn);
     setPlannedActivities(prev => {
       const updated = [newPlan, ...prev];
       if (typeof window !== 'undefined') {
@@ -2083,6 +2244,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updatePlannedActivity = async (id: string, updates: Partial<PlannedActivity>) => {
+    crmService.updatePlannedActivity(id, updates).catch(console.warn);
     setPlannedActivities(prev => {
       const updated = prev.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p);
       if (typeof window !== 'undefined') {
@@ -2093,6 +2255,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deletePlannedActivity = async (id: string) => {
+    crmService.deletePlannedActivity(id).catch(console.warn);
     setPlannedActivities(prev => {
       const updated = prev.filter(p => p.id !== id);
       if (typeof window !== 'undefined') {
@@ -2107,6 +2270,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       ...activityData,
       planned_activity_id: plannedId,
     });
+
+    crmService.updatePlannedActivity(plannedId, {
+      status: 'completed',
+      completed_activity_id: createdAct.id
+    }).catch(console.warn);
 
     setPlannedActivities(prev => {
       const updated = prev.map(p => {
@@ -2126,6 +2294,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateContact = async (id: string, updates: Partial<Contact>) => {
+    crmService.updateContact(id, updates).catch(console.warn);
     setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c));
 
     // Bidirectional sync with projects if project_ids was updated:
@@ -2148,10 +2317,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteContact = async (id: string) => {
+    crmService.deleteContact(id).catch(console.warn);
     setContacts(prev => prev.filter(c => c.id !== id));
   };
 
   const updateCompany = async (id: string, updates: Partial<Company>) => {
+    crmService.updateCompany(id, updates).catch(console.warn);
     setCompanies(prev => prev.map(c => c.id === id ? { ...c, ...updates, updated_at: new Date().toISOString() } : c));
   };
 
@@ -2161,12 +2332,15 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       console.warn('Unauthorized: Only sales_manager and admin can delete a company.');
       return;
     }
+    crmService.deleteCompany(id).catch(console.warn);
     setCompanies(prev => prev.filter(c => c.id !== id));
   };
 
   const archiveProject = async (id: string, reason?: string) => {
     const targetProject = projects.find(p => p.id === id);
     if (!targetProject) return;
+
+    crmService.archiveProject(id, reason).catch(console.warn);
 
     const now = new Date().toISOString();
     const actorName = currentUser.full_name || 'Sales Engineer';
@@ -2211,6 +2385,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     const targetProject = projects.find(p => p.id === id);
     if (!targetProject) return;
 
+    crmService.restoreProject(id).catch(console.warn);
+
     const now = new Date().toISOString();
     setProjects(prev => prev.map(p => {
       if (p.id !== id) return p;
@@ -2223,10 +2399,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteProject = async (id: string, reason?: string) => {
+    crmService.deleteProject(id).catch(console.warn);
     await archiveProject(id, reason);
   };
 
   const updateSalesTarget = async (id: string, newTargetValue: number) => {
+    crmService.updateSalesTarget(id, { target_value: newTargetValue }).catch(console.warn);
     setSalesTargets(prev => prev.map(t => t.id === id ? { ...t, target_value: newTargetValue, updated_at: new Date().toISOString() } : t));
   };
 
@@ -2390,6 +2568,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       is_completed: false,
       created_at: new Date().toISOString(),
     };
+    crmService.createReminder(newReminder).catch(console.warn);
     setReminders(prev => [newReminder, ...prev]);
 
     // If manager/admin assigns a reminder to another user, trigger notification
@@ -2412,14 +2591,24 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateReminder = async (id: string, updates: Partial<Reminder>) => {
+    crmService.updateReminder(id, updates).catch(console.warn);
     setReminders(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
   };
 
   const deleteReminder = async (id: string) => {
+    crmService.deleteReminder(id).catch(console.warn);
     setReminders(prev => prev.filter(r => r.id !== id));
   };
 
   const toggleReminderCompleted = async (id: string) => {
+    const target = reminders.find(r => r.id === id);
+    if (target) {
+      const nextCompleted = !target.is_completed;
+      crmService.updateReminder(id, {
+        is_completed: nextCompleted,
+        completed_at: nextCompleted ? new Date().toISOString() : undefined
+      }).catch(console.warn);
+    }
     setReminders(prev => prev.map(r => {
       if (r.id !== id) return r;
       return {
@@ -2478,6 +2667,221 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     });
   };
   // --- End Reminder CRUD Methods ---
+
+  // ==========================================
+  // VIP MODULE ACTIONS (PIPELINE-ISOLATED)
+  // ==========================================
+  const addVIPItem = async (
+    itemData: Omit<VIPItem, 'id' | 'created_at' | 'updated_at' | 'created_by' | 'status'> & {
+      status?: VIPStatus;
+      created_by?: string;
+    }
+  ): Promise<VIPItem> => {
+    const tempId = 'vip_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    const candidateItem: VIPItem = {
+      ...itemData,
+      id: tempId,
+      status: itemData.status || 'pending',
+      created_by: itemData.created_by || currentUser.id || 'u1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    // Requirement 2: Supabase/API success is authoritative.
+    // We await remote persistence BEFORE committing to in-memory state or localStorage.
+    try {
+      const persisted = await crmService.createVIPItem(candidateItem);
+      const finalItem = persisted || candidateItem;
+
+      // Commit to in-memory state only upon confirmed remote persistence
+      setVipItems(prev => [finalItem, ...prev.filter(v => v.id !== finalItem.id)]);
+      return finalItem;
+    } catch (err: any) {
+      console.error('Remote VIP creation failed:', err);
+      throw new Error(err.message || 'فشل حفظ عنصر VIP في قاعدة البيانات السحابية');
+    }
+  };
+
+  const updateVIPItem = async (id: string, updates: Partial<VIPItem>) => {
+    const targetItem = vipItems.find(item => item.id === id);
+    if (!targetItem) {
+      throw new Error(`VIP item ${id} not found`);
+    }
+
+    // Capture exact previous state for reliable rollback
+    const originalItem = { ...targetItem };
+
+    // Apply optimistic update for smooth UI responsiveness
+    setVipItems(prev =>
+      prev.map(item =>
+        item.id === id
+          ? { ...item, ...updates, updated_at: new Date().toISOString() }
+          : item
+      )
+    );
+
+    try {
+      const updated = await crmService.updateVIPItem(id, updates);
+      if (updated) {
+        // Reconcile with authoritative server state
+        setVipItems(prev =>
+          prev.map(item => (item.id === id ? updated : item))
+        );
+      }
+    } catch (err: any) {
+      // ROLLBACK: Revert strictly the affected item to its original state, preserving all other items
+      setVipItems(prev =>
+        prev.map(item => (item.id === id ? originalItem : item))
+      );
+      console.error('Remote VIP update failed, rolled back:', err);
+      throw new Error(err.message || 'فشل تحديث عنصر VIP في قاعدة البيانات السحابية');
+    }
+  };
+
+  const deleteVIPItem = async (id: string) => {
+    // SAFEGUARD: Deleting a VIP item ONLY deletes from vipItems. NEVER deletes linked project, contact, or company.
+    const itemToDelete = vipItems.find(item => item.id === id);
+    if (!itemToDelete) return;
+
+    // Apply optimistic deletion
+    setVipItems(prev => prev.filter(item => item.id !== id));
+
+    try {
+      await crmService.deleteVIPItem(id);
+    } catch (err: any) {
+      // ROLLBACK: Restore the deleted item back into the state, preserving all other items
+      setVipItems(prev => [itemToDelete, ...prev.filter(item => item.id !== id)]);
+      console.error('Remote VIP deletion failed, rolled back:', err);
+      throw new Error(err.message || 'فشل حذف عنصر VIP من قاعدة البيانات السحابية');
+    }
+  };
+
+  const completeVIPItem = async (params: {
+    vipId: string;
+    channel: ActivityChannel;
+    activityDate: string;
+    activityTime?: string;
+    completionNotes: string;
+    nextAction?: string;
+    nextFollowUpDate?: string;
+    priority?: ProjectPriority;
+  }): Promise<{ activity: Activity; plannedActivity?: PlannedActivity; vipItem: VIPItem }> => {
+    const target = vipItems.find(v => v.id === params.vipId);
+    if (!target) {
+      throw new Error(`VIP item with id ${params.vipId} not found`);
+    }
+
+    // 1. If already completed with activity, return idempotent result immediately
+    if (target.status === 'completed' && target.completed_activity_id) {
+      const existingAct = activities.find(a => a.id === target.completed_activity_id);
+      if (existingAct) {
+        const existingPlan = target.completed_activity_id
+          ? plannedActivities.find(p => p.follow_up_from_activity_id === target.completed_activity_id)
+          : undefined;
+        return { activity: existingAct, plannedActivity: existingPlan, vipItem: target };
+      }
+    }
+
+    // Helper to resolve priority mapping
+    const resolvePriority = (p?: ProjectPriority | VIPPriority): ProjectPriority => {
+      if (p === 'normal') return 'medium';
+      if (p === 'urgent' || p === 'high' || p === 'low' || p === 'medium') return p;
+      return 'high';
+    };
+
+    // 2. Duplicate Activity Guard: Check if an activity was already created for this VIP item
+    const expectedNotesPrefix = `[VIP ${target.category === 'revisit_project' ? 'Revisit' : 'Call'}: ${target.title}]`;
+    let savedActivity: Activity | undefined = undefined;
+
+    if (target.completed_activity_id) {
+      savedActivity = activities.find(a => a.id === target.completed_activity_id);
+    }
+    if (!savedActivity) {
+      savedActivity = activities.find(a => 
+        a.user_id === (currentUser.id || 'u1') && 
+        a.notes?.startsWith(expectedNotesPrefix)
+      );
+    }
+
+    if (!savedActivity) {
+      const activityPayload: Omit<Activity, 'id' | 'created_at'> = {
+        user_id: currentUser.id || 'u1',
+        user_name: currentUser.full_name || currentUser.email || 'Sales Engineer',
+        activity_date: params.activityDate || new Date().toISOString().split('T')[0],
+        activity_time: params.activityTime || '10:00',
+        channel: params.channel,
+        visit_purpose: target.category === 'revisit_project' ? 'follow_up' : 'customer_visit',
+        outcome: 'connected',
+        notes: `${expectedNotesPrefix} ${params.completionNotes}`,
+        location_name: target.location_name,
+        priority: resolvePriority(params.priority || target.priority),
+        next_action: params.nextAction?.trim() || undefined,
+        next_follow_up_at: params.nextFollowUpDate || undefined,
+        project_id: target.project_id || undefined,
+        project_name: target.project_name || (target.category === 'revisit_project' ? target.title : undefined),
+        contact_id: target.contact_id || undefined,
+        contact_name: target.contact_name || (target.category === 'vip_call' ? target.title : undefined),
+        company_id: target.company_id || undefined,
+        company_name: target.company_name || undefined,
+      };
+
+      savedActivity = await addActivity(activityPayload);
+    }
+
+    // 3. Duplicate Planned Activity Guard
+    let savedPlan: PlannedActivity | undefined = undefined;
+    if (params.nextAction?.trim() && params.nextFollowUpDate) {
+      savedPlan = plannedActivities.find(p => 
+        (savedActivity && p.follow_up_from_activity_id === savedActivity.id) ||
+        (p.user_id === (currentUser.id || 'u1') && p.goal === params.nextAction!.trim() && p.scheduled_date === params.nextFollowUpDate)
+      );
+
+      if (!savedPlan) {
+        const planPayload: Omit<PlannedActivity, 'id' | 'created_at' | 'updated_at' | 'status'> = {
+          weekly_plan_id: 'wp_' + params.nextFollowUpDate.substring(0, 7).replace('-', '_'),
+          user_id: currentUser.id || 'u1',
+          user_name: currentUser.full_name || currentUser.email || 'Sales Engineer',
+          scheduled_date: params.nextFollowUpDate,
+          channel: params.channel,
+          visit_purpose: 'follow_up',
+          goal: params.nextAction.trim(),
+          priority: resolvePriority(params.priority || target.priority),
+          project_id: target.project_id || undefined,
+          project_name: target.project_name || (target.category === 'revisit_project' ? target.title : undefined),
+          contact_id: target.contact_id || undefined,
+          contact_name: target.contact_name || (target.category === 'vip_call' ? target.title : undefined),
+          company_id: target.company_id || undefined,
+          company_name: target.company_name || undefined,
+          location_name: target.location_name || undefined,
+          follow_up_from_activity_id: savedActivity.id,
+          is_follow_up: true,
+        };
+        savedPlan = await addPlannedActivity(planPayload);
+      }
+    }
+
+    // 4. Update VIP item status to completed (with authoritative remote save & rollback)
+    const completionUpdates: Partial<VIPItem> = {
+      status: 'completed',
+      completed_at: target.completed_at || new Date().toISOString(),
+      completed_activity_id: savedActivity.id,
+      completion_notes: params.completionNotes,
+    };
+
+    await updateVIPItem(target.id, completionUpdates);
+
+    const updatedVip: VIPItem = {
+      ...target,
+      ...completionUpdates,
+      updated_at: new Date().toISOString(),
+    };
+
+    return {
+      activity: savedActivity,
+      plannedActivity: savedPlan,
+      vipItem: updatedVip,
+    };
+  };
 
   // --- Sales Data Importer & Merging Engine ---
   const importSalesData = async (
@@ -3097,6 +3501,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const contextValue = useMemo(() => ({
+    isDataLoading,
+    dataLoadError,
+    refreshData,
     importSalesData,
     currentRole,
     setCurrentRole,
@@ -3164,6 +3571,12 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     toggleReminderCompleted,
     completeAllReminders,
     completeAllPastPlannedActivities,
+    // VIP Module
+    vipItems,
+    addVIPItem,
+    updateVIPItem,
+    deleteVIPItem,
+    completeVIPItem,
     // Approval Requests System
     requests,
     createRequest,
@@ -3213,6 +3626,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     acknowledgePlanTaskFromChat,
     assignTaskFromChatToPlan,
   }), [
+    isDataLoading,
+    dataLoadError,
+    refreshData,
     importSalesData,
     currentRole,
     setCurrentRole,
@@ -3279,6 +3695,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     toggleReminderCompleted,
     completeAllReminders,
     completeAllPastPlannedActivities,
+    vipItems,
+    addVIPItem,
+    updateVIPItem,
+    deleteVIPItem,
+    completeVIPItem,
     requests,
     createRequest,
     updateRequest,

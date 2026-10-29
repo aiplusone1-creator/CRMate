@@ -161,6 +161,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Account is deactivated' }, { status: 403 });
     }
 
+    if (!user.password_hash) {
+      return NextResponse.json({ error: 'Password authentication not configured for this account. Please use Supabase Auth.' }, { status: 401 });
+    }
+
     const isMatch = await verifyPassword(password, user.password_hash);
     if (!isMatch) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });

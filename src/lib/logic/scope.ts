@@ -6,7 +6,8 @@ import {
   SalesTarget, 
   Reminder, 
   ApprovalRequest, 
-  Profile 
+  Profile,
+  VIPItem 
 } from '@/types/crm';
 import { User } from '@/lib/types/user';
 
@@ -57,14 +58,9 @@ export function scopeProjects(
     return baseProjects;
   }
 
-  // Sales engineer:
-  // If they deliberately switch filter to 'all' ("لو شال الفلتر"), allow viewing all project names across team.
-  // Otherwise (default / 'mine'), return only projects currently assigned/referred to them.
-  // Collaborations/shared member access is accessible directly through the Chat card, NOT in their personal projects pipeline.
-  if (selectedFilter === 'all') {
-    return baseProjects;
-  }
-
+  // Sales engineer / sales rep:
+  // Strictly locked to their own projects (owner or referred_to).
+  // Non-managers are strictly forbidden from viewing the entire team's projects.
   return baseProjects.filter(p => {
     const isOwner = p.owner_id === user.id;
     const isReferred = p.referred_to_id === user.id;
@@ -184,4 +180,31 @@ export function scopeTargets(
 ): SalesTarget[] {
   if (!user) return [];
   return allTargets;
+}
+
+/**
+ * Filter VIP items based on user role and active manager filter
+ */
+export function scopeVIPItems(
+  allVIPItems: VIPItem[],
+  user: ScopingUser,
+  selectedFilter: string = 'all'
+): VIPItem[] {
+  if (!user || !allVIPItems) return [];
+
+  const isAdminOrManager = 
+    user.role === 'admin' || 
+    user.role === 'sales_manager' || 
+    user.role === 'viewer' || 
+    user.role === 'estimator';
+
+  if (isAdminOrManager) {
+    if (selectedFilter && selectedFilter !== 'all') {
+      return allVIPItems.filter(v => v.created_by === selectedFilter);
+    }
+    return allVIPItems;
+  }
+
+  // Sales engineer: strictly sees their own items
+  return allVIPItems.filter(v => v.created_by === user.id);
 }

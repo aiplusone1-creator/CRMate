@@ -17,6 +17,7 @@ import {
 import { authRepository } from '@/lib/repo/local/auth';
 import { AuthError } from '@/lib/types/user';
 import { useCRM } from '@/lib/store/crm-context';
+import { createClient } from '@/lib/supabase/client';
 import { CRMateMasterLockup } from '@/components/brand/crmate-logo';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { LanguageToggle } from '@/components/common/language-toggle';
@@ -37,21 +38,15 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
 
-  // Parse redirect & expired params and check session
+  // Parse redirect & expired params
   useEffect(() => {
-    let targetRedirect = '/';
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      targetRedirect = params.get('redirect') || '/';
-      setRedirectUrl(targetRedirect);
+      const redirect = params.get('redirect');
+      setRedirectUrl(redirect && redirect !== '/login' ? redirect : '/');
       setIsExpired(params.get('expired') === 'true');
     }
-
-    const session = authRepository.getSession();
-    if (session) {
-      router.replace(targetRedirect);
-    }
-  }, [router]);
+  }, []);
 
   const triggerShake = () => {
     setIsShaking(true);
@@ -70,9 +65,53 @@ export default function LoginPage() {
     setErrorMessage(null);
 
     try {
-      const user = await authRepository.login(email.trim(), password, rememberMe);
-      switchUser(user.id);
-      router.push(redirectUrl);
+      let authenticatedUserId: string | null = null;
+      let requiresPasswordChange = false;
+
+      // 1. Attempt Supabase Auth verification
+      const supabase = createClient();
+      if (supabase) {
+        const { data: supaData, error: supaError } = await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+
+        if (!supaError && supaData?.user) {
+          requiresPasswordChange = 
+            supaData.user.app_metadata?.must_change_password === true ||
+            supaData.user.user_metadata?.must_change_password === true;
+
+          // Query profile to get the CRM internal user ID (u0, u1, u2, etc.)
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('email', supaData.user.email)
+            .maybeSingle();
+
+          if (profile) {
+            authenticatedUserId = profile.id;
+          } else {
+            const localUser = authRepository.getUserByEmail(email.trim());
+            if (localUser) authenticatedUserId = localUser.id;
+          }
+        }
+      }
+
+      // 2. Fallback to local auth repository if Supabase Auth is unconfigured or user not yet provisioned
+      if (!authenticatedUserId) {
+        const user = await authRepository.login(email.trim(), password, rememberMe);
+        authenticatedUserId = user.id;
+      }
+
+      if (authenticatedUserId) {
+        switchUser(authenticatedUserId);
+        if (requiresPasswordChange) {
+          router.push('/change-password');
+        } else {
+          const destination = redirectUrl && redirectUrl !== '/login' ? redirectUrl : '/';
+          router.push(destination);
+        }
+      }
     } catch (err: unknown) {
       if (err instanceof AuthError) {
         if (err.code === 'INVALID_EMAIL') {

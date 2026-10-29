@@ -37,7 +37,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthGuard>
-      {pathname === '/login' ? (
+      {pathname === '/login' || pathname === '/change-password' ? (
         <div className="min-h-screen bg-[#EFF3F8] dark:bg-[#141820] font-sans transition-colors duration-300">
           {children}
         </div>

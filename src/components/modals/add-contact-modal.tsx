@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, UserPlus, Flame, Briefcase, Check } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { SAUDI_LOCATIONS } from '@/lib/constants';
@@ -33,8 +34,13 @@ export function AddContactModal({ isOpen, onClose, defaultCompanyId }: AddContac
   const [nextFollowUpDate, setNextFollowUpDate] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,9 +67,15 @@ export function AddContactModal({ isOpen, onClose, defaultCompanyId }: AddContac
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150">
-      <div className="glass-card rounded-2xl sm:rounded-3xl max-w-lg w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] backdrop-blur-2xl animate-in zoom-in-95 duration-150">
+  const modalContent = (
+    <div 
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div 
+        className="glass-card rounded-2xl sm:rounded-3xl max-w-lg w-full shadow-2xl border border-white/90 dark:border-[#8FC2F0]/20 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] backdrop-blur-2xl animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100/80 dark:border-slate-800 bg-white/40 dark:bg-[#232A38]/70 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shadow-2xs">
@@ -277,4 +289,6 @@ export function AddContactModal({ isOpen, onClose, defaultCompanyId }: AddContac
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

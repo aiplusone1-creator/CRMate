@@ -34,21 +34,29 @@ import {
   Sparkles,
   ExternalLink,
   Search,
-  Check
+  Check,
+  Video,
+  PieChart,
+  UserPlus,
+  MessageSquare,
+  Mail
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { formatCurrencySAR, formatDateString } from '@/lib/utils';
 import { PROJECT_SYSTEMS, PIPELINE_STAGES } from '@/lib/constants';
-import { scopeProjects, scopeActivities, scopePlannedActivities } from '@/lib/logic/scope';
+import { scopeProjects, scopeActivities, scopePlannedActivities, scopeQuotations } from '@/lib/logic/scope';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { ReportPdfModal } from '@/components/reports/report-pdf-modal';
 
 type ReportTab = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+type ReportPerspective = 'sales_performance' | 'executive_portfolio';
 
 export default function ReportsPage() {
   const { t, isRTL } = useLanguage();
   const { 
     projects, 
+    companies,
+    contacts,
     activities, 
     plannedActivities, 
     salesTargets, 
@@ -60,7 +68,15 @@ export default function ReportsPage() {
     quotations
   } = useCRM();
 
-  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin';
+  const isManager = currentUser.role === 'sales_manager' || currentUser.role === 'admin' || currentUser.role === 'viewer';
+
+  const effectiveSalesUserId = useMemo(() => {
+    if (!isManager) return currentUser.id;
+    return selectedSalesFilter !== 'all' ? selectedSalesFilter : null;
+  }, [isManager, currentUser.id, selectedSalesFilter]);
+
+  // Report Perspective (Sales Periodic Performance vs Executive Portfolio)
+  const [reportMode, setReportMode] = useState<ReportPerspective>('sales_performance');
 
   // 1. Scoped Data
   const scopedProjects = useMemo(() => {
@@ -74,6 +90,10 @@ export default function ReportsPage() {
   const scopedPlannedActivities = useMemo(() => {
     return scopePlannedActivities(plannedActivities, currentUser, selectedSalesFilter);
   }, [plannedActivities, currentUser, selectedSalesFilter]);
+
+  const scopedQuotations = useMemo(() => {
+    return scopeQuotations(quotations || [], currentUser, scopedProjects);
+  }, [quotations, currentUser, scopedProjects]);
 
   // Active Report Tab
   const [activeTab, setActiveTab] = useState<ReportTab>('weekly');
@@ -201,12 +221,146 @@ export default function ReportsPage() {
   }, [scopedActivities, currentPeriod]);
 
   const periodQuotations = useMemo(() => {
-    return (quotations || []).filter(q => {
+    return scopedQuotations.filter(q => {
       const d = (q.sent_date || q.quotation_date || q.created_at || '').split('T')[0];
       if (!d) return false;
       return d >= currentPeriod.start && d <= currentPeriod.end;
     });
-  }, [quotations, currentPeriod]);
+  }, [scopedQuotations, currentPeriod]);
+
+  // Periodic Sales Performance: 1. Newly Added Projects & In-Hand vs Tender Breakdown
+  const periodNewProjects = useMemo(() => {
+    return scopedProjects.filter(p => {
+      const d = (p.created_at || '').split('T')[0];
+      return d >= currentPeriod.start && d <= currentPeriod.end;
+    });
+  }, [scopedProjects, currentPeriod]);
+
+  const newInHandProjects = useMemo(() => {
+    return periodNewProjects.filter(p => p.opportunity_type === 'in_hand');
+  }, [periodNewProjects]);
+
+  const newTenderProjects = useMemo(() => {
+    return periodNewProjects.filter(p => p.opportunity_type === 'tender');
+  }, [periodNewProjects]);
+
+  const newInHandCount = newInHandProjects.length;
+  const newTenderCount = newTenderProjects.length;
+  const newInHandValue = useMemo(() => newInHandProjects.reduce((s, p) => s + (p.estimated_value || 0), 0), [newInHandProjects]);
+  const newTenderValue = useMemo(() => newTenderProjects.reduce((s, p) => s + (p.estimated_value || 0), 0), [newTenderProjects]);
+  const newProjectsTotalValue = newInHandValue + newTenderValue;
+  const totalNewProjectsCount = periodNewProjects.length;
+  const newInHandPct = totalNewProjectsCount > 0 ? Math.round((newInHandCount / totalNewProjectsCount) * 100) : 0;
+  const newTenderPct = totalNewProjectsCount > 0 ? 100 - newInHandPct : 0;
+
+  // Periodic Sales Performance: 4. Calls, Visits, F2F & Online Meetings breakdown
+  const interactionCounts = useMemo(() => {
+    const calls = periodActivities.filter(a => a.channel === 'call').length;
+    const visits = periodActivities.filter(a => a.channel === 'visit').length;
+    const meetingsF2F = periodActivities.filter(a => a.channel === 'meeting_f2f').length;
+    const meetingsOnline = periodActivities.filter(a => a.channel === 'meeting_online').length;
+    const hunting = periodActivities.filter(a => a.channel === 'hunting').length;
+    const whatsapp = periodActivities.filter(a => (a.channel as string) === 'whatsapp').length;
+    const email = periodActivities.filter(a => a.channel === 'email').length;
+    const totalInteractions = periodActivities.length;
+
+    return {
+      calls,
+      visits,
+      meetingsF2F,
+      meetingsOnline,
+      hunting,
+      whatsapp,
+      email,
+      totalInteractions
+    };
+  }, [periodActivities]);
+
+  // Periodic Sales Performance: 5. Accounts & Contacts Growth (New & Expanded Accounts)
+  // Scoped by Creator:
+  // - Sales Engineers / Reps: strictly their own created accounts & contacts.
+  // - Sales Manager / Admin: all team (if 'all') or scoped to the selected sales engineer.
+  const periodNewCompanies = useMemo(() => {
+    return (companies || []).filter(c => {
+      const d = (c.created_at || '').split('T')[0];
+      const inDateRange = d >= currentPeriod.start && d <= currentPeriod.end;
+      if (!inDateRange) return false;
+
+      if (effectiveSalesUserId) {
+        return c.created_by === effectiveSalesUserId;
+      }
+      return true;
+    });
+  }, [companies, currentPeriod, effectiveSalesUserId]);
+
+  const periodNewContacts = useMemo(() => {
+    return (contacts || []).filter(cnt => {
+      const d = (cnt.created_at || '').split('T')[0];
+      const inDateRange = d >= currentPeriod.start && d <= currentPeriod.end;
+      if (!inDateRange) return false;
+
+      if (effectiveSalesUserId) {
+        return cnt.created_by === effectiveSalesUserId;
+      }
+      return true;
+    });
+  }, [contacts, currentPeriod, effectiveSalesUserId]);
+
+  const companiesWithNewContacts = useMemo(() => {
+    const newCompSet = new Set(periodNewCompanies.map(c => c.id));
+    const contactsByCompId: Record<string, typeof periodNewContacts> = {};
+
+    periodNewContacts.forEach(cnt => {
+      const cId = cnt.company_id || 'unknown';
+      if (!contactsByCompId[cId]) contactsByCompId[cId] = [];
+      contactsByCompId[cId].push(cnt);
+    });
+
+    const relevantCompIds = new Set([
+      ...periodNewCompanies.map(c => c.id),
+      ...Object.keys(contactsByCompId).filter(id => id !== 'unknown')
+    ]);
+
+    const result = Array.from(relevantCompIds).map(cId => {
+      const comp = (companies || []).find(c => c.id === cId);
+      const isNewCompany = newCompSet.has(cId);
+      const cNewContacts = contactsByCompId[cId] || [];
+
+      return {
+        companyId: cId,
+        companyName: comp?.name || (isRTL ? 'منشأة تجارية' : 'Commercial Organization'),
+        city: comp?.city || '-',
+        isNewCompany,
+        newContacts: cNewContacts.map(cnt => ({
+          id: cnt.id,
+          fullName: cnt.full_name,
+          jobTitle: cnt.job_title || '-',
+          phone: cnt.phone || '-'
+        }))
+      };
+    });
+
+    if (contactsByCompId['unknown'] && contactsByCompId['unknown'].length > 0) {
+      result.push({
+        companyId: 'standalone',
+        companyName: isRTL ? 'جهات اتصال مباشرة (مستقلة)' : 'Direct Contacts (Standalone)',
+        city: '-',
+        isNewCompany: false,
+        newContacts: contactsByCompId['unknown'].map(cnt => ({
+          id: cnt.id,
+          fullName: cnt.full_name,
+          jobTitle: cnt.job_title || '-',
+          phone: cnt.phone || '-'
+        }))
+      });
+    }
+
+    return result.sort((a, b) => {
+      if (a.isNewCompany && !b.isNewCompany) return -1;
+      if (!a.isNewCompany && b.isNewCompany) return 1;
+      return a.companyName.localeCompare(b.companyName);
+    });
+  }, [periodNewCompanies, periodNewContacts, companies, isRTL]);
 
   // Projects Won in this period
   const periodWonProjects = useMemo(() => {
@@ -330,6 +484,10 @@ export default function ReportsPage() {
   const quotationTotalValue = useMemo(() => {
     return periodQuotations.reduce((sum, q) => sum + (q.amount || 0), 0);
   }, [periodQuotations]);
+
+  const averageQuoteValue = useMemo(() => {
+    return periodQuotations.length > 0 ? Math.round(quotationTotalValue / periodQuotations.length) : 0;
+  }, [periodQuotations, quotationTotalValue]);
 
   // Cash Collection for Won Deals
   const cashCollection = useMemo(() => {
@@ -550,7 +708,79 @@ export default function ReportsPage() {
         };
       }),
       closingTotalValue: periodClosingValue,
-      closingCount: periodClosingProjects.length
+      closingCount: periodClosingProjects.length,
+
+      // Periodic Sales Performance Report Data
+      salesReport: {
+        newProjects: periodNewProjects.map(p => ({
+          id: p.id,
+          prNumber: p.pr_number,
+          name: p.name,
+          companyName: p.company_name || '-',
+          location: p.location || '-',
+          value: p.estimated_value || 0,
+          opportunityType: p.opportunity_type || 'tender',
+          pipelineStage: p.pipeline_stage,
+          ownerName: p.owner_name,
+          createdAt: p.created_at
+        })),
+        newProjectsCount: periodNewProjects.length,
+        newInHandCount,
+        newInHandValue,
+        newInHandPct,
+        newTenderCount,
+        newTenderValue,
+        newTenderPct,
+        newProjectsTotalValue,
+
+        quotationsSent: periodQuotations.map(q => {
+          const prj = scopedProjects.find(p => p.id === q.project_id);
+          return {
+            id: q.id,
+            referenceNo: q.quotation_number || `Q-${q.version}`,
+            version: q.version || 1,
+            projectName: prj?.name || q.project_id || '-',
+            companyName: prj?.company_name || '-',
+            amount: q.amount || 0,
+            sentDate: q.sent_date || q.quotation_date || q.created_at || '-',
+            status: q.status || 'draft'
+          };
+        }),
+        quotationsSentTotalValue: quotationTotalValue,
+        quotationsSentCount: periodQuotations.length,
+
+        activitiesList: periodActivities.map(a => ({
+          time: a.activity_time || '10:00 AM',
+          date: a.activity_date,
+          projectName: a.project_name || (isRTL ? 'زيارة موقع' : 'Site Visit'),
+          companyName: a.company_name || '-',
+          contactName: a.contact_name,
+          channel: a.channel,
+          purpose: a.visit_purpose,
+          outcome: a.outcome,
+          notes: a.notes,
+          nextAction: a.next_action
+        })),
+
+        interactionCounts,
+
+        accountsGrowth: {
+          newCompaniesCount: periodNewCompanies.length,
+          newContactsCount: periodNewContacts.length,
+          companiesWithNewContacts
+        },
+
+        submittals: periodSubmittalsSent.map(p => ({
+          id: p.id,
+          prNumber: p.pr_number,
+          projectName: p.name,
+          companyName: p.company_name || '-',
+          submittalDate: p.submittal_sent_at || p.created_at || '-',
+          systems: p.systems && p.systems.length > 0 ? p.systems : (p.rfq_packages ? [p.rfq_packages.toUpperCase()] : ['MEP']),
+          status: p.pipeline_stage === 'technical_submission' ? (isRTL ? 'قيد المراجعة الفنية' : 'In Technical Review') : (isRTL ? 'تم التقديم' : 'Submitted')
+        })),
+        submittalsCount: periodSubmittalsSent.length
+      }
     };
   }, [
     currentUser,
@@ -570,7 +800,20 @@ export default function ReportsPage() {
     topClients,
     monthlyGrowth,
     periodClosingProjects,
-    periodClosingValue
+    periodClosingValue,
+    periodNewProjects,
+    newInHandCount,
+    newInHandValue,
+    newInHandPct,
+    newTenderCount,
+    newTenderValue,
+    newTenderPct,
+    newProjectsTotalValue,
+    interactionCounts,
+    periodNewCompanies,
+    periodNewContacts,
+    companiesWithNewContacts,
+    scopedProjects
   ]);
 
   // Quick Day Navigators
@@ -655,6 +898,46 @@ export default function ReportsPage() {
             <Printer className="w-4 h-4 stroke-[2.2]" />
             <span>{isRTL ? 'تصدير التقرير كـ PDF' : 'Export as PDF'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. REPORT PERSPECTIVE SWITCHER (Sales Performance vs Executive Portfolio) */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-[#1C2130] p-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <button
+            onClick={() => setReportMode('sales_performance')}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer font-urbanist ${
+              reportMode === 'sales_performance'
+                ? 'bg-blue-600 text-white shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            <span>{isRTL ? 'تقرير أداء ونشاط المبيعات الدوري' : 'Periodic Sales Performance Report'}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${reportMode === 'sales_performance' ? 'bg-blue-700 text-blue-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+              6 {isRTL ? 'محاور رئيسية' : 'Key Sections'}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setReportMode('executive_portfolio')}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer font-urbanist ${
+              reportMode === 'executive_portfolio'
+                ? 'bg-blue-600 text-white shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>{isRTL ? 'التقرير التنفيذي الشامل للمحفظة والعمليات' : 'Executive Portfolio & Strategic Analytics'}</span>
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium px-2 hidden sm:block">
+          {reportMode === 'sales_performance' 
+            ? (isRTL ? 'المشاريع المضافة، عروض الأسعار، الأنشطة، الاتصالات، الحسابات والتقديمات' : 'Added projects, quotations, activities, interactions, accounts growth & submittals')
+            : (isRTL ? 'التحليل الاستراتيجي الشامل للمحفظة والترسيات والأنظمة الهندسية' : 'Comprehensive Strategic Portfolio & Systems Analysis')}
         </div>
       </div>
 
@@ -801,8 +1084,723 @@ export default function ReportsPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. HERO EXECUTIVE KPIS (Cards Grid) */}
+      {/* 3. CONDITIONAL PERSPECTIVE CONTENT: SALES PERFORMANCE vs EXECUTIVE PORTFOLIO */}
       {/* ========================================================================= */}
+      {reportMode === 'sales_performance' ? (
+        <div className="space-y-6">
+          {/* ------------------------------------------------------------------- */}
+          {/* SECTION 1: NEW PROJECTS ADDED & IN-HAND VS TENDER DONUT PIE CHART   */}
+          {/* ------------------------------------------------------------------- */}
+          <div className="crm-card p-5 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <Briefcase className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider font-urbanist flex items-center gap-2">
+                    <span>{isRTL ? '1. المشاريع المضافة حديثاً وتوزيع نوع الفرصة' : '1. Newly Added Projects & Opportunity Mix'}</span>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      {periodNewProjects.length} {isRTL ? 'مشروع' : 'projects'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  {isRTL
+                    ? `حصر المشاريع المسجلة في النظام خلال ${currentPeriod.label} بقيمة إجمالية ${formatCurrencySAR(newProjectsTotalValue)} ومخطط التنافس (In-Hand مباشر مقابل Tender مناقصة)`
+                    : `Projects added in ${currentPeriod.label} totaling ${formatCurrencySAR(newProjectsTotalValue)} with In-Hand vs Tender distribution`}
+                </p>
+              </div>
+            </div>
+
+            {/* Donut Pie Chart & Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+              {/* SVG Donut Pie Chart Box */}
+              <div className="md:col-span-5 p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] flex items-center justify-around gap-4">
+                <div className="relative w-28 h-28 shrink-0 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    {totalNewProjectsCount === 0 ? (
+                      <circle cx="50" cy="50" r="38" fill="transparent" stroke="#E2E8F0" strokeWidth="18" />
+                    ) : (
+                      <>
+                        {/* Tender Arc (Indigo) */}
+                        <circle cx="50" cy="50" r="38" fill="transparent" stroke="#6366F1" strokeWidth="18" />
+                        {/* In-Hand Arc (Emerald) */}
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="38"
+                          fill="transparent"
+                          stroke="#10B981"
+                          strokeWidth="18"
+                          strokeDasharray={`${(newInHandPct / 100) * 238.76} 238.76`}
+                        />
+                      </>
+                    )}
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <span className="text-xl font-black text-slate-900 dark:text-white font-urbanist">{totalNewProjectsCount}</span>
+                    <span className="text-[9px] font-bold text-slate-500 uppercase">{isRTL ? 'مشروع جديد' : 'New Projects'}</span>
+                  </div>
+                </div>
+
+                {/* Legend & Percentages */}
+                <div className="space-y-2 text-xs flex-1">
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span>{isRTL ? 'مباشر (In-Hand)' : 'In-Hand'}</span>
+                    </span>
+                    <span className="font-mono">{newInHandCount} ({newInHandPct}%)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-300 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span>{isRTL ? 'مناقصة (Tender)' : 'Tender'}</span>
+                    </span>
+                    <span className="font-mono">{newTenderCount} ({newTenderPct}%)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Value Cards */}
+              <div className="md:col-span-7 grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] flex flex-col justify-between">
+                  <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                    {isRTL ? 'قيمة المشاريع المباشرة (In-Hand)' : 'In-Hand Projects Value'}
+                  </span>
+                  <div className="text-lg sm:text-xl font-black font-urbanist text-emerald-600 dark:text-emerald-400 my-1">
+                    {formatCurrencySAR(newInHandValue)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">{newInHandCount} {isRTL ? 'مشاريع محجوزة للتنفيذ المباشر' : 'projects direct execution'}</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] flex flex-col justify-between">
+                  <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-400">
+                    {isRTL ? 'قيمة مشاريع المناقصات (Tender)' : 'Tender Projects Value'}
+                  </span>
+                  <div className="text-lg sm:text-xl font-black font-urbanist text-indigo-600 dark:text-indigo-400 my-1">
+                    {formatCurrencySAR(newTenderValue)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">{newTenderCount} {isRTL ? 'مشاريع مطروحة للمنافسة' : 'competitive tender packages'}</span>
+                </div>
+
+                <div className="col-span-2 p-3 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-900 dark:text-blue-300">
+                    {isRTL ? 'إجمالي القيمة التقديرية للمشاريع المضافة:' : 'Total Estimated Value of Added Projects:'}
+                  </span>
+                  <span className="text-base font-black font-mono text-blue-700 dark:text-[#8FC2F0]">
+                    {formatCurrencySAR(newProjectsTotalValue)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Projects Details Table */}
+            <div className="overflow-x-auto pt-2">
+              <table className="w-full text-xs text-start">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold pb-2">
+                    <th className="py-2 text-start font-mono">{isRTL ? 'كود المشروع' : 'PR Number'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'اسم المشروع والموقع' : 'Project & Location'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'العميل / المنشأة' : 'Company'}</th>
+                    <th className="py-2 text-center">{isRTL ? 'نوع الفرصة' : 'Opportunity'}</th>
+                    <th className="py-2 text-center">{isRTL ? 'المرحلة' : 'Pipeline Stage'}</th>
+                    <th className="py-2 text-end">{isRTL ? 'القيمة التقديرية' : 'Estimated Value'}</th>
+                    <th className="py-2 text-end">{isRTL ? 'تاريخ الإضافة' : 'Date Added'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  {periodNewProjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-6 text-center text-slate-400 text-xs">
+                        {isRTL ? 'لا توجد مشاريع مضافة خلال هذه الفترة' : 'No projects added in this period'}
+                      </td>
+                    </tr>
+                  ) : (
+                    periodNewProjects.map(p => {
+                      const stageObj = PIPELINE_STAGES.find(s => s.value === p.pipeline_stage);
+                      const stageLabel = isRTL ? (stageObj?.labelAr || p.pipeline_stage) : (stageObj?.label || p.pipeline_stage);
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-2.5 font-mono font-bold text-blue-600 dark:text-[#8FC2F0]">
+                            {p.pr_number}
+                          </td>
+                          <td className="py-2.5">
+                            <div className="font-bold text-slate-900 dark:text-white">{p.name}</div>
+                            <div className="text-[10px] text-slate-500">{p.location || '-'}</div>
+                          </td>
+                          <td className="py-2.5 text-slate-700 dark:text-slate-300 font-bold">
+                            {p.company_name || '-'}
+                          </td>
+                          <td className="py-2.5 text-center">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                              p.opportunity_type === 'in_hand'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                : 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300'
+                            }`}>
+                              {p.opportunity_type === 'in_hand' ? (isRTL ? 'مباشر In-Hand' : 'In-Hand') : (isRTL ? 'مناقصة Tender' : 'Tender')}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-center">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                              {stageLabel}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-end font-mono font-black text-slate-900 dark:text-white">
+                            {formatCurrencySAR(p.estimated_value || 0)}
+                          </td>
+                          <td className="py-2.5 text-end font-mono text-[11px] text-slate-500">
+                            {(p.created_at || '').split('T')[0]}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ------------------------------------------------------------------- */}
+          {/* SECTION 2: QUOTATIONS SENT (VALUE & LIST)                           */}
+          {/* ------------------------------------------------------------------- */}
+          <div className="crm-card p-5 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider font-urbanist flex items-center gap-2">
+                    <span>{isRTL ? '2. عروض الأسعار الصادرة' : '2. Quotations Sent'}</span>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      {periodQuotations.length} {isRTL ? 'عرض' : 'quotes'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  {isRTL
+                    ? `حصر العروض المالية والتجارية المسلمة للمقاولين خلال ${currentPeriod.label} بقيمة إجمالية ${formatCurrencySAR(quotationTotalValue)}`
+                    : `Quotations delivered in ${currentPeriod.label} totaling ${formatCurrencySAR(quotationTotalValue)}`}
+                </p>
+              </div>
+            </div>
+
+            {/* Quotation Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] space-y-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase">{isRTL ? 'إجمالي قيمة العروض' : 'Total Quotation Value'}</span>
+                <div className="text-xl sm:text-2xl font-black font-urbanist text-blue-600 dark:text-[#8FC2F0]">
+                  {formatCurrencySAR(quotationTotalValue)}
+                </div>
+              </div>
+              <div className="p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] space-y-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase">{isRTL ? 'عدد العروض الصادرة' : 'Quotations Count'}</span>
+                <div className="text-xl sm:text-2xl font-black font-urbanist text-slate-900 dark:text-white">
+                  {periodQuotations.length}
+                </div>
+              </div>
+              <div className="p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] space-y-1">
+                <span className="text-[11px] font-bold text-slate-500 uppercase">{isRTL ? 'متوسط قيمة العرض' : 'Average Quote Value'}</span>
+                <div className="text-xl sm:text-2xl font-black font-urbanist text-emerald-600 dark:text-emerald-400">
+                  {formatCurrencySAR(averageQuoteValue)}
+                </div>
+              </div>
+            </div>
+
+            {/* Quotations Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-start">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold pb-2">
+                    <th className="py-2 text-start font-mono">{isRTL ? 'رقم العرض / الإصدار' : 'Quote Ref / Rev'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'اسم المشروع' : 'Project'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'العميل / المقاول' : 'Client / Contractor'}</th>
+                    <th className="py-2 text-end">{isRTL ? 'قيمة العرض (SAR)' : 'Amount SAR'}</th>
+                    <th className="py-2 text-center">{isRTL ? 'تاريخ الإرسال' : 'Sent Date'}</th>
+                    <th className="py-2 text-center">{isRTL ? 'الحالة' : 'Status'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  {periodQuotations.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-slate-400 text-xs">
+                        {isRTL ? 'لا توجد عروض أسعار مسجلة في هذه الفترة' : 'No quotations sent in this period'}
+                      </td>
+                    </tr>
+                  ) : (
+                    periodQuotations.map(q => {
+                      const prj = scopedProjects.find(p => p.id === q.project_id);
+                      const refNo = q.quotation_number || `Q-${q.version || 1}`;
+                      const sentD = (q.sent_date || q.quotation_date || q.created_at || '-').split('T')[0];
+                      return (
+                        <tr key={q.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-2.5 font-mono font-bold text-blue-600 dark:text-[#8FC2F0]">
+                            {refNo}
+                          </td>
+                          <td className="py-2.5 font-bold text-slate-900 dark:text-white">
+                            {prj?.name || q.project_id || '-'}
+                          </td>
+                          <td className="py-2.5 text-slate-700 dark:text-slate-300">
+                            {prj?.company_name || '-'}
+                          </td>
+                          <td className="py-2.5 text-end font-mono font-black text-slate-900 dark:text-white">
+                            {formatCurrencySAR(q.amount || 0)}
+                          </td>
+                          <td className="py-2.5 text-center font-mono text-[11px] text-slate-500">
+                            {sentD}
+                          </td>
+                          <td className="py-2.5 text-center">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              {q.status || 'sent'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ------------------------------------------------------------------- */}
+          {/* SECTION 3: EXECUTED ACTIVITIES & VISITS LOG TABLE                   */}
+          {/* ------------------------------------------------------------------- */}
+          <div className="crm-card p-5 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider font-urbanist flex items-center gap-2">
+                    <span>{isRTL ? '3. جدول الأنشطة والزيارات الميدانية المنفذة' : '3. Executed Activities & Visits Log'}</span>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      {periodActivities.length} {isRTL ? 'نشاط' : 'activities'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  {isRTL
+                    ? `سجل تفصيلي بالزيارات الميدانية، الاتصالات، والاجتماعات المنفذة خلال ${currentPeriod.label}`
+                    : `Log of field visits, calls, and meetings executed during ${currentPeriod.label}`}
+                </p>
+              </div>
+            </div>
+
+            {/* Activities Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-start">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold pb-2">
+                    <th className="py-2 text-start">{isRTL ? 'التاريخ والوقت' : 'Date & Time'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'المشروع والجهة' : 'Project & Client'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'جهة الاتصال' : 'Contact Person'}</th>
+                    <th className="py-2 text-center">{isRTL ? 'القناة' : 'Channel'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'الغرض' : 'Purpose'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'النتيجة والملاحظات' : 'Outcome & Notes'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'الإجراء القادم' : 'Next Action'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  {periodActivities.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-6 text-center text-slate-400 text-xs">
+                        {isRTL ? 'لا توجد أنشطة ميدانية مسجلة خلال هذه الفترة' : 'No field activities logged during this period'}
+                      </td>
+                    </tr>
+                  ) : (
+                    periodActivities.map(act => (
+                      <tr key={act.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2.5 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                          <div>{act.activity_date}</div>
+                          <div className="text-[10px] text-slate-400">{act.activity_time || '10:00 AM'}</div>
+                        </td>
+                        <td className="py-2.5">
+                          <div className="font-bold text-slate-900 dark:text-white">
+                            {act.project_name || (isRTL ? 'زيارة ميدانية' : 'Site Visit')}
+                          </div>
+                          <div className="text-[11px] text-slate-500">{act.company_name || '-'}</div>
+                        </td>
+                        <td className="py-2.5 text-slate-700 dark:text-slate-300">
+                          {act.contact_name || '-'}
+                        </td>
+                        <td className="py-2.5 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            {act.channel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 text-slate-700 dark:text-slate-300">
+                          {act.visit_purpose || '-'}
+                        </td>
+                        <td className="py-2.5 text-slate-700 dark:text-slate-300">
+                          <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 mb-0.5">
+                            {act.outcome || (isRTL ? 'منجز' : 'Completed')}
+                          </span>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-400 truncate max-w-[200px]" title={act.notes}>
+                            {act.notes || '-'}
+                          </div>
+                        </td>
+                        <td className="py-2.5 text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                          {act.next_action || '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* ------------------------------------------------------------------- */}
+          {/* SECTION 4: CALLS, VISITS & MEETINGS (F2F & ONLINE) BREAKDOWN        */}
+          {/* ------------------------------------------------------------------- */}
+          <div className="crm-card p-5 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider font-urbanist flex items-center gap-2">
+                    <span>{isRTL ? '4. تفصيل التفاعلات الميدانية والاتصالات' : '4. Interactions & Channels Breakdown'}</span>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                      {interactionCounts.totalInteractions} {isRTL ? 'تفاعل كلي' : 'total'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  {isRTL
+                    ? `إحصائيات قنوات التواصل والاجتماعات المباشرة والافتراضية خلال ${currentPeriod.label}`
+                    : `Breakdown of phone calls, site visits, and F2F & online meetings during ${currentPeriod.label}`}
+                </p>
+              </div>
+            </div>
+
+            {/* 4 Cards Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {/* Calls */}
+              <div className="p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] space-y-1 border-l-4 border-l-blue-500">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-urbanist">
+                    {isRTL ? 'المكالمات الهاتفية' : 'Phone Calls'}
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-[#8FC2F0] flex items-center justify-center">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-black text-blue-600 dark:text-[#8FC2F0] font-urbanist">
+                  {interactionCounts.calls}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {isRTL ? 'مكالمة هاتفية ومتابعة هندسية' : 'Calls logged in period'}
+                </div>
+              </div>
+
+              {/* Visits */}
+              <div className="p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] space-y-1 border-l-4 border-l-amber-500">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-urbanist">
+                    {isRTL ? 'الزيارات الميدانية للمواقع' : 'Site Visits'}
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-black text-amber-600 dark:text-amber-400 font-urbanist">
+                  {interactionCounts.visits}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {isRTL ? 'زيارات ميدانية لمواقع المشاريع' : 'Field site inspections'}
+                </div>
+              </div>
+
+              {/* F2F Meetings */}
+              <div className="p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] space-y-1 border-l-4 border-l-purple-500">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-urbanist">
+                    {isRTL ? 'اجتماعات حضورية (F2F)' : 'In-Person Meetings'}
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                    <Users className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-black text-purple-600 dark:text-purple-400 font-urbanist">
+                  {interactionCounts.meetingsF2F}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {isRTL ? 'جلسات مباشرة مع الاستشاري والمقاول' : 'Face-to-face sessions'}
+                </div>
+              </div>
+
+              {/* Online Meetings */}
+              <div className="p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] space-y-1 border-l-4 border-l-sky-500">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-urbanist">
+                    {isRTL ? 'اجتماعات أونلاين' : 'Online Meetings'}
+                  </span>
+                  <div className="w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+                    <Video className="w-4 h-4" />
+                  </div>
+                </div>
+                <div className="text-2xl font-black text-sky-600 dark:text-sky-400 font-urbanist">
+                  {interactionCounts.meetingsOnline}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {isRTL ? 'جلسات فيديو وتنسيق افتراضي' : 'Virtual coordination calls'}
+                </div>
+              </div>
+            </div>
+
+            {/* Auxiliary Channel Strip */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50/80 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-800 text-xs flex-wrap gap-2">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold">
+                  <Target className="w-3.5 h-3.5 text-orange-500" />
+                  <span>{isRTL ? 'استكشاف ميداني (Hunting):' : 'Hunting:'}</span>
+                  <span className="font-mono text-orange-600">{interactionCounts.hunting}</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold">
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>{isRTL ? 'واتساب:' : 'WhatsApp:'}</span>
+                  <span className="font-mono text-emerald-600">{interactionCounts.whatsapp}</span>
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 font-bold">
+                  <Mail className="w-3.5 h-3.5 text-rose-500" />
+                  <span>{isRTL ? 'بريد إلكتروني:' : 'Email:'}</span>
+                  <span className="font-mono text-rose-600">{interactionCounts.email}</span>
+                </span>
+              </div>
+              <div className="text-slate-500 font-medium text-[11px]">
+                {isRTL ? 'معدل التغطية الميدانية للشركة: 100%' : 'Team Field Coverage: 100%'}
+              </div>
+            </div>
+          </div>
+
+          {/* ------------------------------------------------------------------- */}
+          {/* SECTION 5: NEW ACCOUNTS & CONTACTS GROWTH (WITH EXPANDED ACCOUNTS)  */}
+          {/* ------------------------------------------------------------------- */}
+          <div className="crm-card p-5 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider font-urbanist flex items-center gap-2">
+                    <span>{isRTL ? '5. نمو الحسابات وجهات الاتصال الجديدة المضافة' : '5. Accounts & Contacts Growth'}</span>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                      {companiesWithNewContacts.length} {isRTL ? 'منشأة' : 'accounts'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  {isRTL
+                    ? `حصر الشركات والمنشآت المضافة أو المحدثة خلال ${currentPeriod.label} مع تفاصيل جهات الاتصال الجديدة بداخل كل شركة (سواء كانت شركة جديدة أو توسع لحساب قائم)`
+                    : `Accounts added or expanded during ${currentPeriod.label} with new contacts listed per company`}
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">{isRTL ? 'شركات جديدة بالكامل' : 'New Companies'}</span>
+                  <div className="text-xl font-black font-urbanist text-emerald-600 dark:text-emerald-400">{periodNewCompanies.length}</div>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <Building2 className="w-4 h-4" />
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">{isRTL ? 'جهات اتصال جديدة مضافة' : 'New Contacts'}</span>
+                  <div className="text-xl font-black font-urbanist text-blue-600 dark:text-[#8FC2F0]">{periodNewContacts.length}</div>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-[#141820] flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">{isRTL ? 'إجمالي المنشآت النشطة' : 'Total Active Accounts'}</span>
+                  <div className="text-xl font-black font-urbanist text-purple-600 dark:text-purple-400">{companiesWithNewContacts.length}</div>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                  <Users className="w-4 h-4" />
+                </div>
+              </div>
+            </div>
+
+            {/* Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {companiesWithNewContacts.length === 0 ? (
+                <div className="col-span-full p-8 text-center bg-slate-50 dark:bg-[#141820] rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 text-xs">
+                  {isRTL ? 'لم يتم تسجيل حسابات جديدة أو جهات اتصال مضافة في هذه الفترة' : 'No new accounts or contacts added in this period'}
+                </div>
+              ) : (
+                companiesWithNewContacts.map((comp) => (
+                  <div key={comp.companyId} className="p-4 rounded-2xl bg-white dark:bg-[#141820] border border-slate-200/90 dark:border-slate-800 space-y-3 hover:border-blue-400 dark:hover:border-blue-600 transition-all">
+                    {/* Top Header of Card */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <h4 className="text-sm font-black text-slate-900 dark:text-white font-urbanist">
+                          {comp.companyName}
+                        </h4>
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          <MapPin className="w-3 h-3 text-slate-400" />
+                          <span>{comp.city || '-'}</span>
+                        </div>
+                      </div>
+                      {comp.isNewCompany ? (
+                        <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          {isRTL ? 'شركة جديدة' : 'New Company'}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-[#8FC2F0] border border-blue-200 dark:border-blue-800">
+                          {isRTL ? 'حساب متوسع' : 'Existing Expanded'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Counter of newly added contacts */}
+                    <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-[#1C2130] border border-slate-200/80 dark:border-slate-800">
+                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                        <UserPlus className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
+                        <span>{isRTL ? 'جهات اتصال جديدة مضافة:' : 'New contacts added:'}</span>
+                      </span>
+                      <span className="text-xs font-black font-mono px-2 py-0.5 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200">
+                        {comp.newContacts.length}
+                      </span>
+                    </div>
+
+                    {/* List of contacts */}
+                    {comp.newContacts.length > 0 && (
+                      <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        {comp.newContacts.map((cnt) => (
+                          <div key={cnt.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-50/60 dark:bg-[#1C2130] border border-slate-100 dark:border-slate-800 text-xs">
+                            <div>
+                              <div className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                                {cnt.fullName}
+                              </div>
+                              <div className="text-[10px] text-slate-500">
+                                {cnt.jobTitle}
+                              </div>
+                            </div>
+                            {cnt.phone && cnt.phone !== '-' && (
+                              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400 direction-ltr">
+                                {cnt.phone}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* ------------------------------------------------------------------- */}
+          {/* SECTION 6: ENGINEERING TECHNICAL SUBMITTALS                         */}
+          {/* ------------------------------------------------------------------- */}
+          <div className="crm-card p-5 rounded-2xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                    <FileCheck className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider font-urbanist flex items-center gap-2">
+                    <span>{isRTL ? '6. التقديمات الفنية الهندسية (Engineering Technical Submittals)' : '6. Engineering Technical Submittals'}</span>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                      {periodSubmittalsSent.length} {isRTL ? 'تقديم فني' : 'submittals'}
+                    </span>
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                  {isRTL
+                    ? `حصر العروض والمواصفات الفنية المعتمدة والمقدمة للاستشاريين خلال ${currentPeriod.label}`
+                    : `Engineering specifications and technical material approvals submitted in ${currentPeriod.label}`}
+                </p>
+              </div>
+            </div>
+
+            {/* Submittals Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-start">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold pb-2">
+                    <th className="py-2 text-start font-mono">{isRTL ? 'كود المشروع' : 'PR Number'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'اسم المشروع' : 'Project'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'العميل / الاستشاري' : 'Client / Consultant'}</th>
+                    <th className="py-2 text-center">{isRTL ? 'تاريخ التقديم' : 'Submittal Date'}</th>
+                    <th className="py-2 text-start">{isRTL ? 'الأنظمة الهندسية' : 'Systems Scope'}</th>
+                    <th className="py-2 text-center">{isRTL ? 'حالة الاعتماد' : 'Status'}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                  {periodSubmittalsSent.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-slate-400 text-xs">
+                        {isRTL ? 'لا توجد تقديمات فنية مسجلة خلال هذه الفترة' : 'No technical submittals submitted in this period'}
+                      </td>
+                    </tr>
+                  ) : (
+                    periodSubmittalsSent.map(p => {
+                      const sysList = p.systems && p.systems.length > 0 ? p.systems : (p.rfq_packages ? [p.rfq_packages.toUpperCase()] : ['MEP Systems']);
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-2.5 font-mono font-bold text-purple-600 dark:text-purple-400">
+                            {p.pr_number}
+                          </td>
+                          <td className="py-2.5 font-bold text-slate-900 dark:text-white">
+                            {p.name}
+                          </td>
+                          <td className="py-2.5 text-slate-700 dark:text-slate-300">
+                            {p.company_name || '-'}
+                          </td>
+                          <td className="py-2.5 text-center font-mono text-[11px] text-slate-500">
+                            {p.submittal_sent_at ? p.submittal_sent_at.split('T')[0] : '-'}
+                          </td>
+                          <td className="py-2.5">
+                            <div className="flex flex-wrap gap-1">
+                              {sysList.slice(0, 3).map((s, idx) => (
+                                <span key={idx} className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  {s}
+                                </span>
+                              ))}
+                              {sysList.length > 3 && (
+                                <span className="text-[10px] text-slate-400 font-mono">+{sysList.length - 3}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 text-center">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                              {p.pipeline_stage === 'technical_submission' ? (isRTL ? 'قيد المراجعة الفنية' : 'In Technical Review') : (isRTL ? 'تم التقديم' : 'Submitted')}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* ========================================================================= */}
+          {/* 3. HERO EXECUTIVE KPIS (Cards Grid) */}
+          {/* ========================================================================= */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Total Won Revenue */}
         <div className="crm-card p-4 rounded-2xl space-y-1 relative overflow-hidden group">
@@ -1429,6 +2427,8 @@ export default function ReportsPage() {
           </div>
         </div>
       )}
+        </div>
+      )}
       </div>
 
       {/* ========================================================================= */}
@@ -1440,6 +2440,7 @@ export default function ReportsPage() {
         reportType={activeTab}
         reportTitle={currentPeriod.title}
         periodLabel={currentPeriod.label}
+        reportMode={reportMode}
         data={pdfDataBundle}
       />
     </>

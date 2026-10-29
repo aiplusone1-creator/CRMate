@@ -355,6 +355,7 @@ export function parseExcelWorkbook(
       is_hot_lead: !!defaults?.is_hot_lead,
       notes: defaults?.notes,
       owner_id: targetUserId,
+      created_by: targetUserId,
       last_contacted_at: defaults?.last_contacted_at,
       next_follow_up_at: defaults?.next_follow_up_at,
       created_at: new Date().toISOString().split('T')[0]

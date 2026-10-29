@@ -187,9 +187,10 @@ export function Header() {
     ? t('allTeam') 
     : selectedMember ? `${selectedMember.full_name} (${selectedMember.territory || ''})` : t('filterByRep');
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.push('/login');
+    router.refresh();
   };
 
   const getRoleBadge = (role: string) => {

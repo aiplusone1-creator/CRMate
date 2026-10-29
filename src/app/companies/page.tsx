@@ -1,5 +1,6 @@
 'use client';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Building2, 
   Plus, 
@@ -32,6 +33,11 @@ import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
 export default function CompaniesPage() {
   const { companies, projects, contacts, addCompany, updateCompany, deleteCompany, currentRole, currentUser } = useCRM();
   const { t, isRTL } = useLanguage();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [searchTerm, setSearchTermState] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -247,9 +253,6 @@ export default function CompaniesPage() {
             <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#8FC2F0]/20 text-[#292D32] dark:text-[#8FC2F0] border border-[#8FC2F0]/30 flex items-center gap-1">
               <Building2 className="w-3 h-3 text-[#292D32] dark:text-[#8FC2F0]" />
               <span>{isRTL ? 'دليل المنشآت المؤسسي' : 'Enterprise Directory'}</span>
-            </span>
-            <span className="text-[10.5px] text-slate-400 font-bold">
-              {isRTL ? 'المنطقة الغربية • المملكة العربية السعودية' : 'Western Region • Saudi Arabia'}
             </span>
           </div>
           <h1 className="text-lg sm:text-xl md:text-2xl font-black text-[#292D32] dark:text-white tracking-tight">
@@ -675,9 +678,15 @@ export default function CompaniesPage() {
       />
 
       {/* Create / Edit Company Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150">
-          <div className="glass-card bg-white/95 dark:bg-[#1C2130] rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl border border-white/90 dark:border-[#8FC2F0]/10 overflow-hidden backdrop-blur-2xl animate-in zoom-in-95 duration-150">
+      {isModalOpen && mounted && createPortal(
+        <div 
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-150"
+          onClick={() => setIsModalOpen(false)}
+        >
+          <div 
+            className="glass-card bg-white/95 dark:bg-[#1C2130] rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl border border-white/90 dark:border-[#8FC2F0]/10 overflow-hidden backdrop-blur-2xl animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-4 py-3.5 sm:px-6 sm:py-5 border-b border-slate-100/80 dark:border-[#292D32]/60 flex items-center justify-between bg-white/80 dark:bg-[#232A38] shrink-0">
               <div className="flex items-center gap-2.5 sm:gap-3">
                 <span className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#8FC2F0]/20 border border-[#8FC2F0]/30 text-[#292D32] dark:text-[#8FC2F0] flex items-center justify-center shrink-0 shadow-2xs">
@@ -687,7 +696,7 @@ export default function CompaniesPage() {
                   <h2 className="font-black text-[#292D32] dark:text-white text-base sm:text-lg font-urbanist">
                     {editingCompany ? (isRTL ? 'تعديل ملف المنشأة' : 'Edit Company Profile') : (isRTL ? 'تسجيل منشأة جديدة' : 'Create New Company')}
                   </h2>
-                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">Western Region Commercial Directory</p>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">{isRTL ? 'دليل الشركات والعملاء الموحد' : 'Unified Commercial Directory'}</p>
                 </div>
               </div>
               <button 
@@ -801,7 +810,8 @@ export default function CompaniesPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

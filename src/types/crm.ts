@@ -161,6 +161,7 @@ export interface Contact {
   is_hot_lead: boolean;
   notes?: string;
   owner_id?: string;
+  created_by?: string;
   project_ids?: string[];
   last_contacted_at?: string;
   next_follow_up_at?: string;
@@ -552,6 +553,41 @@ export interface ChatConversation {
   last_sender_name?: string;
   created_at: string;
   created_by?: string;
+}
+
+// ==========================================
+// VIP MODULE TYPES (Isolated from Pipeline)
+// ==========================================
+
+export type VIPCategory = 'revisit_project' | 'vip_call';
+export type VIPStatus = 'pending' | 'in_progress' | 'completed';
+export type VIPPriority = 'normal' | 'high' | 'urgent';
+export type VIPSourceType = 'pipeline_existing' | 'street_spot' | 'manager_instruction' | 'external_lead';
+
+export interface VIPItem {
+  id: string;
+  category: VIPCategory;
+  title: string;
+  project_id?: string;
+  project_name?: string;
+  contact_id?: string;
+  contact_name?: string;
+  company_id?: string;
+  company_name?: string;
+  phone?: string;
+  email?: string;
+  location_name?: string;
+  source_type?: VIPSourceType;
+  source_note?: string;
+  priority: VIPPriority;
+  status: VIPStatus;
+  notes?: string;
+  completed_at?: string;
+  completed_activity_id?: string;
+  completion_notes?: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 

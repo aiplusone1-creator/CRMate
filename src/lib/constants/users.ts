@@ -65,5 +65,17 @@ export const SEEDED_USERS: User[] = [
     created_at: '2026-01-01T00:00:00.000Z',
     title: 'System Administrator & Commercial Director',
     territory: 'Headquarters'
+  },
+  {
+    id: 'u0',
+    name: 'Adel Nasr',
+    name_ar: 'عادل نصر',
+    email: 'adel.nasr@almespar.com',
+    role: 'sales_engineer',
+    avatar_color: '#4F46E5',
+    is_active: true,
+    created_at: '2026-01-01T00:00:00.000Z',
+    title: 'Senior Sales Engineer',
+    territory: 'Saudi Arabia'
   }
 ];

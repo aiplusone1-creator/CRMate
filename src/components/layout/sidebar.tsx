@@ -6,9 +6,10 @@ import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Briefcase, 
-  FileText,
+  // FileText, // Hidden temporarily per user request
   Building2, 
   Users, 
+  Crown,
   CalendarDays, 
   History, 
   BarChart3, 
@@ -56,9 +57,10 @@ export function Sidebar() {
   const navItems = [
     { label: isRTL ? 'لوحة المؤشرات' : 'Dashboard', href: '/', icon: LayoutDashboard },
     { label: isRTL ? 'المشاريع' : 'Projects', href: '/projects', icon: Briefcase },
-    { label: isRTL ? 'عروض الأسعار' : 'Quotations', href: '/quotations', icon: FileText },
+    // { label: isRTL ? 'عروض الأسعار' : 'Quotations', href: '/quotations', icon: FileText }, // Hidden temporarily
     { label: isRTL ? 'الشركات' : 'Companies', href: '/companies', icon: Building2 },
     { label: isRTL ? 'جهات الاتصال' : 'Contacts', href: '/contacts', icon: Users },
+    { label: isRTL ? 'قائمة VIP' : 'VIP List', href: '/vip', icon: Crown },
     { label: isRTL ? 'خطة الأسبوع' : 'Weekly Plan', href: '/my-week', icon: CalendarDays },
     { label: isRTL ? 'سجل الأنشطة' : 'Activities', href: '/activities', icon: History },
     { label: isRTL ? 'التقارير والتحليلات' : 'Reports', href: '/reports', icon: BarChart3 },

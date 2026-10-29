@@ -93,7 +93,55 @@ export function buildCompleteLiveExcelWorkbook(payload?: ExportPayload): Buffer 
   const sourcePath = path.join(process.cwd(), 'source-data', 'Saudi Projects Follow UP - Eslam Mohandes(1).xlsx');
   
   if (!fs.existsSync(sourcePath)) {
-    throw new Error('Source template file not found on disk: ' + sourcePath);
+    // Serverless fallback: build clean in-memory workbook directly
+    const wb = XLSX.utils.book_new();
+    const projectsList = payload?.projects || [];
+    const contactsList = payload?.contacts || [];
+    const activitiesList = payload?.activities || [];
+
+    // 1. Projects Follow UP Sheet
+    const pHeaders = [
+      '#PR', 'Opportunity', 'Client Name', 'Client Phone Number', 'Company Name',
+      'Client Email', 'Project Stage', 'Project Location', 'Status', 'Est. value (SAR)',
+      'Action Done', 'Action Date', 'Current Follow Up', 'Current Follow Up Date'
+    ];
+    const pRows = projectsList.map(p => [
+      p.pr_number || p.id,
+      p.name,
+      p.primary_contact_name || '',
+      p.primary_contact_phone || '',
+      p.company_name || '',
+      (p as any).client_email || '',
+      p.opportunity_type === 'tender' ? 'Tender' : 'In Hand',
+      p.location || 'Western Region',
+      mapStageToStatus(p.pipeline_stage),
+      p.estimated_value || p.final_won_value || 0,
+      p.next_action || '',
+      p.last_activity_at ? p.last_activity_at.split('T')[0] : '',
+      p.next_action || '',
+      p.next_follow_up_at ? p.next_follow_up_at.split('T')[0] : ''
+    ]);
+    const wsProjects = XLSX.utils.aoa_to_sheet([pHeaders, ...pRows]);
+    XLSX.utils.book_append_sheet(wb, wsProjects, 'Projects Follow UP');
+
+    // 2. Hot Leads Sheet
+    const hlHeaders = ['Name', 'Phone', 'Company', 'Position', 'Email', 'City', 'Notes'];
+    const hlRows = contactsList.filter(c => c.is_hot_lead).map(c => [
+      c.full_name, c.phone || '', c.company_name || '', c.job_title || '', c.email || '', c.city || '', c.notes || ''
+    ]);
+    const wsHotLeads = XLSX.utils.aoa_to_sheet([hlHeaders, ...hlRows]);
+    XLSX.utils.book_append_sheet(wb, wsHotLeads, 'Hot Leads');
+
+    // 3. Activities Sheet
+    const actHeaders = ['Date', 'Project', 'Company', 'Contact', 'Type', 'Purpose', 'Notes', 'Outcome'];
+    const actRows = activitiesList.map(a => [
+      a.activity_date, a.project_name || '', a.company_name || '', a.contact_name || '',
+      a.channel, a.visit_purpose, a.notes || '', a.outcome || ''
+    ]);
+    const wsAct = XLSX.utils.aoa_to_sheet([actHeaders, ...actRows]);
+    XLSX.utils.book_append_sheet(wb, wsAct, 'Master Report');
+
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx', compression: true });
   }
 
   // Read authentic workbook preserving styles, formulas, macros
