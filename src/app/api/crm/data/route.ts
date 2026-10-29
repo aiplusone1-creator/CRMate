@@ -27,12 +27,8 @@ export async function GET(req: Request) {
       user.role === 'viewer' || 
       user.role === 'estimator';
 
-    // Build projects query based on role:
-    // Managers & Admins receive all team projects (113).
-    // Sales Engineers receive strictly projects they own or are referred to.
-    const projectsQuery = isManagerOrAdmin
-      ? sb.from('projects').select('*').order('created_at', { ascending: false })
-      : sb.from('projects').select('*').or(`owner_id.eq.${user.id},referred_to_id.eq.${user.id}`).order('created_at', { ascending: false });
+    // Build projects query: fetch all team projects so all users have Global Search discovery
+    const projectsQuery = sb.from('projects').select('*').order('created_at', { ascending: false });
 
     const activitiesQuery = isManagerOrAdmin
       ? sb.from('activities').select('*').order('activity_date', { ascending: false })
@@ -122,10 +118,43 @@ export async function GET(req: Request) {
       }
     }
 
-    const projects = (projectsRes.data || []).map((p: any) => ({
+    const rawAllProjects = (projectsRes.data || []).map((p: any) => ({
       ...p,
       members: membersByProject.get(p.id) || []
     }));
+
+    // Scoped projects for pipeline operations:
+    // Managers & Admins receive all team projects (113).
+    // Sales Engineers receive strictly projects they own or are referred to.
+    const projects = isManagerOrAdmin
+      ? rawAllProjects
+      : rawAllProjects.filter((p: any) => 
+          p.owner_id === user.id || 
+          p.referred_to_id === user.id
+        );
+
+    // Team projects for Global Search discovery:
+    // Managers & Admins receive full commercial details across all projects.
+    // Sales Engineers receive all team projects, but foreign projects have confidential commercial data
+    // (estimated_value, pipeline_stage, internal_notes, next_action) safely sanitized at the server level.
+    const teamProjects = isManagerOrAdmin
+      ? rawAllProjects
+      : rawAllProjects.map((p: any) => {
+          const isOwnerOrAssigned = 
+            p.owner_id === user.id || 
+            p.referred_to_id === user.id || 
+            p.members?.some((m: any) => m.user_id === user.id);
+
+          if (isOwnerOrAssigned) return p;
+
+          return {
+            ...p,
+            estimated_value: 0,
+            pipeline_stage: 'stage_locked',
+            internal_notes: null,
+            next_action: null
+          };
+        });
 
     // Scope quotations: managers see all; sales engineers see quotations linked to their authorized projects
     const authorizedProjectIds = new Set(projects.map((p: any) => p.id));
@@ -172,6 +201,7 @@ export async function GET(req: Request) {
           companies,
           contacts,
           projects,
+          teamProjects,
           quotations,
           activities: activitiesRes.data || [],
           plannedActivities: plannedActivitiesRes.data || [],

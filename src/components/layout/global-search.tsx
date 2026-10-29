@@ -22,7 +22,7 @@ import { useLanguage } from '@/lib/i18n/language-context';
 
 export function GlobalSearch() {
   const router = useRouter();
-  const { projects, companies, contacts, currentUser } = useCRM();
+  const { projects, teamProjects, companies, contacts, currentUser } = useCRM();
   const { language, isRTL } = useLanguage();
 
   const [query, setQuery] = useState('');
@@ -84,9 +84,13 @@ export function GlobalSearch() {
   // Filtered Results
   const trimmedQuery = query.trim().toLowerCase();
 
+  const searchableProjects = useMemo(() => {
+    return (teamProjects && teamProjects.length > 0) ? teamProjects : projects;
+  }, [teamProjects, projects]);
+
   const matchingProjects = useMemo(() => {
     if (!trimmedQuery) return [];
-    return projects.filter(p => {
+    return searchableProjects.filter(p => {
       const isAccessible = canUserAccessProjectCockpit(p, currentUser);
       const matchesPublic = 
         p.name.toLowerCase().includes(trimmedQuery) ||
@@ -102,7 +106,7 @@ export function GlobalSearch() {
         (p.next_action && p.next_action.toLowerCase().includes(trimmedQuery))
       );
     }).slice(0, 5);
-  }, [projects, currentUser, trimmedQuery]);
+  }, [searchableProjects, currentUser, trimmedQuery]);
 
   const matchingCompanies = useMemo(() => {
     if (!trimmedQuery) return [];

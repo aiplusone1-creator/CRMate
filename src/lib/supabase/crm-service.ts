@@ -26,6 +26,7 @@ export interface CRMDataSet {
   notifications: AppNotification[];
   reminders: Reminder[];
   vipItems?: VIPItem[];
+  teamProjects?: Project[];
 }
 
 export type FetchAllDataResult = 

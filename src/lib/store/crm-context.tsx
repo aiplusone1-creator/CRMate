@@ -70,6 +70,7 @@ interface CRMContextType {
   addTeamMember: (member: Omit<Profile, 'id' | 'created_at'> & { id?: string }) => Promise<Profile>;
   deleteTeamMember: (userId: string) => Promise<void>;
   projects: Project[];
+  teamProjects?: Project[];
   contacts: Contact[];
   companies: Company[];
   activities: Activity[];
@@ -1000,6 +1001,8 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     });
   });
 
+  const [teamProjects, setTeamProjects] = useState<Project[]>([]);
+
   const [isSyncingExcel, setIsSyncingExcel] = useState(false);
   const [lastExcelSyncTime, setLastExcelSyncTime] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -1680,6 +1683,19 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
             };
           });
           setProjects(hydrated);
+        }
+        if (d.teamProjects) {
+          const hydratedTeam = d.teamProjects.map(p => {
+            const { health, daysOverdue } = computeProjectHealth(p);
+            return {
+              ...p,
+              calculated_health: health,
+              days_overdue: daysOverdue,
+              card_color: p.card_color || 'default',
+              base_card_color: p.base_card_color || 'default'
+            };
+          });
+          setTeamProjects(hydratedTeam);
         }
         if (d.activities) setActivities(d.activities);
         if (d.plannedActivities) setPlannedActivities(d.plannedActivities);
@@ -3519,6 +3535,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     addTeamMember,
     deleteTeamMember,
     projects,
+    teamProjects,
     contacts,
     companies: sortedCompanies,
     activities,
@@ -3644,6 +3661,7 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     addTeamMember,
     deleteTeamMember,
     projects,
+    teamProjects,
     contacts,
     sortedCompanies,
     activities,

@@ -72,6 +72,7 @@ export default function ProjectDetailPage() {
     currentUser,
     teamMembers,
     projects, 
+    teamProjects,
     companies, 
     contacts, 
     activities, 
@@ -94,7 +95,10 @@ export default function ProjectDetailPage() {
   } = useCRM();
 
   const projectId = params.id as string;
-  const project = projects.find(p => p.id === projectId);
+  const allProjects = React.useMemo(() => {
+    return (teamProjects && teamProjects.length > 0) ? teamProjects : projects;
+  }, [teamProjects, projects]);
+  const project = allProjects.find(p => p.id === projectId);
 
   const { language } = useLanguage();
   const isRTL = language === 'ar';

@@ -304,6 +304,58 @@ async function main() {
   });
 
   // -------------------------------------------------------------------------
+  // Group 5: Live API Discovery & Server-Side Privacy Verification on GET /api/crm/data
+  // -------------------------------------------------------------------------
+  console.log('\n[Group 5] Live API Discovery & Server Privacy Verification');
+
+  const baseUrl = 'http://localhost:3000';
+  const eslamAuthRes = await fetch(`${baseUrl}/api/auth/session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ switchUserId: 'u1' })
+  });
+  const eslamCookie = eslamAuthRes.headers.get('set-cookie')?.split(';')[0];
+
+  const eslamDataRes = await fetch(`${baseUrl}/api/crm/data`, {
+    headers: { Cookie: eslamCookie },
+    cache: 'no-store'
+  });
+  const eslamDataJson = await eslamDataRes.json();
+  const eslamApiData = eslamDataJson.data;
+
+  test('Sales Engineer payload contains teamProjects with all team projects (>= 113)', () => {
+    assert.ok(Array.isArray(eslamApiData.teamProjects), 'Must return teamProjects array');
+    assert.ok(eslamApiData.teamProjects.length >= 113, `teamProjects must have at least 113 projects, got ${eslamApiData.teamProjects.length}`);
+  });
+
+  test('Sales Engineer can discover a teammate project in teamProjects by PR number', () => {
+    const karimProject = eslamApiData.teamProjects.find(p => p.owner_id === 'u4');
+    assert.ok(karimProject, 'Must find a project owned by Karim (u4)');
+    // Public search fields must be intact
+    assert.ok(karimProject.pr_number, 'PR number must be present');
+    assert.ok(karimProject.name, 'Project name must be present');
+    // Confidential commercial fields must be sanitized on the server
+    assert.strictEqual(karimProject.estimated_value, 0, 'Commercial value must be 0 for teammate project over wire');
+    assert.strictEqual(karimProject.pipeline_stage, 'stage_locked', 'Pipeline stage must be stage_locked over wire');
+    assert.strictEqual(karimProject.internal_notes, null, 'Internal notes must be null over wire');
+    assert.strictEqual(karimProject.next_action, null, 'Next action must be null over wire');
+  });
+
+  test('Global Search matching logic finds teammate project and masks stage and value', () => {
+    const karimProject = eslamApiData.teamProjects.find(p => p.owner_id === 'u4');
+    const searchMatches = filterMatchingProjects(eslamApiData.teamProjects, salesUserEslam, karimProject.pr_number);
+    assert.strictEqual(searchMatches.length >= 1, true, 'Must find teammate project by PR number');
+
+    const rendered = renderProjectSearchResult(searchMatches[0], salesUserEslam, true);
+    assert.strictEqual(rendered.isAccessible, false);
+    assert.strictEqual(rendered.displayedValue, 'القيمة محجوبة');
+    assert.strictEqual(rendered.displayedStage, 'المرحلة محجوبة');
+    assert.strictEqual(rendered.isValueLocked, true);
+    assert.strictEqual(rendered.isStageLocked, true);
+    assert.strictEqual(rendered.badge, 'زميل آخر');
+  });
+
+  // -------------------------------------------------------------------------
   // Summary
   // -------------------------------------------------------------------------
   console.log('\n================================================================');
