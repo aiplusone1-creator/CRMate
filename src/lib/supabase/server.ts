@@ -37,6 +37,9 @@ export function createClient() {
         }
       },
     },
+    global: {
+      fetch: (url: any, options: any) => fetch(url, { ...options, cache: 'no-store' }),
+    },
   });
 }
 
@@ -57,6 +60,9 @@ export function createAdminClient() {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    global: {
+      fetch: (url: any, options: any) => fetch(url, { ...options, cache: 'no-store' }),
     },
   });
 }

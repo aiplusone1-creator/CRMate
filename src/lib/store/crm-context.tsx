@@ -731,13 +731,49 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     return INITIAL_TEAM_MEMBERS;
   });
 
-  const [currentUser, setCurrentUser] = useState<Profile>(INITIAL_TEAM_MEMBERS[0]);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [currentRole, setCurrentRole] = useState<UserRole>(INITIAL_TEAM_MEMBERS[0].role);
+  const [currentUser, setCurrentUser] = useState<Profile>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('crmate_auth_user');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.id) return parsed;
+        } catch (e) { /* fallback */ }
+      }
+    }
+    return INITIAL_TEAM_MEMBERS[1] || INITIAL_TEAM_MEMBERS[0];
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('crmate_is_authenticated') === 'true' || Boolean(localStorage.getItem('al_mespar_session'));
+    }
+    return false;
+  });
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('crmate_auth_user');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.role) return parsed.role;
+        } catch (e) { /* fallback */ }
+      }
+    }
+    return INITIAL_TEAM_MEMBERS[1]?.role || INITIAL_TEAM_MEMBERS[0].role;
+  });
   const [selectedSalesFilter, setSelectedSalesFilter] = useState<string>(() => {
-    return (INITIAL_TEAM_MEMBERS[0].role === 'sales_engineer' || (INITIAL_TEAM_MEMBERS[0].role as string) === 'sales_rep')
-      ? INITIAL_TEAM_MEMBERS[0].id
-      : 'all';
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('crmate_auth_user');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && (parsed.role === 'sales_engineer' || (parsed.role as string) === 'sales_rep')) {
+            return parsed.id;
+          }
+        } catch (e) { /* fallback */ }
+      }
+    }
+    return INITIAL_TEAM_MEMBERS[1]?.id || 'all';
   });
 
   // Sync currentRole and default sales filter when user changes
@@ -870,6 +906,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(member);
       setCurrentRole(member.role);
       setIsAuthenticated(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('crmate_auth_user', JSON.stringify(member));
+        localStorage.setItem('crmate_is_authenticated', 'true');
+      }
     } else if (devUser) {
       const profile: Profile = {
         id: devUser.id,
@@ -886,6 +926,10 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       setCurrentUser(profile);
       setCurrentRole(profile.role);
       setIsAuthenticated(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('crmate_auth_user', JSON.stringify(profile));
+        localStorage.setItem('crmate_is_authenticated', 'true');
+      }
     }
   };
 
@@ -1684,10 +1728,15 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         const d = res.data;
         if (d.profiles && d.profiles.length > 0) {
           setTeamMembers(d.profiles);
-          const currentMatch = d.profiles.find(p => p.id === currentUser.id);
+          const currentMatch = d.profiles.find(
+            p => p.id === currentUser.id || (currentUser.email && p.email.toLowerCase() === currentUser.email.toLowerCase())
+          );
           if (currentMatch) {
             setCurrentUser(currentMatch);
             setCurrentRole(currentMatch.role);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('crmate_auth_user', JSON.stringify(currentMatch));
+            }
           }
         }
         if (d.companies) setCompanies(d.companies);
@@ -1704,6 +1753,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
             };
           });
           setProjects(hydrated);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('al_mespar_projects', JSON.stringify(hydrated));
+            } catch (e) { /* ignore */ }
+          }
         }
         if (d.teamProjects) {
           const hydratedTeam = d.teamProjects.map(p => {
@@ -2068,70 +2122,80 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
 
   const updateProject = async (id: string, updates: Partial<Project>) => {
     crmService.updateProject(id, updates).catch(console.warn);
-    setProjects(prev => prev.map(p => {
-      if (p.id !== id) return p;
-      const stageChanged = Boolean(updates.pipeline_stage && updates.pipeline_stage !== p.pipeline_stage);
-      const stage_entered_at = stageChanged 
-        ? new Date().toISOString() 
-        : (updates.stage_entered_at || p.stage_entered_at || p.created_at);
+    setProjects(prev => {
+      const next = prev.map(p => {
+        if (p.id !== id) return p;
+        const stageChanged = Boolean(updates.pipeline_stage && updates.pipeline_stage !== p.pipeline_stage);
+        const stage_entered_at = stageChanged 
+          ? new Date().toISOString() 
+          : (updates.stage_entered_at || p.stage_entered_at || p.created_at);
 
-      // Handle Automatic Card Color based on Won / Lost / Return:
-      let newCardColor = updates.card_color ?? p.card_color;
-      let newBaseCardColor = updates.base_card_color ?? p.base_card_color;
-      const stageDefaults: Partial<Project> = {};
+        // Handle Automatic Card Color based on Won / Lost / Return:
+        let newCardColor = updates.card_color ?? p.card_color;
+        let newBaseCardColor = updates.base_card_color ?? p.base_card_color;
+        const stageDefaults: Partial<Project> = {};
 
-      if (stageChanged && updates.pipeline_stage) {
-        const targetStage = updates.pipeline_stage;
-        if (targetStage === 'won') {
-          // If entering Won from an active stage, preserve the active stage color as base_card_color
-          if (p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost') {
-            newBaseCardColor = (p.card_color && p.card_color !== 'emerald' && p.card_color !== 'rose') 
-              ? p.card_color 
-              : (p.base_card_color || 'default');
+        if (stageChanged && updates.pipeline_stage) {
+          const targetStage = updates.pipeline_stage;
+          if (targetStage === 'won') {
+            // If entering Won from an active stage, preserve the active stage color as base_card_color
+            if (p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost') {
+              newBaseCardColor = (p.card_color && p.card_color !== 'emerald' && p.card_color !== 'rose') 
+                ? p.card_color 
+                : (p.base_card_color || 'default');
+            }
+            newCardColor = 'emerald';
+          } else if (targetStage === 'lost') {
+            // If entering Lost from an active stage, preserve the active stage color as base_card_color
+            if (p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost') {
+              newBaseCardColor = (p.card_color && p.card_color !== 'emerald' && p.card_color !== 'rose') 
+                ? p.card_color 
+                : (p.base_card_color || 'default');
+            }
+            newCardColor = 'rose';
+          } else {
+            // Returning to any active/previous stage: restore original base card color!
+            newCardColor = newBaseCardColor || 'default';
           }
-          newCardColor = 'emerald';
-        } else if (targetStage === 'lost') {
-          // If entering Lost from an active stage, preserve the active stage color as base_card_color
-          if (p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost') {
-            newBaseCardColor = (p.card_color && p.card_color !== 'emerald' && p.card_color !== 'rose') 
-              ? p.card_color 
-              : (p.base_card_color || 'default');
+
+          // Stage specific workflow defaults upon stage advancement:
+          if (targetStage === 'rfq_processing') {
+            if (!p.rfq_packages && !updates.rfq_packages) stageDefaults.rfq_packages = 'both';
+          } else if (targetStage === 'technical_submission') {
+            if (!p.submittal_status && !updates.submittal_status) stageDefaults.submittal_status = 'under_approval';
+            if (!p.submittal_sent_at && !updates.submittal_sent_at) stageDefaults.submittal_sent_at = new Date().toISOString();
+          } else if (targetStage === 'negotiation') {
+            stageDefaults.submittal_status = 'approved';
+            if (!p.client_target_price && !updates.client_target_price) {
+              stageDefaults.client_target_price = Math.round((updates.estimated_value || p.estimated_value || 100000) * 0.92);
+            }
+            if (p.last_discount_pct === undefined && updates.last_discount_pct === undefined) {
+              stageDefaults.last_discount_pct = 8;
+            }
           }
-          newCardColor = 'rose';
-        } else {
-          // Returning to any active/previous stage: restore original base card color!
-          newCardColor = newBaseCardColor || 'default';
         }
 
-        // Stage specific workflow defaults upon stage advancement:
-        if (targetStage === 'rfq_processing') {
-          if (!p.rfq_packages && !updates.rfq_packages) stageDefaults.rfq_packages = 'both';
-        } else if (targetStage === 'technical_submission') {
-          if (!p.submittal_status && !updates.submittal_status) stageDefaults.submittal_status = 'under_approval';
-          if (!p.submittal_sent_at && !updates.submittal_sent_at) stageDefaults.submittal_sent_at = new Date().toISOString();
-        } else if (targetStage === 'negotiation') {
-          stageDefaults.submittal_status = 'approved';
-          if (!p.client_target_price && !updates.client_target_price) {
-            stageDefaults.client_target_price = Math.round((updates.estimated_value || p.estimated_value || 100000) * 0.92);
-          }
-          if (p.last_discount_pct === undefined && updates.last_discount_pct === undefined) {
-            stageDefaults.last_discount_pct = 8;
-          }
-        }
+        const updated = { 
+          ...p, 
+          ...stageDefaults,
+          ...updates, 
+          card_color: newCardColor,
+          base_card_color: newBaseCardColor,
+          stage_entered_at,
+          updated_at: new Date().toISOString() 
+        };
+        const { health, daysOverdue } = computeProjectHealth(updated);
+        return { ...updated, calculated_health: health, days_overdue: daysOverdue };
+      });
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('al_mespar_projects', JSON.stringify(next));
+        } catch (e) { /* ignore */ }
       }
 
-      const updated = { 
-        ...p, 
-        ...stageDefaults,
-        ...updates, 
-        card_color: newCardColor,
-        base_card_color: newBaseCardColor,
-        stage_entered_at,
-        updated_at: new Date().toISOString() 
-      };
-      const { health, daysOverdue } = computeProjectHealth(updated);
-      return { ...updated, calculated_health: health, days_overdue: daysOverdue };
-    }));
+      return next;
+    });
 
     // Bidirectional sync with contacts if contact_ids was updated:
     if (updates.contact_ids !== undefined) {

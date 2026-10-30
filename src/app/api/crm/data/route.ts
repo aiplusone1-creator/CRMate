@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { ProjectMember } from '@/types/crm';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
 export async function GET(req: Request) {
   const auth = await authenticateRequestAsync(req);
@@ -52,7 +54,7 @@ export async function GET(req: Request) {
 
     const approvalRequestsQuery = isManagerOrAdmin
       ? sb.from('approval_requests').select('*').order('created_at', { ascending: false })
-      : sb.from('approval_requests').select('*').or(`user_id.eq.${user.id},requested_by.eq.${user.id}`).order('created_at', { ascending: false });
+      : sb.from('approval_requests').select('*').eq('requested_by', user.id).order('created_at', { ascending: false });
 
     const notificationsQuery = isManagerOrAdmin
       ? sb.from('notifications').select('*').order('created_at', { ascending: false })

@@ -12,6 +12,7 @@ import {
   Profile,
   VIPItem 
 } from '@/types/crm';
+import { createClient } from '@/lib/supabase/client';
 
 export interface CRMDataSet {
   profiles: Profile[];
@@ -48,11 +49,25 @@ export const crmService = {
    */
   async fetchAllData(): Promise<FetchAllDataResult> {
     try {
-      const res = await fetch('/api/crm/data', {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      try {
+        const supabase = createClient();
+        if (supabase) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.access_token) {
+            headers['Authorization'] = `Bearer ${data.session.access_token}`;
+          }
+        }
+      } catch (e) {
+        // Fallback to cookie authentication
+      }
+
+      const res = await fetch(`/api/crm/data?t=${Date.now()}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers,
         cache: 'no-store'
       });
 
@@ -88,9 +103,25 @@ export const crmService = {
     payload?: { id?: string; data?: any }
   ): Promise<{ success: boolean; data?: T; error?: string }> {
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      try {
+        const supabase = createClient();
+        if (supabase) {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.access_token) {
+            headers['Authorization'] = `Bearer ${data.session.access_token}`;
+          }
+        }
+      } catch (e) {
+        // Fallback to cookie authentication
+      }
+
       const res = await fetch('/api/crm/mutate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           entity,
           action,

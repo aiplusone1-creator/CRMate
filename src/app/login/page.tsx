@@ -84,12 +84,21 @@ export default function LoginPage() {
           // Query profile to get the CRM internal user ID (u0, u1, u2, etc.)
           const { data: profile } = await supabase
             .from('profiles')
-            .select('id, role')
+            .select('id, role, full_name')
             .eq('email', supaData.user.email)
             .maybeSingle();
 
           if (profile) {
             authenticatedUserId = profile.id;
+            if (typeof window !== 'undefined') {
+              const profileToStore = {
+                id: profile.id,
+                email: supaData.user.email,
+                role: profile.role,
+                full_name: profile.full_name || supaData.user.user_metadata?.full_name || ''
+              };
+              localStorage.setItem('crmate_auth_user', JSON.stringify(profileToStore));
+            }
           } else {
             const localUser = authRepository.getUserByEmail(email.trim());
             if (localUser) authenticatedUserId = localUser.id;
