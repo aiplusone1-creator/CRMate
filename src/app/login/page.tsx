@@ -104,6 +104,9 @@ export default function LoginPage() {
       }
 
       if (authenticatedUserId) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('crmate_is_authenticated', 'true');
+        }
         switchUser(authenticatedUserId);
         if (requiresPasswordChange) {
           router.push('/change-password');

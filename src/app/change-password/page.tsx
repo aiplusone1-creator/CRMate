@@ -70,6 +70,10 @@ export default function ChangePasswordPage() {
           : 'Password successfully updated! Redirecting to CRM cockpit...'
       );
 
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('crmate_is_authenticated', 'true');
+      }
+
       setTimeout(() => {
         router.push('/');
         router.refresh();

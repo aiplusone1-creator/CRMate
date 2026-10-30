@@ -759,6 +759,27 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
         setIsAuthenticated(true);
       }
 
+      // Authoritative Supabase Auth session synchronization on mount
+      const supabase = createClient();
+      if (supabase) {
+        supabase.auth.getUser().then(({ data }) => {
+          if (data?.user) {
+            setIsAuthenticated(true);
+            localStorage.setItem('crmate_is_authenticated', 'true');
+            const userEmail = data.user.email?.toLowerCase();
+            if (userEmail) {
+              const matchedMember = teamMembers.find(m => m.email.toLowerCase() === userEmail) ||
+                INITIAL_TEAM_MEMBERS.find(m => m.email.toLowerCase() === userEmail);
+              if (matchedMember) {
+                setCurrentUser(matchedMember);
+                setCurrentRole(matchedMember.role);
+                localStorage.setItem('crmate_auth_user', JSON.stringify(matchedMember));
+              }
+            }
+          }
+        }).catch(() => {});
+      }
+
       const authUser = authRepository.getCurrentUser();
       if (authUser) {
         const profile: Profile = {
