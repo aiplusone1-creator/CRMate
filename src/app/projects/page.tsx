@@ -782,8 +782,8 @@ export default function ProjectsPage() {
           </h1>
           <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
             {isRTL 
-              ? `مسار المبيعات التفاعلي لمنطقة الغربية (${filteredProjects.length} مشروع مشمول في النطاق)` 
-              : `Visual sales pipeline for Al Mespar Western Region (${filteredProjects.length} projects in scope)`}
+              ? `مسار المبيعات التفاعلي لشركة المسبار (${filteredProjects.length} مشروع مشمول في النطاق)` 
+              : `Visual sales pipeline for Al Mespar (${filteredProjects.length} projects in scope)`}
           </p>
         </div>
 
