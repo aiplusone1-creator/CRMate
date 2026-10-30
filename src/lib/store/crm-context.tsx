@@ -687,6 +687,18 @@ export const INITIAL_TEAM_MEMBERS: Profile[] = [
     monthly_target_sar: 5000000,
     created_at: '2026-01-01',
     avatar_initials: 'ES'
+  },
+  {
+    id: 'u6',
+    email: 'm.radwan@almespar.com',
+    full_name: 'Mohamed Radwan',
+    title: 'Sales Manager',
+    role: 'sales_manager',
+    phone: '966559209983',
+    territory: 'Kingdom-Wide (KSA)',
+    monthly_target_sar: 1500000,
+    created_at: '2026-01-01',
+    avatar_initials: 'MR'
   }
 ];
 

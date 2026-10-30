@@ -77,5 +77,18 @@ export const SEEDED_USERS: User[] = [
     created_at: '2026-01-01T00:00:00.000Z',
     title: 'Senior Sales Engineer',
     territory: 'Saudi Arabia'
+  },
+  {
+    id: 'u6',
+    name: 'Mohamed Radwan',
+    name_ar: 'محمد رضوان',
+    email: 'm.radwan@almespar.com',
+    role: 'sales_manager',
+    phone: '966559209983',
+    avatar_color: '#0EA5E9',
+    is_active: true,
+    created_at: '2026-01-01T00:00:00.000Z',
+    title: 'Sales Manager',
+    territory: 'Kingdom-Wide (KSA)'
   }
 ];
