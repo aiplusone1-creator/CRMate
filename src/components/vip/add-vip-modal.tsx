@@ -386,9 +386,20 @@ export function AddVIPModal({
                 {isRTL ? 'رقم الهاتف / الجوال' : 'Phone Number'}
               </label>
               <input
-                type="text"
+                type="tel"
+                inputMode="numeric"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => {
+                  const converted = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+                  setPhone(converted.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, ''));
+                }}
+                onKeyDown={e => {
+                  if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+                  if (e.ctrlKey || e.metaKey) return;
+                  if (!/[\d+٠-٩]/.test(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
                 placeholder="05XXXXXXXX"
                 className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
               />

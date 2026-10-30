@@ -139,9 +139,20 @@ export function AddContactModal({ isOpen, onClose, defaultCompanyId }: AddContac
               <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Phone / WhatsApp</label>
               <input
                 type="tel"
+                inputMode="numeric"
                 placeholder="+966 50 123 4567"
                 value={phone}
-                onChange={e => setPhone(e.target.value)}
+                onChange={e => {
+                  const converted = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+                  setPhone(converted.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, ''));
+                }}
+                onKeyDown={e => {
+                  if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+                  if (e.ctrlKey || e.metaKey) return;
+                  if (!/[\d+٠-٩]/.test(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
                 className="w-full px-3.5 py-2.5 bg-white/90 dark:bg-[#141820] border border-slate-200/80 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#8FC2F0] focus:border-[#8FC2F0] font-mono font-bold text-slate-900 dark:text-white shadow-2xs"
               />
             </div>

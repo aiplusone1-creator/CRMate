@@ -714,9 +714,23 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
                           {isRTL ? 'رقم الجوال *' : 'Mobile / Phone *'}
                         </label>
                         <input 
-                          type="text" 
+                          type="tel"
+                          inputMode="numeric"
                           value={fastContactPhone} 
-                          onChange={e => setFastContactPhone(e.target.value)}
+                          onChange={e => {
+                            // Convert Eastern Arabic-Indic numerals (٠-٩) to standard digits (0-9)
+                            const converted = e.target.value.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+                            // Strictly allow only digits and optional leading '+'
+                            const numbersOnly = converted.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+                            setFastContactPhone(numbersOnly);
+                          }}
+                          onKeyDown={e => {
+                            if (['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+                            if (e.ctrlKey || e.metaKey) return;
+                            if (!/[\d+٠-٩]/.test(e.key)) {
+                              e.preventDefault();
+                            }
+                          }}
                           placeholder="9665XXXXXXXX"
                           className="w-full px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white font-mono text-xs"
                         />
