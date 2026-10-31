@@ -5,6 +5,7 @@ import { CRMProvider } from '@/lib/store/crm-context';
 import { Shell } from '@/components/layout/shell';
 import { LanguageProvider } from '@/lib/i18n/language-context';
 import { ThemeProvider } from '@/lib/theme/theme-context';
+import { PwaRegister } from '@/components/pwa/pwa-register';
 
 const urbanist = Urbanist({
   subsets: ['latin'],
@@ -38,15 +39,29 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  applicationName: 'CRMate',
   title: {
     default: 'CRMate — Intelligent Sales CRM',
     template: '%s | CRMate',
   },
   description: 'High-velocity sales management & pipeline intelligence for Al Mespar',
   manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'CRMate',
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
-    icon: '/icon',
-    apple: '/icon',
+    icon: [
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
   },
   openGraph: {
     title: 'CRMate — Intelligent Sales CRM',
@@ -64,6 +79,7 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning className={`${urbanist.variable} ${outfit.variable} ${cairo.variable}`}>
       <body suppressHydrationWarning className="font-sans antialiased text-[#292D32] dark:text-[#E8EDF4] bg-[#EFF3F8] dark:bg-[#141820] selection:bg-[#8FC2F0]/30 selection:text-[#292D32] dark:selection:text-white">
+        <PwaRegister />
         <ThemeProvider>
           <LanguageProvider>
             <CRMProvider>
