@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Urbanist, Cairo, Outfit } from 'next/font/google';
 import './globals.css';
 import { CRMProvider } from '@/lib/store/crm-context';
+import { PresenceProvider } from '@/lib/realtime/presence-context';
 import { Shell } from '@/components/layout/shell';
 import { LanguageProvider } from '@/lib/i18n/language-context';
 import { ThemeProvider } from '@/lib/theme/theme-context';
@@ -83,9 +84,11 @@ export default function RootLayout({
         <ThemeProvider>
           <LanguageProvider>
             <CRMProvider>
-              <Shell>
-                {children}
-              </Shell>
+              <PresenceProvider>
+                <Shell>
+                  {children}
+                </Shell>
+              </PresenceProvider>
             </CRMProvider>
           </LanguageProvider>
         </ThemeProvider>

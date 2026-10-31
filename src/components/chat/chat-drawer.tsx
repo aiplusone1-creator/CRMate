@@ -32,6 +32,7 @@ import {
   Share2
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
+import { usePresence } from '@/lib/realtime/presence-context';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { formatChatTime } from '@/lib/logic/chat';
 import { ChatConversation, ChatMessage, ChatProjectCard, ChatPlanTaskCard, ActivityChannel, VisitPurpose } from '@/types/crm';
@@ -39,6 +40,7 @@ import { ChatConversation, ChatMessage, ChatProjectCard, ChatPlanTaskCard, Activ
 export function ChatDrawer() {
   const router = useRouter();
   const { isRTL, t } = useLanguage();
+  const { isUserOnline } = usePresence();
   const {
     currentUser,
     teamMembers,
@@ -415,6 +417,7 @@ export function ChatDrawer() {
                 );
               } else {
                 const dmInfo = getDMInfo(conv);
+                const isOnline = isUserOnline(dmInfo.userId);
                 return (
                   <button
                     key={conv.id}
@@ -430,7 +433,12 @@ export function ChatDrawer() {
                         <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
                           {dmInfo.initials}
                         </div>
-                        <span className="absolute bottom-0 end-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#1E2328]" />
+                        <span 
+                          className={`absolute bottom-0 end-0 w-2 h-2 rounded-full ring-2 ring-white dark:ring-[#1E2328] transition-colors duration-200 ${
+                            isOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'
+                          }`}
+                          title={isOnline ? (isRTL ? 'متصل الآن' : 'Online') : (isRTL ? 'غير متصل' : 'Offline')}
+                        />
                       </div>
                       <div className="truncate">
                         <div className="flex items-center gap-1.5">
@@ -461,24 +469,34 @@ export function ChatDrawer() {
               {isRTL ? 'الزملاء في الفريق' : 'Team Members'}
             </p>
             <div className="flex gap-1 overflow-x-auto py-1">
-              {teamMembers.filter(t => t.id !== currentUser.id).map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => {
-                    const dm = getOrCreateDM(m.id);
-                    setActiveConversationId(dm.id);
-                  }}
-                  className="flex flex-col items-center p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-white/5 transition-colors shrink-0"
-                  title={`${m.full_name} (${m.territory || ''})`}
-                >
-                  <div className="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-[9px] font-bold flex items-center justify-center">
-                    {m.avatar_initials}
-                  </div>
-                  <span className="text-[9px] text-slate-500 dark:text-slate-400 max-w-[48px] truncate">
-                    {m.full_name.split(' ')[0]}
-                  </span>
-                </button>
-              ))}
+              {teamMembers.filter(t => t.id !== currentUser.id).map(m => {
+                const isOnline = isUserOnline(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      const dm = getOrCreateDM(m.id);
+                      setActiveConversationId(dm.id);
+                    }}
+                    className="flex flex-col items-center p-1 rounded-lg hover:bg-slate-200/60 dark:hover:bg-white/5 transition-colors shrink-0"
+                    title={`${m.full_name} (${isOnline ? (isRTL ? 'متصل الآن' : 'Online') : (isRTL ? 'غير متصل' : 'Offline')})`}
+                  >
+                    <div className="relative">
+                      <div className="w-6 h-6 rounded-full bg-slate-300 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-[9px] font-bold flex items-center justify-center">
+                        {m.avatar_initials}
+                      </div>
+                      <span
+                        className={`absolute bottom-0 end-0 w-2 h-2 rounded-full ring-1 ring-white dark:ring-[#1E2328] transition-colors duration-200 ${
+                          isOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'
+                        }`}
+                      />
+                    </div>
+                    <span className="text-[9px] text-slate-500 dark:text-slate-400 max-w-[48px] truncate">
+                      {m.full_name.split(' ')[0]}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -489,39 +507,61 @@ export function ChatDrawer() {
         <div className="flex-1 flex flex-col bg-white dark:bg-[#1A1F26] min-w-0">
           {/* Active Conversation Top Bar */}
           <div className="p-3.5 border-b border-slate-200 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-[#1E2328]/50">
-            {activeConversation ? (
-              <div className="flex items-center gap-3 min-w-0">
-                {activeConversation.type === 'channel' ? (
-                  <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                    <Hash className="w-5 h-5" />
-                  </div>
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                    {getDMInfo(activeConversation).initials}
-                  </div>
-                )}
+            {activeConversation ? (() => {
+              const activeDmInfo = activeConversation.type === 'direct' ? getDMInfo(activeConversation) : null;
+              const isActiveDmOnline = activeDmInfo ? isUserOnline(activeDmInfo.userId) : false;
 
-                <div className="truncate">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">
-                      {activeConversation.type === 'channel'
-                        ? (isRTL ? (activeConversation.name_ar || activeConversation.name) : (activeConversation.name || activeConversation.name_ar))
-                        : getDMInfo(activeConversation).name}
-                    </h3>
-                    {activeConversation.type === 'direct' && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
-                        {getDMInfo(activeConversation).territory || getDMInfo(activeConversation).role}
-                      </span>
-                    )}
+              return (
+                <div className="flex items-center gap-3 min-w-0">
+                  {activeConversation.type === 'channel' ? (
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                      <Hash className="w-5 h-5" />
+                    </div>
+                  ) : (
+                    <div className="relative shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-xs font-bold flex items-center justify-center">
+                        {activeDmInfo?.initials}
+                      </div>
+                      <span
+                        className={`absolute bottom-0 end-0 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-[#1E2328] transition-colors duration-200 ${
+                          isActiveDmOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'
+                        }`}
+                        title={isActiveDmOnline ? (isRTL ? 'متصل الآن' : 'Online') : (isRTL ? 'غير متصل' : 'Offline')}
+                      />
+                    </div>
+                  )}
+
+                  <div className="truncate">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                        {activeConversation.type === 'channel'
+                          ? (isRTL ? (activeConversation.name_ar || activeConversation.name) : (activeConversation.name || activeConversation.name_ar))
+                          : activeDmInfo?.name}
+                      </h3>
+                      {activeConversation.type === 'direct' && activeDmInfo && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">
+                          {activeDmInfo.territory || activeDmInfo.role}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {activeConversation.type === 'channel' ? (
+                        activeConversation.description || (isRTL ? 'قناة التنسيق الرسمية' : 'Official coordination channel')
+                      ) : (
+                        <span className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActiveDmOnline ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+                          <span className={isActiveDmOnline ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}>
+                            {isActiveDmOnline ? (isRTL ? 'متصل الآن' : 'Online') : (isRTL ? 'غير متصل' : 'Offline')}
+                          </span>
+                          <span className="text-slate-300 dark:text-slate-600">•</span>
+                          <span>{isRTL ? 'محادثة خاصة' : 'Direct Chat'}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                    {activeConversation.type === 'channel'
-                      ? activeConversation.description || (isRTL ? 'قناة التنسيق الرسمية' : 'Official coordination channel')
-                      : (isRTL ? 'محادثة خاصة مشفرة' : 'Direct encrypted chat')}
-                  </p>
                 </div>
-              </div>
-            ) : (
+              );
+            })() : (
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Share2 className="w-4 h-4" />
@@ -586,29 +626,47 @@ export function ChatDrawer() {
                     {isRTL ? '👥 الزملاء في الفريق' : 'Team Members'}
                   </span>
                   <div className="grid grid-cols-2 gap-2">
-                    {teamMembers.filter(m => m.id !== currentUser.id).map(m => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          const dm = getOrCreateDM(m.id);
-                          setActiveConversationId(dm.id);
-                        }}
-                        className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-blue-500 hover:bg-blue-50/60 dark:hover:bg-blue-950/30 flex items-center gap-2.5 transition-all cursor-pointer group text-start bg-slate-50/50 dark:bg-white/5"
-                      >
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {m.avatar_initials}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                            {m.full_name}
-                          </span>
-                          <span className="text-[10px] text-slate-400 truncate block">
-                            {m.territory || m.role}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
+                    {teamMembers.filter(m => m.id !== currentUser.id).map(m => {
+                      const isOnline = isUserOnline(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            const dm = getOrCreateDM(m.id);
+                            setActiveConversationId(dm.id);
+                          }}
+                          className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 hover:border-blue-500 hover:bg-blue-50/60 dark:hover:bg-blue-950/30 flex items-center gap-2.5 transition-all cursor-pointer group text-start bg-slate-50/50 dark:bg-white/5"
+                        >
+                          <div className="relative shrink-0">
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-[10px] font-bold flex items-center justify-center">
+                              {m.avatar_initials}
+                            </div>
+                            <span
+                              className={`absolute bottom-0 end-0 w-2 h-2 rounded-full ring-2 ring-white dark:ring-[#1E2328] transition-colors duration-200 ${
+                                isOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'
+                              }`}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                                {m.full_name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px]">
+                              <span className={isOnline ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-slate-400'}>
+                                {isOnline ? (isRTL ? 'متصل' : 'Online') : (isRTL ? 'غير متصل' : 'Offline')}
+                              </span>
+                              <span className="text-slate-300 dark:text-slate-600">•</span>
+                              <span className="text-slate-400 truncate">
+                                {m.territory || m.role}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -989,25 +1047,40 @@ export function ChatDrawer() {
                   {isRTL ? 'الإشارة لزميل في الفريق' : 'Mention Team Member'}
                 </div>
                 <div className="max-h-48 overflow-y-auto space-y-0.5">
-                  {teamMembers.map(member => (
-                    <button
-                      key={member.id}
-                      onClick={() => handleInsertMention(member)}
-                      className="w-full text-start p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 flex items-center gap-2 text-xs transition-colors"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
-                        {member.avatar_initials}
-                      </div>
-                      <div className="truncate">
-                        <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                          {member.full_name}
-                        </p>
-                        <p className="text-[10px] text-slate-400 truncate">
-                          {member.territory || member.role}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                  {teamMembers.map(member => {
+                    const isOnline = isUserOnline(member.id);
+                    return (
+                      <button
+                        key={member.id}
+                        onClick={() => handleInsertMention(member)}
+                        className="w-full text-start p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 flex items-center gap-2 text-xs transition-colors"
+                      >
+                        <div className="relative shrink-0">
+                          <div className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center">
+                            {member.avatar_initials}
+                          </div>
+                          <span
+                            className={`absolute bottom-0 end-0 w-1.5 h-1.5 rounded-full ring-1 ring-white dark:ring-[#1E2328] transition-colors duration-200 ${
+                              isOnline ? 'bg-emerald-500' : 'bg-slate-400 dark:bg-slate-600'
+                            }`}
+                          />
+                        </div>
+                        <div className="truncate min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                              {member.full_name}
+                            </p>
+                            <span className={`text-[9px] font-medium ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                              • {isOnline ? (isRTL ? 'متصل' : 'Online') : (isRTL ? 'غير متصل' : 'Offline')}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 truncate">
+                            {member.territory || member.role}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

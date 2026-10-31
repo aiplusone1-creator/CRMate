@@ -1,5 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr';
 
+let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
+
 export function isSupabaseConfigured(): boolean {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL && 
@@ -13,6 +15,13 @@ export function createClient() {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return null;
+  }
+
+  if (typeof window !== 'undefined') {
+    if (!clientInstance) {
+      clientInstance = createBrowserClient(supabaseUrl, supabaseAnonKey);
+    }
+    return clientInstance;
   }
 
   return createBrowserClient(supabaseUrl, supabaseAnonKey);
