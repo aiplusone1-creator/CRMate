@@ -149,15 +149,22 @@ export async function POST(req: Request) {
           }
 
           if (insertError && (insertError.message?.includes('consultant_id') || insertError.message?.includes('consultant_name'))) {
+            const cId = insertPayload.consultant_id;
+            const cName = insertPayload.consultant_name;
             delete insertPayload.consultant_id;
             delete insertPayload.consultant_name;
+            if (cId) {
+              const currentNotes = insertPayload.internal_notes || '';
+              const tag = `<!--CONSULTANT:${JSON.stringify({ id: cId, name: cName })}-->`;
+              insertPayload.internal_notes = (currentNotes + ' ' + tag).trim();
+            }
             const retryRes = await sb
               .from('projects')
               .insert(insertPayload)
               .select()
               .single();
             if (!retryRes.error && retryRes.data) {
-              inserted = { ...retryRes.data, consultant_id: payload.consultant_id, consultant_name: payload.consultant_name };
+              inserted = { ...retryRes.data, consultant_id: cId, consultant_name: cName };
               lastError = null;
               break;
             }
@@ -247,6 +254,28 @@ export async function POST(req: Request) {
 
         if (updateError && (updateError.message?.includes('consultant_id') || updateError.message?.includes('consultant_name'))) {
           const { consultant_id, consultant_name, ...cleanPayload } = payload;
+          
+          // Resilient storage fallback: Embed consultant in internal_notes so it is persisted in PostgreSQL
+          let existingNotes = cleanPayload.internal_notes;
+          if (existingNotes === undefined) {
+            const { data: cur } = await sb.from('projects').select('internal_notes').eq('id', targetId).maybeSingle();
+            existingNotes = cur?.internal_notes || '';
+          }
+          existingNotes = (existingNotes || '').replace(/\s*<!--CONSULTANT:[^>]+-->/g, '');
+          if (consultant_id) {
+            const tag = `<!--CONSULTANT:${JSON.stringify({ id: consultant_id, name: consultant_name })}-->`;
+            cleanPayload.internal_notes = (existingNotes + ' ' + tag).trim();
+          } else if (consultant_id === null) {
+            cleanPayload.internal_notes = existingNotes.trim() || null;
+          } else if (consultant_id === undefined && cleanPayload.internal_notes !== undefined) {
+            // Re-attach existing consultant tag if user updated notes without touching consultant
+            const { data: cur } = await sb.from('projects').select('internal_notes').eq('id', targetId).maybeSingle();
+            const curTag = cur?.internal_notes?.match(/<!--CONSULTANT:[^>]+-->/);
+            if (curTag) {
+              cleanPayload.internal_notes = (cleanPayload.internal_notes + ' ' + curTag[0]).trim();
+            }
+          }
+
           const retryRes = await sb
             .from('projects')
             .update(cleanPayload)

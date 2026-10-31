@@ -1788,12 +1788,26 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
               base_card_color: p.base_card_color || 'default'
             };
           });
-          setProjects(hydrated);
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem('al_mespar_projects', JSON.stringify(hydrated));
-            } catch (e) { /* ignore */ }
-          }
+          setProjects(prev => {
+            const merged = hydrated.map(hp => {
+              if (hp.consultant_id) return hp;
+              const prevMatch = prev.find(pr => pr.id === hp.id);
+              if (prevMatch?.consultant_id) {
+                return {
+                  ...hp,
+                  consultant_id: prevMatch.consultant_id,
+                  consultant_name: prevMatch.consultant_name
+                };
+              }
+              return hp;
+            });
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('al_mespar_projects', JSON.stringify(merged));
+              } catch (e) { /* ignore */ }
+            }
+            return merged;
+          });
         }
         if (d.teamProjects) {
           const hydratedTeam = d.teamProjects.map(p => {

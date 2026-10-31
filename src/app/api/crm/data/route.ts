@@ -120,10 +120,32 @@ export async function GET(req: Request) {
       }
     }
 
-    const rawAllProjects = (projectsRes.data || []).map((p: any) => ({
-      ...p,
-      members: membersByProject.get(p.id) || []
-    }));
+    const rawAllProjects = (projectsRes.data || []).map((p: any) => {
+      let consultant_id = p.consultant_id;
+      let consultant_name = p.consultant_name;
+
+      // Resilient fallback: If native column not yet present, extract from structured internal_notes tag
+      if (!consultant_id && p.internal_notes && p.internal_notes.includes('<!--CONSULTANT:')) {
+        const match = p.internal_notes.match(/<!--CONSULTANT:({[^>]+})-->/);
+        if (match) {
+          try {
+            const parsed = JSON.parse(match[1]);
+            consultant_id = parsed.id;
+            consultant_name = parsed.name;
+          } catch (e) { /* ignore parse error */ }
+        }
+      }
+
+      const cleanNotes = p.internal_notes ? p.internal_notes.replace(/\s*<!--CONSULTANT:[^>]+-->/g, '').trim() || null : null;
+
+      return {
+        ...p,
+        consultant_id: consultant_id || undefined,
+        consultant_name: consultant_name || undefined,
+        internal_notes: cleanNotes,
+        members: membersByProject.get(p.id) || []
+      };
+    });
 
     // Scoped projects for pipeline operations:
     // Managers & Admins receive all team projects (113).
