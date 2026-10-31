@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { VIPItem, VIPStatus, VIPPriority } from '@/types/crm';
 import { useLanguage } from '@/lib/i18n/language-context';
+import { formatTelUri } from '@/lib/utils';
 
 interface VIPTableViewProps {
   items: VIPItem[];
@@ -154,7 +155,7 @@ export function VIPTableView({
                     <div className="space-y-0.5">
                       {item.phone && (
                         <div>
-                          <a href={`tel:${item.phone}`} className="text-blue-600 dark:text-blue-400 hover:underline font-mono text-[11px]">
+                          <a href={`tel:${formatTelUri(item.phone)}`} className="text-blue-600 dark:text-blue-400 hover:underline font-mono text-[11px]">
                             {item.phone}
                           </a>
                         </div>

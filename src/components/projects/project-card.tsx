@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Project, OpportunityType, RFQPackage, SubmittalStatus } from '@/types/crm';
 import { PIPELINE_STAGES, PROJECT_CARD_COLORS } from '@/lib/constants';
-import { formatCurrencySAR, formatDateString, normalizePhoneNumber } from '@/lib/utils';
+import { formatCurrencySAR, formatDateString, normalizePhoneNumber, formatTelUri } from '@/lib/utils';
 import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 import { getStageAgingInfo } from '@/lib/logic/pipeline-analytics';
 import { useCRM } from '@/lib/store/crm-context';
@@ -829,7 +829,7 @@ export const ProjectCard = React.memo(function ProjectCard({
               )}
               {project.primary_contact_phone && (
                 <a
-                  href={`tel:${project.primary_contact_phone}`}
+                  href={`tel:${formatTelUri(project.primary_contact_phone)}`}
                   draggable={false}
                   onMouseDown={(e) => e.stopPropagation()}
                   className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-xs"

@@ -50,7 +50,7 @@ import {
 import { useCRM } from '@/lib/store/crm-context';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { PIPELINE_STAGES, OPPORTUNITY_TYPES, canEditCommercialValue } from '@/lib/constants';
-import { formatCurrencySAR, formatDateString, normalizePhoneNumber } from '@/lib/utils';
+import { formatCurrencySAR, formatDateString, normalizePhoneNumber, formatTelUri } from '@/lib/utils';
 import { PipelineStage, Quotation, RFQPackage, SubmittalStatus } from '@/types/crm';
 import { getStageAgingInfo } from '@/lib/logic/pipeline-analytics';
 import { QuotationManager } from '@/components/quotations/quotation-manager';
@@ -1153,7 +1153,7 @@ export default function ProjectDetailPage() {
                       <div className="flex items-center gap-2 pt-2.5 mt-2 border-t border-slate-200/50 dark:border-slate-700/50">
                         {cntCleanPhone && (
                           <a
-                            href={`tel:${cntCleanPhone}`}
+                            href={`tel:${formatTelUri(cntCleanPhone)}`}
                             className="flex-1 py-1.5 px-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-xl flex items-center justify-center gap-1 border border-slate-200 dark:border-slate-700 transition-colors shadow-2xs"
                             title={`${isRTL ? 'اتصال بـ' : 'Call'} ${cnt.full_name}`}
                           >

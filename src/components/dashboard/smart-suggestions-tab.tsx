@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { useLanguage } from '@/lib/i18n/language-context';
-import { formatCurrencySAR, formatDateString } from '@/lib/utils';
+import { formatCurrencySAR, formatDateString, formatTelUri } from '@/lib/utils';
 import { Project } from '@/types/crm';
 
 export type SuggestionCategory = 'all' | 'accelerators' | 'risks' | 'quotations' | 'hunting';
@@ -323,7 +323,7 @@ export function SmartSuggestionsTab() {
                   <div className="flex items-center gap-2">
                     {item.phone && (
                       <a
-                        href={`tel:${item.phone}`}
+                        href={`tel:${formatTelUri(item.phone)}`}
                         className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-[#0284C7] hover:text-white dark:hover:bg-[#38BDF8] dark:hover:text-slate-900 transition-colors"
                         title={isRTL ? 'اتصال مباشر' : 'Call'}
                       >

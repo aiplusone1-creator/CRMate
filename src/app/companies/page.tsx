@@ -25,7 +25,7 @@ import { Company, CompanyType } from '@/types/crm';
 import { CompanyDetailModal } from '@/components/modals/company-detail-modal';
 import { AddProjectModal } from '@/components/modals/add-project-modal';
 import { AddContactModal } from '@/components/modals/add-contact-modal';
-import { formatCurrencySAR, normalizePhoneNumber } from '@/lib/utils';
+import { formatCurrencySAR, normalizePhoneNumber, formatTelUri } from '@/lib/utils';
 import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
@@ -564,7 +564,7 @@ export default function CompaniesPage() {
                           )}
                           {primaryCleanPhone && (
                             <a
-                              href={`tel:${primaryContact.phone}`}
+                              href={`tel:${formatTelUri(primaryContact.phone)}`}
                               className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-xs"
                               title={`Call ${primaryContact.full_name}`}
                             >

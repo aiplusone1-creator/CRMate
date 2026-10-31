@@ -27,7 +27,7 @@ import {
 import { Company } from '@/types/crm';
 import { useCRM } from '@/lib/store/crm-context';
 import { COMPANY_TYPES, PIPELINE_STAGES, PROJECT_PRIORITIES } from '@/lib/constants';
-import { formatCurrencySAR, formatDateString, normalizePhoneNumber } from '@/lib/utils';
+import { formatCurrencySAR, formatDateString, normalizePhoneNumber, formatTelUri } from '@/lib/utils';
 import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
 
 interface CompanyDetailModalProps {
@@ -667,7 +667,7 @@ export function CompanyDetailModal({
 
                           {cleanPhone && (
                             <a
-                              href={`tel:${cnt.phone}`}
+                              href={`tel:${formatTelUri(cnt.phone)}`}
                               className="inline-flex items-center justify-center gap-1 py-2 px-3 rounded-xl text-xs font-bold text-[#292D32] bg-slate-100 hover:bg-slate-200 transition-colors"
                               title={`Call ${cnt.full_name}`}
                             >

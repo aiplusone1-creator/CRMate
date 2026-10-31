@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
 import { useLanguage } from '@/lib/i18n/language-context';
-import { formatCurrencySAR } from '@/lib/utils';
+import { formatCurrencySAR, formatTelUri } from '@/lib/utils';
 import { Project } from '@/types/crm';
 
 export interface ActionableItem {
@@ -559,7 +559,7 @@ export function PriorityActionsWidget({ cardSpan = 12 }: PriorityActionsWidgetPr
                     <div className="flex items-center gap-2 shrink-0">
                       {item.phone && (
                         <a
-                          href={`tel:${item.phone}`}
+                          href={`tel:${formatTelUri(item.phone)}`}
                           className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-2xs"
                           title={isRTL ? `اتصال بـ ${item.contactName || ''}` : `Call ${item.contactName || ''}`}
                         >

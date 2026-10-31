@@ -72,6 +72,20 @@ export function formatDisplayPhone(phone: string | null | undefined): string {
   return phone;
 }
 
+/**
+ * Returns an international RFC 3966 telephone URI string (e.g. "+966559209983")
+ * ensuring the leading '+' symbol is always preserved for phone dialers.
+ */
+export function formatTelUri(phone: string | null | undefined): string {
+  if (!phone) return "";
+  const normalized = normalizePhoneNumber(phone);
+  if (normalized) {
+    return `+${normalized}`;
+  }
+  const rawClean = phone.replace(/[^0-9+]/g, '');
+  return rawClean.startsWith('+') ? rawClean : `+${rawClean}`;
+}
+
 import type { Project, ProjectHealth } from "@/types/crm";
 
 export function computeProjectHealth(project: Project): { health: ProjectHealth; daysOverdue: number } {

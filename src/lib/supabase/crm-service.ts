@@ -434,5 +434,21 @@ export const crmService = {
   async fetchVIPItems(): Promise<VIPItem[] | null> {
     const all = await this.fetchAllData();
     return all.success ? (all.data.vipItems || []) : null;
+  },
+
+  // ==========================================
+  // NOTIFICATIONS
+  // ==========================================
+  async markNotificationRead(id: string): Promise<boolean> {
+    const res = await this.mutate('notifications', 'update', { id, data: { is_read: true } });
+    return res.success;
+  },
+
+  async markAllNotificationsRead(ids?: string[]): Promise<boolean> {
+    const res = await this.mutate('notifications', 'update', { 
+      id: 'mark_all_read', 
+      data: { is_read: true, ids } 
+    });
+    return res.success;
   }
 };

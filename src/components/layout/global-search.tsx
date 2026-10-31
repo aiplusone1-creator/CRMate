@@ -130,22 +130,28 @@ export function GlobalSearch() {
 
   // Combine results into a flat list for keyboard navigation
   const flatResults = useMemo(() => {
-    const items: Array<{ type: 'project' | 'company' | 'contact'; id: string; url: string }> = [];
-    matchingProjects.forEach(p => items.push({ type: 'project', id: p.id, url: `/projects/${p.id}` }));
-    matchingCompanies.forEach(c => items.push({ type: 'company', id: c.id, url: `/companies?id=${c.id}` }));
-    matchingContacts.forEach(c => items.push({ type: 'contact', id: c.id, url: `/contacts?id=${c.id}` }));
+    const items: Array<{ type: 'project' | 'company' | 'contact'; id: string; url: string; title?: string }> = [];
+    matchingProjects.forEach(p => items.push({ type: 'project', id: p.id, url: `/projects/${p.id}`, title: p.name }));
+    matchingCompanies.forEach(c => items.push({ type: 'company', id: c.id, url: `/companies?id=${c.id}`, title: c.name }));
+    matchingContacts.forEach(c => items.push({ 
+      type: 'contact', 
+      id: c.id, 
+      url: `/contacts?search=${encodeURIComponent(c.full_name)}`,
+      title: c.full_name 
+    }));
     return items;
   }, [matchingProjects, matchingCompanies, matchingContacts]);
 
   const totalResultsCount = matchingProjects.length + matchingCompanies.length + matchingContacts.length;
 
-  const handleSelectResult = (url: string, type?: 'project' | 'company' | 'contact', id?: string) => {
+  const handleSelectResult = (url: string, type?: 'project' | 'company' | 'contact', id?: string, title?: string) => {
     setIsOpen(false);
     setQuery('');
     if (type === 'company' && id && typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('crm:open-company', { detail: { id } }));
-    } else if (type === 'contact' && id && typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('crm:open-contact', { detail: { id } }));
+    } else if (type === 'contact' && typeof window !== 'undefined') {
+      const searchTerm = title || '';
+      window.dispatchEvent(new CustomEvent('crm:search-contact', { detail: { search: searchTerm } }));
     }
     router.push(url);
   };
@@ -164,10 +170,10 @@ export function GlobalSearch() {
       e.preventDefault();
       if (selectedIndex >= 0 && selectedIndex < flatResults.length) {
         const item = flatResults[selectedIndex];
-        handleSelectResult(item.url, item.type, item.id);
+        handleSelectResult(item.url, item.type, item.id, item.title);
       } else if (flatResults.length > 0) {
         const item = flatResults[0];
-        handleSelectResult(item.url, item.type, item.id);
+        handleSelectResult(item.url, item.type, item.id, item.title);
       }
     }
   };
@@ -384,7 +390,7 @@ export function GlobalSearch() {
                         return (
                           <button
                             key={ct.id}
-                            onClick={() => handleSelectResult(`/contacts?id=${ct.id}`, 'contact', ct.id)}
+                            onClick={() => handleSelectResult(`/contacts?search=${encodeURIComponent(ct.full_name)}`, 'contact', ct.id, ct.full_name)}
                             className={`w-full ${isRTL ? 'text-right' : 'text-left'} p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${
                               isSelected 
                                 ? 'bg-purple-50/80 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/40' 

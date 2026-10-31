@@ -465,6 +465,18 @@ export function Header() {
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {badgeCount > 0 && (
+                      <button
+                        onClick={() => {
+                          const allUnreadIds = myNotifications.filter(n => !n.is_read).map(n => n.id);
+                          markAllNotificationsRead(allUnreadIds);
+                        }}
+                        className="text-[11px] bg-white/15 hover:bg-white/25 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
+                        title={isRTL ? 'تحديد كافة الإشعارات كمقروءة' : 'Mark all notifications as read'}
+                      >
+                        {isRTL ? 'تحديد الكل كمقروء' : 'Mark all read'}
+                      </button>
+                    )}
                     {notifTab === 'reminders' && (
                       <button
                         onClick={() => {
@@ -475,16 +487,6 @@ export function Header() {
                         title={isRTL ? 'إضافة تذكير جديد' : 'Add reminder'}
                       >
                         + {isRTL ? 'إضافة' : 'Add'}
-                      </button>
-                    )}
-                    {notifTab === 'approvals' && unreadApprovalCount > 0 && (
-                      <button
-                        onClick={() => {
-                          approvalNotifs.filter(n => !n.is_read).forEach(n => markNotificationRead(n.id));
-                        }}
-                        className="text-[11px] bg-white/15 hover:bg-white/25 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
-                      >
-                        {isRTL ? 'تحديد كـ مقروء' : 'Mark all read'}
                       </button>
                     )}
                     {notifTab === 'reminders' && (
@@ -499,27 +501,7 @@ export function Header() {
                           <CheckCircle2 className="w-3 h-3" />
                           <span>{isRTL ? 'إنجاز الكل' : 'Complete All'}</span>
                         </button>
-                        {unreadReminderCount > 0 && (
-                          <button
-                            onClick={() => {
-                              reminderNotifs.filter(n => !n.is_read).forEach(n => markNotificationRead(n.id));
-                            }}
-                            className="text-[11px] bg-white/15 hover:bg-white/25 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
-                          >
-                            {isRTL ? 'تحديد كـ مقروء' : 'Mark read'}
-                          </button>
-                        )}
                       </div>
-                    )}
-                    {notifTab === 'system' && unreadSystemCount > 0 && (
-                      <button
-                        onClick={() => {
-                          systemNotifs.filter(n => !n.is_read).forEach(n => markNotificationRead(n.id));
-                        }}
-                        className="text-[11px] bg-white/15 hover:bg-white/25 px-2 py-0.5 rounded-md font-semibold transition-colors cursor-pointer"
-                      >
-                        {isRTL ? 'تحديد كـ مقروء' : 'Mark all read'}
-                      </button>
                     )}
                   </div>
                 </div>

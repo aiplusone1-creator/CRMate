@@ -190,7 +190,7 @@ interface CRMContextType {
   // Notifications
   notifications: AppNotification[];
   markNotificationRead: (id: string) => void;
-  markAllNotificationsRead: () => void;
+  markAllNotificationsRead: (ids?: string[]) => void;
   // Interactive Module Guide System
   isGuideOpen: boolean;
   activeGuideModuleId: string | null;
@@ -1717,13 +1717,19 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
   };
 
   const markNotificationRead = (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
     markNotificationAsRead(id);
-    setNotifications(getAllNotifications());
+    crmService.markNotificationRead(id).catch(console.warn);
   };
 
-  const markAllNotificationsRead = () => {
-    markAllNotificationsAsRead(currentUser.id);
-    setNotifications(getAllNotifications());
+  const markAllNotificationsRead = (ids?: string[]) => {
+    setNotifications(prev => prev.map(n => (!ids || ids.includes(n.id)) ? { ...n, is_read: true } : n));
+    if (ids && ids.length > 0) {
+      ids.forEach(id => markNotificationAsRead(id));
+    } else {
+      markAllNotificationsAsRead(currentUser.id);
+    }
+    crmService.markAllNotificationsRead(ids).catch(console.warn);
   };
   // --- End Approval Requests System State ---
 

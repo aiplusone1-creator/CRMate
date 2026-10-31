@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Users, 
   Plus, 
@@ -24,7 +25,7 @@ import {
 import { useCRM } from '@/lib/store/crm-context';
 import { SAUDI_LOCATIONS } from '@/lib/constants';
 import { Contact } from '@/types/crm';
-import { formatDateString, normalizePhoneNumber, formatDisplayPhone } from '@/lib/utils';
+import { formatDateString, normalizePhoneNumber, formatDisplayPhone, formatTelUri } from '@/lib/utils';
 import { WhatsAppComposerModal } from '@/components/modals/whatsapp-composer-modal';
 import { useLanguage } from '@/lib/i18n/language-context';
 export default function ContactsPage() {
@@ -117,11 +118,14 @@ export default function ContactsPage() {
         return;
       }
       const q = searchParams.get('search');
-      if (q) setSearchTerm(q);
+      if (q) {
+        setSearchTerm(decodeURIComponent(q));
+        setIsModalOpen(false);
+      }
     }
-  }, [openContactById]);
+  }, [openContactById, setSearchTerm]);
 
-  // Listen to instantaneous custom open event from global search
+  // Listen to instantaneous custom open/search event from global search
   React.useEffect(() => {
     const handler = (e: any) => {
       const id = e?.detail?.id;
@@ -129,9 +133,20 @@ export default function ContactsPage() {
         openContactById(id);
       }
     };
+    const searchHandler = (e: any) => {
+      const s = e?.detail?.search;
+      if (typeof s === 'string') {
+        setSearchTerm(s);
+        setIsModalOpen(false);
+      }
+    };
     window.addEventListener('crm:open-contact', handler);
-    return () => window.removeEventListener('crm:open-contact', handler);
-  }, [openContactById]);
+    window.addEventListener('crm:search-contact', searchHandler);
+    return () => {
+      window.removeEventListener('crm:open-contact', handler);
+      window.removeEventListener('crm:search-contact', searchHandler);
+    };
+  }, [openContactById, setSearchTerm]);
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -498,14 +513,17 @@ export default function ContactsPage() {
                             <div className="flex items-center gap-1.5">
                               <span className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">{displayPhone}</span>
                               <a
-                                href={`tel:${cleanPhone || rawPhone}`}
+                                href={`tel:${formatTelUri(rawPhone)}`}
                                 className="p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/50 text-blue-600 dark:text-[#8FC2F0] transition-colors"
                                 title={isRTL ? 'اتصال مباشر' : 'Call'}
                               >
                                 <Phone className="w-3.5 h-3.5" />
                               </a>
                               <button
-                                onClick={() => setSelectedContactForWhatsApp(cnt)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedContactForWhatsApp(cnt);
+                                }}
                                 className="p-1 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-emerald-600 transition-colors cursor-pointer"
                                 title={isRTL ? 'مراسلة واتساب' : 'WhatsApp'}
                               >
@@ -717,7 +735,7 @@ export default function ContactsPage() {
                       <>
                         {/* Call Button */}
                         <a
-                          href={`tel:${cleanPhone || rawPhone}`}
+                          href={`tel:${formatTelUri(rawPhone)}`}
                           className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-4 bg-[#292D32] hover:bg-black dark:bg-[#8FC2F0] dark:text-[#292D32] text-white text-xs font-bold rounded-full shadow-xs transition-all active:scale-[0.98]"
                           title={`${isRTL ? 'اتصال بـ' : 'Call'} ${cnt.full_name} (${displayPhone})`}
                         >
@@ -728,7 +746,10 @@ export default function ContactsPage() {
                         {/* WhatsApp Button */}
                         {cleanPhone && (
                           <button
-                            onClick={() => setSelectedContactForWhatsApp(cnt)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedContactForWhatsApp(cnt);
+                            }}
                             className="inline-flex items-center justify-center gap-1.5 py-2 px-4 bg-[#15803D] hover:bg-[#166534] text-white text-xs font-bold rounded-full shadow-xs transition-all shrink-0 active:scale-[0.98] cursor-pointer"
                             title={`${isRTL ? 'مراسلة واتساب لـ' : 'Compose WhatsApp message to'} ${cnt.full_name}`}
                           >
@@ -785,8 +806,8 @@ export default function ContactsPage() {
       )}
 
       {/* Create / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-50">
+      {isModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 z-[9999]">
           <div className="bg-white dark:bg-[#1C2130] rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 dark:border-[#8FC2F0]/15 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-4 py-3.5 sm:px-6 sm:py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#232A38] shrink-0">
               <h2 className="font-bold text-slate-900 dark:text-white text-base sm:text-lg">
@@ -989,7 +1010,8 @@ export default function ContactsPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* WhatsApp B2B Quick Composer Modal */}

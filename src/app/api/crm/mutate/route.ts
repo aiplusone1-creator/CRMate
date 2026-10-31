@@ -17,7 +17,8 @@ type AllowedEntity =
   | 'approval_requests'
   | 'sales_targets'
   | 'profiles'
-  | 'vip_items';
+  | 'vip_items'
+  | 'notifications';
 
 type AllowedAction = 'insert' | 'update' | 'delete' | 'archive' | 'restore';
 
@@ -703,6 +704,70 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: delErr.message || 'Failed to delete VIP item from remote database' }, { status: 500 });
         }
         return NextResponse.json({ success: true, id: targetId });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 12. NOTIFICATIONS
+    // -------------------------------------------------------------
+    if (entity === 'notifications') {
+      if (action === 'update') {
+        const isMarkAll = id === 'mark_all_read' || id === 'all';
+        if (isMarkAll) {
+          const ids = Array.isArray(data?.ids) ? data.ids : [];
+          if (ids.length > 0) {
+            const { error: batchErr } = await sb
+              .from('notifications')
+              .update({ is_read: true })
+              .in('id', ids);
+
+            if (batchErr) {
+              console.error('[CRM Mutate] Failed to mark notifications as read by IDs:', batchErr);
+              return NextResponse.json({ error: 'Failed to update notifications', details: batchErr.message }, { status: 500 });
+            }
+          } else {
+            let q = sb.from('notifications').update({ is_read: true });
+            if (!isManagerOrAdmin) {
+              q = q.or(`user_id.eq.${user.id},user_id.is.null`);
+            }
+            const { error: allErr } = await q;
+            if (allErr) {
+              console.error('[CRM Mutate] Failed to mark all notifications as read:', allErr);
+              return NextResponse.json({ error: 'Failed to update notifications', details: allErr.message }, { status: 500 });
+            }
+          }
+
+          return NextResponse.json({ success: true, message: 'All notifications marked as read' });
+        }
+
+        if (!id) {
+          return NextResponse.json({ error: 'Notification ID required', code: 'MISSING_ID' }, { status: 400 });
+        }
+
+        const { data: updatedNotif, error: notifErr } = await sb
+          .from('notifications')
+          .update({ is_read: data?.is_read ?? true })
+          .eq('id', id)
+          .select()
+          .maybeSingle();
+
+        if (notifErr) {
+          console.error('[CRM Mutate] Failed to mark notification as read:', notifErr);
+          return NextResponse.json({ error: 'Failed to update notification', details: notifErr.message }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true, data: updatedNotif });
+      }
+
+      if (action === 'delete') {
+        if (!id) {
+          return NextResponse.json({ error: 'Notification ID required', code: 'MISSING_ID' }, { status: 400 });
+        }
+        const { error: delErr } = await sb.from('notifications').delete().eq('id', id);
+        if (delErr) {
+          return NextResponse.json({ error: 'Failed to delete notification', details: delErr.message }, { status: 500 });
+        }
+        return NextResponse.json({ success: true });
       }
     }
 

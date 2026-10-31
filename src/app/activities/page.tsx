@@ -50,7 +50,7 @@ import {
   Activity,
   VisitPurpose 
 } from '@/types/crm';
-import { formatDateString, normalizePhoneNumber, getSaturdayOfWeek, getTodayDateStr } from '@/lib/utils';
+import { formatDateString, normalizePhoneNumber, formatTelUri, getSaturdayOfWeek, getTodayDateStr } from '@/lib/utils';
 import { AddActivityModal } from '@/components/modals/add-activity-modal';
 import { EditActivityModal } from '@/components/modals/edit-activity-modal';
 import { VoiceActivityModal } from '@/components/activities/voice-activity-modal';
@@ -776,7 +776,7 @@ export default function ActivitiesPage() {
                               )}
                               {cleanPhone && (
                                 <a
-                                  href={`tel:${cleanPhone}`}
+                                  href={`tel:${formatTelUri(cleanPhone)}`}
                                   className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-2xs"
                                   title="Call Contact"
                                 >

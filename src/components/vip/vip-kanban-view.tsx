@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { VIPItem, VIPStatus, VIPPriority } from '@/types/crm';
 import { useLanguage } from '@/lib/i18n/language-context';
+import { formatTelUri } from '@/lib/utils';
 
 interface VIPKanbanViewProps {
   items: VIPItem[];
@@ -139,7 +140,7 @@ export function VIPKanbanView({
                         {item.phone && (
                           <div className="flex items-center gap-1.5">
                             <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <a href={`tel:${item.phone}`} className="hover:underline text-blue-600 dark:text-blue-400 font-mono">
+                            <a href={`tel:${formatTelUri(item.phone)}`} className="hover:underline text-blue-600 dark:text-blue-400 font-mono">
                               {item.phone}
                             </a>
                           </div>
