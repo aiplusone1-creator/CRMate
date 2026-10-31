@@ -148,6 +148,21 @@ export async function POST(req: Request) {
             break;
           }
 
+          if (insertError && (insertError.message?.includes('consultant_id') || insertError.message?.includes('consultant_name'))) {
+            delete insertPayload.consultant_id;
+            delete insertPayload.consultant_name;
+            const retryRes = await sb
+              .from('projects')
+              .insert(insertPayload)
+              .select()
+              .single();
+            if (!retryRes.error && retryRes.data) {
+              inserted = { ...retryRes.data, consultant_id: payload.consultant_id, consultant_name: payload.consultant_name };
+              lastError = null;
+              break;
+            }
+          }
+
           lastError = insertError;
           const isPrConflict = insertError?.code === '23505' || 
             insertError?.message?.toLowerCase().includes('pr_number') ||
@@ -223,12 +238,26 @@ export async function POST(req: Request) {
         const { calculated_health, days_overdue, members, id: _omitId, pr_number: _omitPr, weighted_value: _omitWv, ...payload } = data || {};
         payload.updated_at = new Date().toISOString();
 
-        const { data: updated, error: updateError } = await sb
+        let { data: updated, error: updateError } = await sb
           .from('projects')
           .update(payload)
           .eq('id', targetId)
           .select()
           .single();
+
+        if (updateError && (updateError.message?.includes('consultant_id') || updateError.message?.includes('consultant_name'))) {
+          const { consultant_id, consultant_name, ...cleanPayload } = payload;
+          const retryRes = await sb
+            .from('projects')
+            .update(cleanPayload)
+            .eq('id', targetId)
+            .select()
+            .single();
+          if (!retryRes.error && retryRes.data) {
+            updated = { ...retryRes.data, consultant_id, consultant_name };
+            updateError = null;
+          }
+        }
 
         if (updateError) {
           console.error('Project update error:', updateError);

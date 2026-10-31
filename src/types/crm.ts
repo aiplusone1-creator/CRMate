@@ -183,6 +183,8 @@ export interface Project {
   name: string;
   company_id: string;
   company_name?: string;
+  consultant_id?: string;
+  consultant_name?: string;
   primary_contact_id?: string;
   primary_contact_name?: string;
   primary_contact_phone?: string;

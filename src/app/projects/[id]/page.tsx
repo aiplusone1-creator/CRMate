@@ -61,6 +61,7 @@ import { QuotationPrintModal } from '@/components/modals/quotation-print-modal';
 import { LostReasonModal } from '@/components/modals/lost-reason-modal';
 import { WonCelebrationModal } from '@/components/modals/won-celebration-modal';
 import { ArchiveProjectModal } from '@/components/modals/archive-project-modal';
+import { AssignConsultantModal } from '@/components/modals/assign-consultant-modal';
 import { POCollectionManager } from '@/components/projects/po-collection-manager';
 import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
 import { ProjectSystemsMultiSelect } from '@/components/projects/project-systems-select';
@@ -113,6 +114,7 @@ export default function ProjectDetailPage() {
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [isAssignConsultantOpen, setIsAssignConsultantOpen] = useState(false);
 
   // Referral states
   const [isReferModalOpen, setIsReferModalOpen] = useState(false);
@@ -533,6 +535,29 @@ export default function ProjectDetailPage() {
                 <Building2 className="w-4 h-4 text-blue-500" />
                 <span>{project.company_name}</span>
               </span>
+
+              {/* Consultant Tag / Add Consultant Button */}
+              {project.consultant_name ? (
+                <button
+                  type="button"
+                  onClick={() => setIsAssignConsultantOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-bold hover:bg-purple-100 dark:hover:bg-purple-900/60 transition-colors cursor-pointer text-xs shadow-2xs"
+                  title={isRTL ? 'تغيير استشاري المشروع' : 'Change Project Consultant'}
+                >
+                  <Building2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                  <span>{isRTL ? `الاستشاري: ${project.consultant_name}` : `Consultant: ${project.consultant_name}`}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsAssignConsultantOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-dashed border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 font-bold transition-colors cursor-pointer text-xs shadow-2xs"
+                  title={isRTL ? 'تعيين استشاري لهذا المشروع' : 'Add consultant for this project'}
+                >
+                  <Plus className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                  <span>{isRTL ? 'إضافة استشاري للمشروع' : 'Add consultant for this project'}</span>
+                </button>
+              )}
               <span className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                 <span>{project.location}</span>
@@ -641,6 +666,17 @@ export default function ProjectDetailPage() {
                         >
                           <ShieldCheck className="w-4 h-4 text-amber-600" />
                           <span>{isRTL ? 'طلب موافقة (خصم / عرض)' : 'Request Approval'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setIsActionsMenuOpen(false);
+                            setIsAssignConsultantOpen(true);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition-colors text-start cursor-pointer"
+                        >
+                          <Building2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                          <span>{isRTL ? 'تعيين / تغيير استشاري المشروع' : 'Assign / Change Consultant'}</span>
                         </button>
 
                         <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
@@ -1448,6 +1484,13 @@ export default function ProjectDetailPage() {
         project={project}
         onClose={() => setIsArchiveModalOpen(false)}
         onConfirm={handleArchiveProject}
+      />
+
+      {/* Assign Consultant Modal */}
+      <AssignConsultantModal
+        project={project}
+        isOpen={isAssignConsultantOpen}
+        onClose={() => setIsAssignConsultantOpen(false)}
       />
 
       {/* Refer Project Modal */}

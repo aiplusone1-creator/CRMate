@@ -48,6 +48,8 @@ playwright-report/
 .backups/
 backups/
 .agent/
+*.rar
+*.zip
 .agents/
 
 # Private Business Spreadsheets & Workbooks

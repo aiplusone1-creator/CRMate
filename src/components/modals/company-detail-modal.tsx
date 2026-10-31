@@ -29,6 +29,7 @@ import { useCRM } from '@/lib/store/crm-context';
 import { COMPANY_TYPES, PIPELINE_STAGES, PROJECT_PRIORITIES } from '@/lib/constants';
 import { formatCurrencySAR, formatDateString, normalizePhoneNumber, formatTelUri } from '@/lib/utils';
 import { canUserAccessProjectCockpit } from '@/lib/logic/scope';
+import { useLanguage } from '@/lib/i18n/language-context';
 
 interface CompanyDetailModalProps {
   company: Company | null;
@@ -50,6 +51,7 @@ export function CompanyDetailModal({
   initialTab = 'projects'
 }: CompanyDetailModalProps) {
   const { projects, contacts, activities, openFastLog, currentRole, currentUser, teamMembers } = useCRM();
+  const { isRTL } = useLanguage();
   const [activeTab, setActiveTab] = useState<'projects' | 'contacts' | 'activities' | 'overview'>(initialTab);
   const [contactSearch, setContactSearch] = useState<string>('');
   const [mounted, setMounted] = useState(false);
@@ -79,7 +81,7 @@ export function CompanyDetailModal({
   if (!isOpen || !company || !mounted) return null;
 
   // Filter linked data
-  const linkedProjects = projects.filter(p => p.company_id === company.id);
+  const linkedProjects = projects.filter(p => p.company_id === company.id || p.consultant_id === company.id);
   const linkedContacts = contacts.filter(cnt => cnt.company_id === company.id);
   
   // Filter contacts by contactSearch (supports full_name, job_title / position, phone, notes)
@@ -372,10 +374,18 @@ export function CompanyDetailModal({
                               <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300/70 dark:border-slate-700">
                                 {proj.pr_number}
                               </span>
-                              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                                <Lock className="w-3 h-3 text-amber-600 shrink-0" />
-                                <span>المرحلة محجوبة للمالك</span>
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {proj.consultant_id === company.id && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800 flex items-center gap-1">
+                                    <span>🏛️</span>
+                                    <span>{isRTL ? 'استشاري المشروع' : 'Consultant'}</span>
+                                  </span>
+                                )}
+                                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                                  <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                                  <span>المرحلة محجوبة للمالك</span>
+                                </span>
+                              </div>
                             </div>
 
                             {/* Project Name (Non-clickable, with lock icon) */}
@@ -438,9 +448,17 @@ export function CompanyDetailModal({
                             <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-800 border border-slate-200/70">
                               {proj.pr_number}
                             </span>
-                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${stage?.badgeClass || 'bg-slate-100 text-slate-700'}`}>
-                              {stage?.label || proj.pipeline_stage}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {proj.consultant_id === company.id && (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800 flex items-center gap-1">
+                                  <span>🏛️</span>
+                                  <span>{isRTL ? 'استشاري المشروع' : 'Consultant'}</span>
+                                </span>
+                              )}
+                              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${stage?.badgeClass || 'bg-slate-100 text-slate-700'}`}>
+                                {stage?.label || proj.pipeline_stage}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Project Name (Clickable link to Cockpit) */}

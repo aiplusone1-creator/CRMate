@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { 
   MapPin, Calendar, MessageCircle, MessageSquare, Phone, Clock, ArrowRight, Plus, 
   GripVertical, Bell, ShieldCheck, Palette, Check, FileCheck, 
-  Layers, Tag, Target, AlertTriangle, UserCheck, X, Lock, Sparkles 
+  Layers, Tag, Target, AlertTriangle, UserCheck, X, Lock, Sparkles, Building2 
 } from 'lucide-react';
 import { Project, OpportunityType, RFQPackage, SubmittalStatus, Quotation } from '@/types/crm';
 import { PIPELINE_STAGES, PROJECT_CARD_COLORS } from '@/lib/constants';
@@ -15,6 +15,7 @@ import { getStageAgingInfo } from '@/lib/logic/pipeline-analytics';
 import { useCRM } from '@/lib/store/crm-context';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { ContextualHelp } from '@/components/guide/contextual-help';
+import { AssignConsultantModal } from '@/components/modals/assign-consultant-modal';
 
 interface ProjectCardProps {
   project: Project;
@@ -60,6 +61,7 @@ export const ProjectCard = React.memo(function ProjectCard({
 
   const [isReferOpen, setIsReferOpen] = useState(false);
   const [isReferring, setIsReferring] = useState(false);
+  const [isAssignConsultantOpen, setIsAssignConsultantOpen] = useState(false);
   const referRef = useRef<HTMLDivElement>(null);
 
   const salesReps = teamMembers.filter(m => m.role === 'sales_engineer' || (m.role as string) === 'sales_rep');
@@ -300,6 +302,38 @@ export const ProjectCard = React.memo(function ProjectCard({
             <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium break-words mt-0.5 leading-tight">
               {project.company_name || 'Organization'}
             </div>
+
+            {/* Consultant Attribution */}
+            {project.consultant_name ? (
+              <div 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsAssignConsultantOpen(true);
+                }}
+                className="inline-flex items-center gap-1 text-[10px] text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/70 dark:border-indigo-900/50 px-1.5 py-0.5 rounded-md font-medium hover:bg-indigo-100/70 transition-colors cursor-pointer mt-0.5 max-w-full truncate"
+                title={isRTL ? "الاستشاري المشرف (انقر للتغيير)" : "Project Consultant (click to edit)"}
+              >
+                <Building2 className="w-2.5 h-2.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                <span className="truncate">{isRTL ? `الاستشاري: ${project.consultant_name}` : `Consultant: ${project.consultant_name}`}</span>
+              </div>
+            ) : !isLockedForSales ? (
+              <button
+                type="button"
+                draggable={false}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsAssignConsultantOpen(true);
+                }}
+                className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-blue-600 dark:hover:text-[#8FC2F0] hover:bg-blue-50/50 dark:hover:bg-blue-950/30 px-1 py-0.5 rounded transition-colors cursor-pointer mt-0.5 opacity-60 hover:opacity-100"
+                title={isRTL ? "تعيين استشاري لهذا المشروع" : "Add consultant for this project"}
+              >
+                <Plus className="w-2.5 h-2.5" />
+                <span>{isRTL ? 'تعيين استشاري' : 'Add consultant'}</span>
+              </button>
+            ) : null}
 
             {/* Owner & Referred To */}
             <div className="text-[10px] text-slate-500 dark:text-slate-400 font-medium break-words mt-0.5 leading-tight font-sans space-y-0.5">
@@ -1007,6 +1041,12 @@ export const ProjectCard = React.memo(function ProjectCard({
           </div>
         </div>
       )}
+      {/* Assign Project Consultant Modal */}
+      <AssignConsultantModal
+        project={project}
+        isOpen={isAssignConsultantOpen}
+        onClose={() => setIsAssignConsultantOpen(false)}
+      />
     </div>
   );
 });

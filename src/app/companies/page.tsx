@@ -385,7 +385,7 @@ export default function CompaniesPage() {
           </div>
         ) : (
           filteredCompanies.map(c => {
-            const linkedProjects = projects.filter(p => p.company_id === c.id);
+            const linkedProjects = projects.filter(p => p.company_id === c.id || p.consultant_id === c.id);
             const linkedContacts = contacts.filter(cnt => cnt.company_id === c.id);
             const typeConfig = COMPANY_TYPES.find(t => t.value === c.company_type);
 

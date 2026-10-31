@@ -69,6 +69,32 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
   const [nextFollowUpDate, setNextFollowUpDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Consultant State
+  const [consultantId, setConsultantId] = useState('');
+  const [isFastConsultantOpen, setIsFastConsultantOpen] = useState(false);
+  const [fastConsultantName, setFastConsultantName] = useState('');
+  const [fastConsultantCity, setFastConsultantCity] = useState('Jeddah');
+  const [fastConsultantPhone, setFastConsultantPhone] = useState('');
+
+  const consultantCompanies = useMemo(() => {
+    return companies.filter(c => c.company_type === 'consultant');
+  }, [companies]);
+
+  const handleSaveFastConsultant = async () => {
+    if (!fastConsultantName.trim()) return;
+    const newComp = await addCompany({
+      name: fastConsultantName.trim(),
+      normalized_name: fastConsultantName.trim().toLowerCase(),
+      company_type: 'consultant',
+      city: fastConsultantCity,
+      phone: fastConsultantPhone.trim() || undefined
+    });
+    setConsultantId(newComp.id);
+    setIsFastConsultantOpen(false);
+    setFastConsultantName('');
+    setFastConsultantPhone('');
+  };
+
   // Fast Add Company & Contact State
   const [isFastCompanyOpen, setIsFastCompanyOpen] = useState(false);
   const [fastCompanyName, setFastCompanyName] = useState('');
@@ -232,6 +258,8 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
       stage_entered_at: selectedDateTime,
       company_id: companyId,
       company_name: selectedCompany?.name,
+      consultant_id: consultantId || undefined,
+      consultant_name: companies.find(c => c.id === consultantId)?.name,
       primary_contact_id: effectivePrimaryId || undefined,
       primary_contact_name: selectedContact?.full_name,
       primary_contact_phone: selectedContact?.phone,
@@ -762,6 +790,90 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Consultant Assignment (Optional) */}
+          <div className="p-3.5 rounded-2xl bg-purple-50/40 dark:bg-purple-950/20 border border-purple-200/80 dark:border-purple-800/60 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-purple-900 dark:text-purple-300 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                <span>{isRTL ? 'الاستشاري المشرف (Consultant) - اختياري' : 'Project Consultant (Optional)'}</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsFastConsultantOpen(!isFastConsultantOpen)}
+                className="text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-100/70 hover:bg-purple-200/70 dark:bg-purple-900/40 dark:hover:bg-purple-800/40 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all border border-purple-300/80 dark:border-purple-700/80 cursor-pointer shadow-2xs"
+              >
+                <Plus className="w-3 h-3 text-purple-600 dark:text-purple-400" />
+                <span>{isRTL ? '+ استشاري جديد (سريع)' : '+ Fast Add Consultant'}</span>
+              </button>
+            </div>
+
+            <select
+              value={consultantId}
+              onChange={e => {
+                if (e.target.value === '__FAST_ADD_CONSULTANT__') {
+                  setIsFastConsultantOpen(true);
+                  return;
+                }
+                setConsultantId(e.target.value);
+              }}
+              className="w-full px-3 py-2 bg-white dark:bg-[#141820] border border-purple-200 dark:border-purple-800/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium text-xs text-slate-900 dark:text-white shadow-2xs"
+            >
+              <option value="">{isRTL ? '-- بدون استشاري (أو اختر من الاستشاريين المسجلين) --' : '-- No Consultant (or Select Registered Consultant) --'}</option>
+              <option value="__FAST_ADD_CONSULTANT__" className="font-extrabold text-purple-600 bg-purple-50 dark:bg-purple-950">
+                {isRTL ? '⚡ + إضافة استشاري جديد سريع...' : '⚡ + Fast Add New Consultant...'}
+              </option>
+              {consultantCompanies.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.city ? `(${c.city})` : ''}
+                </option>
+              ))}
+            </select>
+
+            {/* Fast Add Consultant Inline Form */}
+            {isFastConsultantOpen && (
+              <div className="p-3 rounded-xl bg-white dark:bg-[#1c222e] border border-purple-300 dark:border-purple-700 space-y-2 animate-in fade-in">
+                <div className="flex items-center justify-between text-xs font-bold text-purple-900 dark:text-purple-200">
+                  <span>{isRTL ? 'إضافة استشاري جديد سريع' : 'Fast Add New Consultant'}</span>
+                  <button type="button" onClick={() => setIsFastConsultantOpen(false)} className="text-slate-400 hover:text-rose-500">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <input
+                      type="text"
+                      value={fastConsultantName}
+                      onChange={e => setFastConsultantName(e.target.value)}
+                      placeholder={isRTL ? 'اسم المكتب الاستشاري *' : 'Consultant Name *'}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <select
+                      value={fastConsultantCity}
+                      onChange={e => setFastConsultantCity(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#141820] text-slate-900 dark:text-white text-xs"
+                    >
+                      {SAUDI_LOCATIONS.map(loc => (
+                        <option key={loc} value={loc}>{loc}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    disabled={!fastConsultantName.trim()}
+                    onClick={handleSaveFastConsultant}
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs disabled:opacity-50 cursor-pointer"
+                  >
+                    {isRTL ? 'حفظ واختيار الاستشاري' : 'Save & Select Consultant'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Strict Duplicate Warning Alert - Blocks Creation */}
