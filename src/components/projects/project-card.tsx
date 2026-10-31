@@ -7,7 +7,7 @@ import {
   GripVertical, Bell, ShieldCheck, Palette, Check, FileCheck, 
   Layers, Tag, Target, AlertTriangle, UserCheck, X, Lock, Sparkles 
 } from 'lucide-react';
-import { Project, OpportunityType, RFQPackage, SubmittalStatus } from '@/types/crm';
+import { Project, OpportunityType, RFQPackage, SubmittalStatus, Quotation } from '@/types/crm';
 import { PIPELINE_STAGES, PROJECT_CARD_COLORS } from '@/lib/constants';
 import { formatCurrencySAR, formatDateString, normalizePhoneNumber, formatTelUri } from '@/lib/utils';
 import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
@@ -18,6 +18,7 @@ import { ContextualHelp } from '@/components/guide/contextual-help';
 
 interface ProjectCardProps {
   project: Project;
+  latestQuote?: Quotation | null;
   onLogActivity?: (project: Project) => void;
   isDraggable?: boolean;
   isDragging?: boolean;
@@ -28,6 +29,7 @@ interface ProjectCardProps {
 
 export const ProjectCard = React.memo(function ProjectCard({ 
   project, 
+  latestQuote: propLatestQuote,
   onLogActivity,
   isDraggable = false,
   isDragging = false,
@@ -74,9 +76,11 @@ export const ProjectCard = React.memo(function ProjectCard({
     }
   };
 
-  const latestQuote = quotations
-    ?.filter(q => q.project_id === project.id && !q.is_archived)
-    ?.sort((a, b) => b.version - a.version)[0];
+  const latestQuote = propLatestQuote !== undefined
+    ? propLatestQuote
+    : quotations
+        ?.filter(q => q.project_id === project.id && !q.is_archived)
+        ?.sort((a, b) => b.version - a.version)[0];
 
   // Effective card color based on pipeline stage:
   // - Won stage -> always emerald (Green)
@@ -223,6 +227,7 @@ export const ProjectCard = React.memo(function ProjectCard({
       draggable={isDraggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 160px' }}
       className={`crm-kanban-card p-3 sm:p-4 group flex flex-col justify-between transition-all duration-200 ${currentColorConfig?.cardClass || ''} ${
         isDragging 
           ? 'opacity-35 border-2 border-dashed border-[#8FC2F0] bg-white/40 shadow-none scale-[0.98]' 

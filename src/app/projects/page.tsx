@@ -44,7 +44,7 @@ import {
   SAUDI_LOCATIONS,
   canEditCommercialValue
 } from '@/lib/constants';
-import { Project, OpportunityType, PipelineStage, ProjectPriority, CompanyType } from '@/types/crm';
+import { Project, OpportunityType, PipelineStage, ProjectPriority, CompanyType, Quotation } from '@/types/crm';
 import { formatCurrencySAR, formatDateString, cn } from '@/lib/utils';
 import { formatCompactSAR } from '@/lib/logic/quotation-pricing';
 import { calculatePipelineForecast, getStageAgingInfo, STAGE_PROBABILITIES } from '@/lib/logic/pipeline-analytics';
@@ -398,19 +398,19 @@ export default function ProjectsPage() {
     setIsAddModalOpen(true);
   };
 
-  const openEditModal = (proj: Project) => {
+  const openEditModal = React.useCallback((proj: Project) => {
     if (!canUserAccessProjectCockpit(proj, currentUser)) return;
     setEditingProject(proj);
     setIsEditModalOpen(true);
-  };
+  }, [currentUser]);
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = React.useCallback((id: string, name: string) => {
     const proj = projects.find(p => p.id === id);
     if (proj && canUserAccessProjectCockpit(proj, currentUser)) {
       setProjectToArchive(proj);
       setIsArchiveModalOpen(true);
     }
-  };
+  }, [projects, currentUser]);
 
   const handleConfirmArchive = async (reason: string) => {
     if (projectToArchive) {
@@ -444,6 +444,20 @@ export default function ProjectsPage() {
     return calculatePipelineForecast(scopedBaseProjects, quotations);
   }, [scopedBaseProjects, quotations]);
 
+  // Pre-calculate latest active quotation per project in a single O(N) pass for O(1) instant lookup
+  const latestQuoteMap = useMemo(() => {
+    const map = new Map<string, Quotation>();
+    if (!quotations) return map;
+    for (const q of quotations) {
+      if (q.is_archived) continue;
+      const existing = map.get(q.project_id);
+      if (!existing || q.version > existing.version) {
+        map.set(q.project_id, q);
+      }
+    }
+    return map;
+  }, [quotations]);
+
   // Filter logic - Ordered from most recently entered this stage to oldest (Debounced deferred search)
   const filteredProjects = useMemo(() => {
     const term = deferredSearchTerm.toLowerCase().trim();
@@ -473,6 +487,56 @@ export default function ProjectsPage() {
       return timeB - timeA; // Descending: Most recently entered stage first
     });
   }, [scopedBaseProjects, deferredSearchTerm, selectedStage, selectedType, selectedHealth, selectedCity, activeFilterScope]);
+
+  // Group Kanban projects and totals by stage in a single O(N) pass to prevent heavy loops in JSX
+  const { stageProjectsMap, stageValuesMap } = useMemo(() => {
+    const pMap: Record<string, Project[]> = {};
+    const vMap: Record<string, number> = {};
+
+    for (const col of kanbanStages) {
+      pMap[col.stage] = [];
+      vMap[col.stage] = 0;
+    }
+
+    for (const p of filteredProjects) {
+      let targetStage = p.pipeline_stage;
+      if (targetStage === 'pricing') targetStage = 'rfq_processing';
+      if (targetStage === 'technically_approved') targetStage = 'negotiation';
+
+      if (pMap[targetStage]) {
+        pMap[targetStage].push(p);
+        vMap[targetStage] += p.estimated_value || 0;
+      }
+    }
+
+    // Sort each stage: most recently entered first
+    for (const stageKey of Object.keys(pMap)) {
+      pMap[stageKey].sort((a, b) => {
+        const timeA = new Date(a.stage_entered_at || a.updated_at || a.created_at).getTime();
+        const timeB = new Date(b.stage_entered_at || b.updated_at || b.created_at).getTime();
+        return timeB - timeA;
+      });
+    }
+
+    return { stageProjectsMap: pMap, stageValuesMap: vMap };
+  }, [filteredProjects, kanbanStages]);
+
+  // Pre-calculate aging and cockpit access maps for instant O(1) table row rendering
+  const stageAgingMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getStageAgingInfo>>();
+    for (const p of filteredProjects) {
+      map.set(p.id, getStageAgingInfo(p));
+    }
+    return map;
+  }, [filteredProjects]);
+
+  const accessMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const p of filteredProjects) {
+      map.set(p.id, canUserAccessProjectCockpit(p, currentUser));
+    }
+    return map;
+  }, [filteredProjects, currentUser]);
 
   // Current calendar month string (e.g. "2026-10" or "2026-11")
   const currentYearMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
@@ -528,237 +592,281 @@ export default function ProjectsPage() {
     return CLOSING_QUARTERS.filter(q => q.id === selectedQuarterFilter);
   }, [selectedQuarterFilter]);
 
+interface ProjectTableRowProps {
+  project: Project;
+  isAccessible: boolean;
+  stageConfig?: (typeof PIPELINE_STAGES)[0];
+  stageLabel: string;
+  latestQuote?: Quotation;
+  aging: ReturnType<typeof getStageAgingInfo>;
+  isRTL: boolean;
+  currentRole: string;
+  openEditModal: (p: Project) => void;
+  handleDelete: (id: string, name: string) => void;
+}
+
+const ProjectTableRow = React.memo(function ProjectTableRow({
+  project: p,
+  isAccessible,
+  stageConfig,
+  stageLabel,
+  latestQuote,
+  aging,
+  isRTL,
+  currentRole,
+  openEditModal,
+  handleDelete
+}: ProjectTableRowProps) {
+  return (
+    <tr 
+      key={p.id} 
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 68px' }}
+      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
+    >
+      <td className="py-4 px-4 whitespace-nowrap">
+        <span className="font-mono text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-[#232A38] text-slate-800 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700">
+          {p.pr_number}
+        </span>
+      </td>
+      <td className="py-4 px-4 min-w-[220px]">
+        {isAccessible ? (
+          <Link 
+            href={`/projects/${p.id}`}
+            className="font-semibold text-slate-900 dark:text-white leading-tight hover:text-[#8FC2F0] hover:underline transition-colors block"
+          >
+            {p.name}
+          </Link>
+        ) : (
+          <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 leading-tight">
+            <span>{p.name}</span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+              <Lock className="w-2.5 h-2.5" />
+              <span>{isRTL ? 'للاطلاع فقط' : 'View only'}</span>
+            </span>
+          </div>
+        )}
+        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+          <span className="text-blue-600 dark:text-[#8FC2F0] font-medium flex items-center gap-1">
+            <Building2 className="w-3 h-3" />
+            {p.company_name}
+          </span>
+          {p.primary_contact_name && (
+            <span className="text-slate-400 dark:text-slate-500">&bull; {p.primary_contact_name}</span>
+          )}
+          <span className="text-slate-400 dark:text-slate-500">&bull; {p.location}</span>
+        </div>
+      </td>
+      <td className="py-4 px-4 whitespace-nowrap">
+        <div className="flex flex-col gap-1">
+          <span className={`text-[11px] font-black px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 shadow-2xs w-fit ${
+            p.opportunity_type === 'in_hand'
+              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+              : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${
+              p.opportunity_type === 'in_hand' ? 'bg-emerald-500 animate-pulse' : 'bg-indigo-500'
+            }`} />
+            <span>
+              {p.opportunity_type === 'in_hand'
+                ? (isRTL ? 'In Hand (في اليد)' : 'In Hand')
+                : (isRTL ? 'Tender (مناقصة)' : 'Tender')}
+            </span>
+          </span>
+          {p.opportunity_type === 'in_hand' && p.closing_date && (
+            <span 
+              className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono font-bold flex items-center gap-1"
+              title={isRTL ? `تاريخ الإغلاق المتوقع: ${formatDateString(p.closing_date)}` : `Expected Closing Date: ${formatDateString(p.closing_date)}`}
+            >
+              <Calendar className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{isRTL ? 'إغلاق:' : 'Close:'} {formatDateString(p.closing_date)}</span>
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="py-4 px-4 whitespace-nowrap">
+        {isAccessible ? (
+          <div className="space-y-1">
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border inline-block ${stageConfig?.badgeClass || 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700'}`}>
+              {stageLabel}
+            </span>
+            {p.pipeline_stage === 'won' && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                {p.po_attachment_url || p.po_number ? (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold flex items-center gap-1">
+                    <FileCheck className="w-2.5 h-2.5" />
+                    <span>{p.po_number || 'PO'}</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 font-bold">
+                    {isRTL ? 'بلا PO' : 'No PO'}
+                  </span>
+                )}
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-600 text-white font-black">
+                  {p.collected_percentage || 0}% {isRTL ? 'محصل' : 'Coll.'}
+                </span>
+              </div>
+            )}
+            {p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost' && (
+              <div className="flex items-center gap-1">
+                <span 
+                  className={`text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 font-urbanist ${aging.badgeClass}`}
+                  title={isRTL ? `المشروع في هذه المرحلة منذ ${aging.daysInStage} يوماً (الحد المعياري: ${aging.slaDays} يوم)` : `Project in stage for ${aging.daysInStage} days (Target SLA: ${aging.slaDays}d)`}
+                >
+                  <Clock className="w-2.5 h-2.5" />
+                  <span>{isRTL ? aging.labelAr : aging.labelEn}</span>
+                </span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1.5">
+            <Lock className="w-3 h-3 text-amber-500" />
+            <span>{isRTL ? 'المرحلة محجوبة للمالك' : 'Stage locked'}</span>
+          </span>
+        )}
+      </td>
+      <td className="py-4 px-4 whitespace-nowrap">
+        {isAccessible ? (
+          <>
+            {p.calculated_health === 'red' && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">
+                  {p.days_overdue ? `${p.days_overdue}d late` : 'Needs Action'}
+                </span>
+              </div>
+            )}
+            {p.calculated_health === 'yellow' && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Approaching</span>
+              </div>
+            )}
+            {p.calculated_health === 'green' && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Healthy</span>
+              </div>
+            )}
+            {p.calculated_health === 'neutral' && (
+              <span className="text-xs text-slate-400">Closed</span>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-slate-400 italic">—</span>
+        )}
+      </td>
+      <td className="py-4 px-4 text-right whitespace-nowrap font-urbanist">
+        {isAccessible ? (
+          <>
+            <div className="font-extrabold text-slate-900 dark:text-white">
+              {formatCurrencySAR(p.estimated_value)}
+            </div>
+            {latestQuote && (
+              <div className="text-[11px] font-bold text-blue-600 dark:text-[#8FC2F0] mt-0.5">
+                {isRTL ? 'عرض:' : 'Quote:'} {formatCompactSAR(latestQuote.amount)} (V{latestQuote.version})
+              </div>
+            )}
+            <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 mt-0.5 flex items-center justify-end gap-1">
+              <span>{isRTL ? 'الموزون:' : 'Weighted:'}</span>
+              <span>{formatCompactSAR((latestQuote?.amount || p.estimated_value) * (STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1))}</span>
+              <span className="text-[10px] opacity-75">({Math.round((STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1) * 100)}%)</span>
+            </div>
+          </>
+        ) : (
+          <div className="font-bold text-xs text-amber-600 dark:text-amber-400 flex items-center justify-end gap-1">
+            <Lock className="w-3 h-3 text-amber-500" />
+            <span>{isRTL ? 'القيمة محجوبة للمالك' : 'Value locked'}</span>
+          </div>
+        )}
+      </td>
+      <td className="py-4 px-4 min-w-[200px]">
+        {isAccessible ? (
+          p.next_action ? (
+            <div>
+              <div className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-1">
+                {p.next_action}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-slate-400" />
+                <span>Due: {formatDateString(p.next_follow_up_at)}</span>
+              </div>
+            </div>
+          ) : (
+            <span className="text-xs text-rose-600 dark:text-rose-400 font-medium italic">
+              No next action set!
+            </span>
+          )
+        ) : (
+          <span className="text-xs text-slate-400 italic">—</span>
+        )}
+      </td>
+      <td className="py-4 px-4 whitespace-nowrap">
+        <div className="text-xs font-medium text-slate-800 dark:text-slate-200">
+          {p.owner_name || 'Eslam M.'}
+        </div>
+        {p.members && p.members.length > 0 && (
+          <div className="text-[11px] text-blue-600 dark:text-[#8FC2F0] flex items-center gap-1 mt-0.5">
+            <Users2 className="w-3 h-3" />
+            <span>+ {p.members[0].user_name}</span>
+          </div>
+        )}
+      </td>
+      <td className="py-4 px-4 text-right whitespace-nowrap">
+        {currentRole !== 'viewer' && (
+          isAccessible ? (
+            <div className="flex items-center justify-end gap-1.5">
+              <button
+                onClick={() => openEditModal(p)}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Edit Project"
+              >
+                <Edit className="w-3.5 h-3.5" />
+              </button>
+              {currentRole !== 'estimator' && (
+                <button
+                  onClick={() => handleDelete(p.id, p.name)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                  title="Delete Project"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-end gap-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+              <Lock className="w-3 h-3 text-amber-500" />
+              <span>{isRTL ? `مسند إلى: ${p.referred_to_name || p.owner_name || 'سيلز آخر'}` : 'Locked'}</span>
+            </div>
+          )
+        )}
+      </td>
+    </tr>
+  );
+});
+
   const renderProjectTableRow = (p: Project) => {
-    const isAccessible = canUserAccessProjectCockpit(p, currentUser);
+    const isAccessible = accessMap.get(p.id) ?? false;
     const stageConfig = PIPELINE_STAGES.find(s => s.value === p.pipeline_stage);
-    const latestQuote = quotations
-      ?.filter(q => q.project_id === p.id && !q.is_archived)
-      ?.sort((a, b) => b.version - a.version)[0];
+    const stageObj = kanbanStages.find(ks => ks.stage === p.pipeline_stage);
+    const stageLabel = isRTL ? (stageObj?.labelAr || stageConfig?.labelAr || p.pipeline_stage) : (stageConfig?.label || p.pipeline_stage);
+    const latestQuote = latestQuoteMap.get(p.id);
+    const aging = stageAgingMap.get(p.id) || getStageAgingInfo(p);
 
     return (
-      <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
-        <td className="py-4 px-4 whitespace-nowrap">
-          <span className="font-mono text-xs font-bold px-2 py-1 bg-slate-100 dark:bg-[#232A38] text-slate-800 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700">
-            {p.pr_number}
-          </span>
-        </td>
-        <td className="py-4 px-4 min-w-[220px]">
-          {canUserAccessProjectCockpit(p, currentUser) ? (
-            <Link 
-              href={`/projects/${p.id}`}
-              className="font-semibold text-slate-900 dark:text-white leading-tight hover:text-[#8FC2F0] hover:underline transition-colors block"
-            >
-              {p.name}
-            </Link>
-          ) : (
-            <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-300 leading-tight">
-              <span>{p.name}</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-                <Lock className="w-2.5 h-2.5" />
-                <span>{isRTL ? 'للاطلاع فقط' : 'View only'}</span>
-              </span>
-            </div>
-          )}
-          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
-            <span className="text-blue-600 dark:text-[#8FC2F0] font-medium flex items-center gap-1">
-              <Building2 className="w-3 h-3" />
-              {p.company_name}
-            </span>
-            {p.primary_contact_name && (
-              <span className="text-slate-400 dark:text-slate-500">&bull; {p.primary_contact_name}</span>
-            )}
-            <span className="text-slate-400 dark:text-slate-500">&bull; {p.location}</span>
-          </div>
-        </td>
-        <td className="py-4 px-4 whitespace-nowrap">
-          <div className="flex flex-col gap-1">
-            <span className={`text-[11px] font-black px-2.5 py-1 rounded-full border inline-flex items-center gap-1.5 shadow-2xs w-fit ${
-              p.opportunity_type === 'in_hand'
-                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                p.opportunity_type === 'in_hand' ? 'bg-emerald-500 animate-pulse' : 'bg-indigo-500'
-              }`} />
-              <span>
-                {p.opportunity_type === 'in_hand'
-                  ? (isRTL ? 'In Hand (في اليد)' : 'In Hand')
-                  : (isRTL ? 'Tender (مناقصة)' : 'Tender')}
-              </span>
-            </span>
-            {p.opportunity_type === 'in_hand' && p.closing_date && (
-              <span 
-                className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono font-bold flex items-center gap-1"
-                title={isRTL ? `تاريخ الإغلاق المتوقع: ${formatDateString(p.closing_date)}` : `Expected Closing Date: ${formatDateString(p.closing_date)}`}
-              >
-                <Calendar className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>{isRTL ? 'إغلاق:' : 'Close:'} {formatDateString(p.closing_date)}</span>
-              </span>
-            )}
-          </div>
-        </td>
-        <td className="py-4 px-4 whitespace-nowrap">
-          {isAccessible ? (
-            <div className="space-y-1">
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border inline-block ${stageConfig?.badgeClass || 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700'}`}>
-                {isRTL ? (kanbanStages.find(ks => ks.stage === p.pipeline_stage)?.labelAr || stageConfig?.labelAr || p.pipeline_stage) : (stageConfig?.label || p.pipeline_stage)}
-              </span>
-              {p.pipeline_stage === 'won' && (
-                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                  {p.po_attachment_url || p.po_number ? (
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold flex items-center gap-1">
-                      <FileCheck className="w-2.5 h-2.5" />
-                      <span>{p.po_number || 'PO'}</span>
-                    </span>
-                  ) : (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 font-bold">
-                      {isRTL ? 'بلا PO' : 'No PO'}
-                    </span>
-                  )}
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-600 text-white font-black">
-                    {p.collected_percentage || 0}% {isRTL ? 'محصل' : 'Coll.'}
-                  </span>
-                </div>
-              )}
-              {p.pipeline_stage !== 'won' && p.pipeline_stage !== 'lost' && (() => {
-                const aging = getStageAgingInfo(p);
-                return (
-                  <div className="flex items-center gap-1">
-                    <span 
-                      className={`text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 font-urbanist ${aging.badgeClass}`}
-                      title={isRTL ? `المشروع في هذه المرحلة منذ ${aging.daysInStage} يوماً (الحد المعياري: ${aging.slaDays} يوم)` : `Project in stage for ${aging.daysInStage} days (Target SLA: ${aging.slaDays}d)`}
-                    >
-                      <Clock className="w-2.5 h-2.5" />
-                      <span>{isRTL ? aging.labelAr : aging.labelEn}</span>
-                    </span>
-                  </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1.5">
-              <Lock className="w-3 h-3 text-amber-500" />
-              <span>{isRTL ? 'المرحلة محجوبة للمالك' : 'Stage locked'}</span>
-            </span>
-          )}
-        </td>
-        <td className="py-4 px-4 whitespace-nowrap">
-          {isAccessible ? (
-            <>
-              {p.calculated_health === 'red' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                  <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">
-                    {p.days_overdue ? `${p.days_overdue}d late` : 'Needs Action'}
-                  </span>
-                </div>
-              )}
-              {p.calculated_health === 'yellow' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Approaching</span>
-                </div>
-              )}
-              {p.calculated_health === 'green' && (
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Healthy</span>
-                </div>
-              )}
-              {p.calculated_health === 'neutral' && (
-                <span className="text-xs text-slate-400">Closed</span>
-              )}
-            </>
-          ) : (
-            <span className="text-xs text-slate-400 italic">—</span>
-          )}
-        </td>
-        <td className="py-4 px-4 text-right whitespace-nowrap font-urbanist">
-          {isAccessible ? (
-            <>
-              <div className="font-extrabold text-slate-900 dark:text-white">
-                {formatCurrencySAR(p.estimated_value)}
-              </div>
-              {latestQuote && (
-                <div className="text-[11px] font-bold text-blue-600 dark:text-[#8FC2F0] mt-0.5">
-                  {isRTL ? 'عرض:' : 'Quote:'} {formatCompactSAR(latestQuote.amount)} (V{latestQuote.version})
-                </div>
-              )}
-              <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 mt-0.5 flex items-center justify-end gap-1">
-                <span>{isRTL ? 'الموزون:' : 'Weighted:'}</span>
-                <span>{formatCompactSAR((latestQuote?.amount || p.estimated_value) * (STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1))}</span>
-                <span className="text-[10px] opacity-75">({Math.round((STAGE_PROBABILITIES[p.pipeline_stage] ?? 0.1) * 100)}%)</span>
-              </div>
-            </>
-          ) : (
-            <div className="font-bold text-xs text-amber-600 dark:text-amber-400 flex items-center justify-end gap-1">
-              <Lock className="w-3 h-3 text-amber-500" />
-              <span>{isRTL ? 'القيمة محجوبة للمالك' : 'Value locked'}</span>
-            </div>
-          )}
-        </td>
-        <td className="py-4 px-4 min-w-[200px]">
-          {isAccessible ? (
-            p.next_action ? (
-              <div>
-                <div className="text-xs text-slate-800 dark:text-slate-200 font-medium line-clamp-1">
-                  {p.next_action}
-                </div>
-                <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-slate-400" />
-                  <span>Due: {formatDateString(p.next_follow_up_at)}</span>
-                </div>
-              </div>
-            ) : (
-              <span className="text-xs text-rose-600 dark:text-rose-400 font-medium italic">
-                No next action set!
-              </span>
-            )
-          ) : (
-            <span className="text-xs text-slate-400 italic">—</span>
-          )}
-        </td>
-        <td className="py-4 px-4 whitespace-nowrap">
-          <div className="text-xs font-medium text-slate-800 dark:text-slate-200">
-            {p.owner_name || 'Eslam M.'}
-          </div>
-          {p.members && p.members.length > 0 && (
-            <div className="text-[11px] text-blue-600 dark:text-[#8FC2F0] flex items-center gap-1 mt-0.5">
-              <Users2 className="w-3 h-3" />
-              <span>+ {p.members[0].user_name}</span>
-            </div>
-          )}
-        </td>
-        <td className="py-4 px-4 text-right whitespace-nowrap">
-          {currentRole !== 'viewer' && (
-            canUserAccessProjectCockpit(p, currentUser) ? (
-              <div className="flex items-center justify-end gap-1.5">
-                <button
-                  onClick={() => openEditModal(p)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-[#292D32] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                  title="Edit Project"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                </button>
-                {currentRole !== 'estimator' && (
-                  <button
-                    onClick={() => handleDelete(p.id, p.name)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                    title="Delete Project"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center justify-end gap-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                <Lock className="w-3 h-3 text-amber-500" />
-                <span>{isRTL ? `مسند إلى: ${p.referred_to_name || p.owner_name || 'سيلز آخر'}` : 'Locked'}</span>
-              </div>
-            )
-          )}
-        </td>
-      </tr>
+      <ProjectTableRow
+        key={p.id}
+        project={p}
+        isAccessible={isAccessible}
+        stageConfig={stageConfig}
+        stageLabel={stageLabel}
+        latestQuote={latestQuote}
+        aging={aging}
+        isRTL={isRTL}
+        currentRole={currentRole}
+        openEditModal={openEditModal}
+        handleDelete={handleDelete}
+      />
     );
   };
 
@@ -1310,16 +1418,8 @@ export default function ProjectsPage() {
             <div className="overflow-x-auto pb-6">
               <div className="flex gap-5 min-w-[1700px]">
                 {kanbanStages.map(col => {
-                  const stageProjects = filteredProjects.filter(p => {
-                    if (col.stage === 'rfq_processing') return p.pipeline_stage === 'rfq_processing' || (p.pipeline_stage as string) === 'pricing';
-                    if (col.stage === 'negotiation') return p.pipeline_stage === 'negotiation' || (p.pipeline_stage as string) === 'technically_approved';
-                    return p.pipeline_stage === col.stage;
-                  }).sort((a, b) => {
-                    const timeA = new Date(a.stage_entered_at || a.updated_at || a.created_at).getTime();
-                    const timeB = new Date(b.stage_entered_at || b.updated_at || b.created_at).getTime();
-                    return timeB - timeA;
-                  });
-                  const stageValue = stageProjects.reduce((sum, p) => sum + p.estimated_value, 0);
+                  const stageProjects = stageProjectsMap[col.stage] || [];
+                  const stageValue = stageValuesMap[col.stage] || 0;
                   const isColumnTargeted = dragOverStage === col.stage;
 
                   return (
@@ -1393,6 +1493,7 @@ export default function ProjectsPage() {
                               <ProjectCard 
                                 key={proj.id} 
                                 project={proj}
+                                latestQuote={latestQuoteMap.get(proj.id)}
                                 isReadOnlyForSalesRep={!isAccessible}
                                 isDraggable={currentRole !== 'viewer' && isAccessible}
                                 isDragging={draggedProjectId === proj.id}
@@ -1634,6 +1735,7 @@ export default function ProjectsPage() {
                               <ProjectCard 
                                 key={proj.id} 
                                 project={proj}
+                                latestQuote={latestQuoteMap.get(proj.id)}
                                 isReadOnlyForSalesRep={!isAccessible}
                                 isDraggable={currentRole !== 'viewer' && isAccessible}
                                 isDragging={draggedProjectId === proj.id}
@@ -1919,6 +2021,7 @@ export default function ProjectsPage() {
                       return (
                         <tr 
                           key={p.id}
+                          style={{ contentVisibility: 'auto', containIntrinsicSize: '0 68px' }}
                           className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
                         >
                           <td className="py-3.5 px-4">
