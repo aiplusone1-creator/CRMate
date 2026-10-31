@@ -821,6 +821,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
               if (matchedMember) {
                 setCurrentUser(matchedMember);
                 setCurrentRole(matchedMember.role);
+                if (matchedMember.role === 'sales_engineer' || (matchedMember.role as string) === 'sales_rep') {
+                  setSelectedSalesFilter(matchedMember.id);
+                } else {
+                  setSelectedSalesFilter('all');
+                }
                 localStorage.setItem('crmate_auth_user', JSON.stringify(matchedMember));
               }
             }
@@ -917,6 +922,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
     if (member) {
       setCurrentUser(member);
       setCurrentRole(member.role);
+      if (member.role === 'sales_engineer' || (member.role as string) === 'sales_rep') {
+        setSelectedSalesFilter(member.id);
+      } else {
+        setSelectedSalesFilter('all');
+      }
       setIsAuthenticated(true);
       if (typeof window !== 'undefined') {
         localStorage.setItem('crmate_auth_user', JSON.stringify(member));
@@ -937,6 +947,11 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
       };
       setCurrentUser(profile);
       setCurrentRole(profile.role);
+      if (profile.role === 'sales_engineer' || (profile.role as string) === 'sales_rep') {
+        setSelectedSalesFilter(profile.id);
+      } else {
+        setSelectedSalesFilter('all');
+      }
       setIsAuthenticated(true);
       if (typeof window !== 'undefined') {
         localStorage.setItem('crmate_auth_user', JSON.stringify(profile));
@@ -1752,6 +1767,9 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           if (currentMatch) {
             setCurrentUser(currentMatch);
             setCurrentRole(currentMatch.role);
+            if (currentMatch.role === 'sales_engineer' || (currentMatch.role as string) === 'sales_rep') {
+              setSelectedSalesFilter(currentMatch.id);
+            }
             if (typeof window !== 'undefined') {
               localStorage.setItem('crmate_auth_user', JSON.stringify(currentMatch));
             }

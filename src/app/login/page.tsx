@@ -121,7 +121,11 @@ export default function LoginPage() {
           router.push('/change-password');
         } else {
           const destination = redirectUrl && redirectUrl !== '/login' ? redirectUrl : '/';
-          router.push(destination);
+          if (typeof window !== 'undefined') {
+            window.location.href = destination;
+          } else {
+            router.push(destination);
+          }
         }
       }
     } catch (err: unknown) {

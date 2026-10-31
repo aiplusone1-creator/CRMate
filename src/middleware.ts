@@ -48,10 +48,25 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Validate the user token against Supabase Auth server
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Validate the user token against Supabase Auth server (supporting both cookies and Authorization: Bearer <token>)
+  let user = null;
+  const authHeader = request.headers.get('authorization') || '';
+  if (authHeader.toLowerCase().startsWith('bearer ')) {
+    const bearerToken = authHeader.slice(7).trim();
+    if (bearerToken) {
+      const { data } = await supabase.auth.getUser(bearerToken);
+      if (data?.user) {
+        user = data.user;
+      }
+    }
+  }
+
+  if (!user) {
+    const { data } = await supabase.auth.getUser();
+    if (data?.user) {
+      user = data.user;
+    }
+  }
 
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/api/auth');
   const isChangePasswordPage = pathname === '/change-password';

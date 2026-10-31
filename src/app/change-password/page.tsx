@@ -17,6 +17,7 @@ import { CRMateMasterLockup } from '@/components/brand/crmate-logo';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { LanguageToggle } from '@/components/common/language-toggle';
 import { ThemeToggle } from '@/components/common/theme-toggle';
+import { createClient } from '@/lib/supabase/client';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -70,14 +71,30 @@ export default function ChangePasswordPage() {
           : 'Password successfully updated! Redirecting to CRM cockpit...'
       );
 
+      // Re-authenticate client-side session with the new password to guarantee fresh cookies and tokens
+      const supabase = createClient();
+      if (supabase && data?.user?.email) {
+        try {
+          await supabase.auth.signInWithPassword({
+            email: data.user.email,
+            password: newPassword,
+          });
+        } catch (signInErr) {
+          console.warn('Could not re-authenticate after password change:', signInErr);
+        }
+      }
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('crmate_is_authenticated', 'true');
       }
 
       setTimeout(() => {
-        router.push('/');
-        router.refresh();
-      }, 1200);
+        if (typeof window !== 'undefined') {
+          window.location.href = '/';
+        } else {
+          router.push('/');
+        }
+      }, 1000);
     } catch (err: any) {
       setErrorMessage(err.message || (isRTL ? 'حدث خطأ في الاتصال' : 'Connection error'));
     } finally {
