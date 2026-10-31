@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { 
   Briefcase, 
   ArrowLeft, 
-  Building2, 
+  Building2,
+  Factory, 
   User, 
   Phone, 
   MessageCircle, 
@@ -562,6 +563,12 @@ export default function ProjectDetailPage() {
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                 <span>{project.location}</span>
               </span>
+              {project.industry && (
+                <span className="flex items-center gap-1 text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 font-bold">
+                  <Factory className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
+                  <span>{project.industry}</span>
+                </span>
+              )}
               <span className="flex items-center gap-1">
                 <User className="w-3.5 h-3.5 text-slate-400" />
                 <span className="font-semibold text-slate-700 dark:text-slate-300">{isRTL ? 'المالك:' : 'Owner:'}</span>

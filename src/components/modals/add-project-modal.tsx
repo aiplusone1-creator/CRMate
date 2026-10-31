@@ -2,10 +2,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Building2, Plus, Sparkles, FolderKanban, Layers, FileCheck, ShieldCheck, Tag, Target, UserCheck, AlertCircle, Lock, User, Calendar, Check, Star, Users } from 'lucide-react';
+import { X, Building2, Factory, Plus, Sparkles, FolderKanban, Layers, FileCheck, ShieldCheck, Tag, Target, UserCheck, AlertCircle, Lock, User, Calendar, Check, Star, Users } from 'lucide-react';
 import { useCRM } from '@/lib/store/crm-context';
-import { SAUDI_LOCATIONS, PIPELINE_STAGES, OPPORTUNITY_TYPES } from '@/lib/constants';
-import { PipelineStage, OpportunityType, ProjectPriority, RFQPackage, SubmittalStatus, Project, CompanyType } from '@/types/crm';
+import { SAUDI_LOCATIONS, PIPELINE_STAGES, OPPORTUNITY_TYPES, PROJECT_INDUSTRIES } from '@/lib/constants';
+import { PipelineStage, OpportunityType, ProjectPriority, RFQPackage, SubmittalStatus, Project, CompanyType, ProjectIndustry } from '@/types/crm';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { ProjectSystemsMultiSelect } from '@/components/projects/project-systems-select';
 import { cn, formatDateString } from '@/lib/utils';
@@ -47,11 +47,15 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
       setCreatedAtDate(new Date().toISOString().split('T')[0]);
       setClosingDate('');
       setClosingDateError('');
+      setIndustry('');
+      setIndustryError('');
     }
   }, [isOpen, currentUser.id]);
 
   const [primaryContactId, setPrimaryContactId] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [industry, setIndustry] = useState<ProjectIndustry | ''>('');
+  const [industryError, setIndustryError] = useState('');
   const [location, setLocation] = useState('Jeddah');
   const [opportunityType, setOpportunityType] = useState<OpportunityType>('tender');
   const [closingDate, setClosingDate] = useState('');
@@ -228,6 +232,11 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
     e.preventDefault();
     if (!name.trim() || exactDuplicateProject) return;
 
+    if (!industry) {
+      setIndustryError(isRTL ? 'قطاع المشروع إلزامي، يرجى اختيار قطاع من القائمة' : 'Project Industry is mandatory. Please select an industry.');
+      return;
+    }
+
     if (opportunityType === 'in_hand' && !closingDate.trim()) {
       setClosingDateError(isRTL ? 'تاريخ الإغلاق المتوقع (Closing Date) إلزامي لكافة مشاريع In Hand' : 'Closing Date is mandatory for In Hand projects');
       return;
@@ -265,6 +274,7 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
       primary_contact_phone: selectedContact?.phone,
       contact_ids: selectedContactIds.length > 0 ? selectedContactIds : (effectivePrimaryId ? [effectivePrimaryId] : undefined),
       location,
+      industry: industry as ProjectIndustry,
       opportunity_type: opportunityType,
       closing_date: closingDate.trim() || undefined,
       pipeline_stage: pipelineStage,
@@ -911,9 +921,50 @@ export function AddProjectModal({ isOpen, onClose, defaultCompanyId }: AddProjec
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">Location</label>
+              <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Factory className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
+                  <span>{isRTL ? 'قطاع المشروع (Project Industry) *' : 'Project Industry *'}</span>
+                </span>
+                <span className="text-[10px] text-rose-500 font-extrabold uppercase bg-rose-50 dark:bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-900">
+                  {isRTL ? 'إلزامي' : 'Mandatory'}
+                </span>
+              </label>
+              <select
+                required
+                value={industry}
+                onChange={e => {
+                  setIndustry(e.target.value as ProjectIndustry);
+                  if (industryError) setIndustryError('');
+                }}
+                className={cn(
+                  "w-full px-3.5 py-2.5 bg-white/90 dark:bg-[#141820] border rounded-xl focus:outline-none focus:ring-2 font-medium text-slate-900 dark:text-white shadow-2xs",
+                  industryError 
+                    ? "border-rose-500 focus:ring-rose-500 bg-rose-50/30 ring-2 ring-rose-500/20" 
+                    : "border-slate-200/80 dark:border-slate-700 focus:ring-[#8FC2F0] focus:border-[#8FC2F0]"
+                )}
+              >
+                <option value="" disabled className="dark:bg-[#141820] dark:text-white">
+                  {isRTL ? '-- اختر قطاع المشروع (إلزامي) --' : '-- Select Project Industry * --'}
+                </option>
+                {PROJECT_INDUSTRIES.map(ind => (
+                  <option key={ind.value} value={ind.value} className="dark:bg-[#141820] dark:text-white">
+                    {ind.label}
+                  </option>
+                ))}
+              </select>
+              {industryError && (
+                <p className="text-[11px] font-bold text-rose-600 dark:text-rose-400 mt-1 flex items-center gap-1 animate-in fade-in">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>{industryError}</span>
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block font-bold text-[#292D32] dark:text-slate-200 mb-1.5">{isRTL ? 'المدينة (Location)' : 'Location'}</label>
               <select
                 value={location}
                 onChange={e => setLocation(e.target.value)}

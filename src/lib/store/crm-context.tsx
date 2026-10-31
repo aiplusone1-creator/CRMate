@@ -1790,16 +1790,13 @@ export function CRMProvider({ children }: { children: React.ReactNode }) {
           });
           setProjects(prev => {
             const merged = hydrated.map(hp => {
-              if (hp.consultant_id) return hp;
               const prevMatch = prev.find(pr => pr.id === hp.id);
-              if (prevMatch?.consultant_id) {
-                return {
-                  ...hp,
-                  consultant_id: prevMatch.consultant_id,
-                  consultant_name: prevMatch.consultant_name
-                };
-              }
-              return hp;
+              return {
+                ...hp,
+                consultant_id: hp.consultant_id || prevMatch?.consultant_id,
+                consultant_name: hp.consultant_name || prevMatch?.consultant_name,
+                industry: hp.industry || prevMatch?.industry
+              };
             });
             if (typeof window !== 'undefined') {
               try {

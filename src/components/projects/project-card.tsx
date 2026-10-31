@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { 
   MapPin, Calendar, MessageCircle, MessageSquare, Phone, Clock, ArrowRight, Plus, 
   GripVertical, Bell, ShieldCheck, Palette, Check, FileCheck, 
-  Layers, Tag, Target, AlertTriangle, UserCheck, X, Lock, Sparkles, Building2 
+  Layers, Tag, Target, AlertTriangle, UserCheck, X, Lock, Sparkles, Building2, Factory 
 } from 'lucide-react';
 import { Project, OpportunityType, RFQPackage, SubmittalStatus, Quotation } from '@/types/crm';
 import { PIPELINE_STAGES, PROJECT_CARD_COLORS } from '@/lib/constants';
@@ -333,6 +333,13 @@ export const ProjectCard = React.memo(function ProjectCard({
                 <Plus className="w-2.5 h-2.5" />
                 <span>{isRTL ? 'تعيين استشاري' : 'Add consultant'}</span>
               </button>
+            ) : null}
+
+            {project.industry ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700/80 shrink-0 w-fit mt-0.5">
+                <Factory className="w-2.5 h-2.5 text-blue-600 dark:text-[#8FC2F0]" />
+                <span>{project.industry}</span>
+              </span>
             ) : null}
 
             {/* Owner & Referred To */}

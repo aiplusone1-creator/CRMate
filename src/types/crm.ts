@@ -23,6 +23,15 @@ export type OpportunityType =
   | 'upgrade_retrofit'
   | 'hunting_potential';
 
+export type ProjectIndustry = 
+  | 'Commercial'
+  | 'Hospitality'
+  | 'Health Care'
+  | 'Data Center'
+  | 'Governmental'
+  | 'Residential'
+  | 'Industrial';
+
 export type PipelineStage = 
   | 'lead'
   | 'qualification'
@@ -191,6 +200,7 @@ export interface Project {
   contact_ids?: string[];
   location: string;
   opportunity_type: OpportunityType;
+  industry?: ProjectIndustry;
   pipeline_stage: PipelineStage;
   priority: ProjectPriority;
   estimated_value: number;
@@ -507,6 +517,7 @@ export interface ChatProjectCard {
   estimated_value: number;
   pipeline_stage: PipelineStage;
   opportunity_type: OpportunityType;
+  industry?: ProjectIndustry;
   closing_date?: string;
   owner_id?: string;
   owner_name?: string;

@@ -148,23 +148,34 @@ export async function POST(req: Request) {
             break;
           }
 
-          if (insertError && (insertError.message?.includes('consultant_id') || insertError.message?.includes('consultant_name'))) {
+          if (insertError && (
+            insertError.message?.includes('consultant_id') || 
+            insertError.message?.includes('consultant_name') ||
+            insertError.message?.includes('industry')
+          )) {
             const cId = insertPayload.consultant_id;
             const cName = insertPayload.consultant_name;
+            const ind = insertPayload.industry;
             delete insertPayload.consultant_id;
             delete insertPayload.consultant_name;
+            delete insertPayload.industry;
+            let currentNotes = insertPayload.internal_notes || '';
             if (cId) {
-              const currentNotes = insertPayload.internal_notes || '';
               const tag = `<!--CONSULTANT:${JSON.stringify({ id: cId, name: cName })}-->`;
-              insertPayload.internal_notes = (currentNotes + ' ' + tag).trim();
+              currentNotes = (currentNotes + ' ' + tag).trim();
             }
+            if (ind) {
+              const indTag = `<!--INDUSTRY:${JSON.stringify({ industry: ind })}-->`;
+              currentNotes = (currentNotes + ' ' + indTag).trim();
+            }
+            insertPayload.internal_notes = currentNotes || undefined;
             const retryRes = await sb
               .from('projects')
               .insert(insertPayload)
               .select()
               .single();
             if (!retryRes.error && retryRes.data) {
-              inserted = { ...retryRes.data, consultant_id: cId, consultant_name: cName };
+              inserted = { ...retryRes.data, consultant_id: cId, consultant_name: cName, industry: ind };
               lastError = null;
               break;
             }
@@ -252,29 +263,29 @@ export async function POST(req: Request) {
           .select()
           .single();
 
-        if (updateError && (updateError.message?.includes('consultant_id') || updateError.message?.includes('consultant_name'))) {
-          const { consultant_id, consultant_name, ...cleanPayload } = payload;
+        if (updateError && (
+          updateError.message?.includes('consultant_id') || 
+          updateError.message?.includes('consultant_name') ||
+          updateError.message?.includes('industry')
+        )) {
+          const { consultant_id, consultant_name, industry, ...cleanPayload } = payload;
           
-          // Resilient storage fallback: Embed consultant in internal_notes so it is persisted in PostgreSQL
+          // Resilient storage fallback: Embed consultant and industry in internal_notes so it is persisted in PostgreSQL
           let existingNotes = cleanPayload.internal_notes;
           if (existingNotes === undefined) {
             const { data: cur } = await sb.from('projects').select('internal_notes').eq('id', targetId).maybeSingle();
             existingNotes = cur?.internal_notes || '';
           }
-          existingNotes = (existingNotes || '').replace(/\s*<!--CONSULTANT:[^>]+-->/g, '');
+          existingNotes = (existingNotes || '').replace(/\s*<!--(CONSULTANT|INDUSTRY):[^>]+-->/g, '');
           if (consultant_id) {
             const tag = `<!--CONSULTANT:${JSON.stringify({ id: consultant_id, name: consultant_name })}-->`;
-            cleanPayload.internal_notes = (existingNotes + ' ' + tag).trim();
-          } else if (consultant_id === null) {
-            cleanPayload.internal_notes = existingNotes.trim() || null;
-          } else if (consultant_id === undefined && cleanPayload.internal_notes !== undefined) {
-            // Re-attach existing consultant tag if user updated notes without touching consultant
-            const { data: cur } = await sb.from('projects').select('internal_notes').eq('id', targetId).maybeSingle();
-            const curTag = cur?.internal_notes?.match(/<!--CONSULTANT:[^>]+-->/);
-            if (curTag) {
-              cleanPayload.internal_notes = (cleanPayload.internal_notes + ' ' + curTag[0]).trim();
-            }
+            existingNotes = (existingNotes + ' ' + tag).trim();
           }
+          if (industry) {
+            const indTag = `<!--INDUSTRY:${JSON.stringify({ industry })}-->`;
+            existingNotes = (existingNotes + ' ' + indTag).trim();
+          }
+          cleanPayload.internal_notes = existingNotes.trim() || null;
 
           const retryRes = await sb
             .from('projects')
@@ -283,7 +294,7 @@ export async function POST(req: Request) {
             .select()
             .single();
           if (!retryRes.error && retryRes.data) {
-            updated = { ...retryRes.data, consultant_id, consultant_name };
+            updated = { ...retryRes.data, consultant_id, consultant_name, industry };
             updateError = null;
           }
         }

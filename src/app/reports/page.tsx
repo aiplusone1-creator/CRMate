@@ -10,7 +10,8 @@ import {
   TrendingUp, 
   CheckCircle2, 
   AlertTriangle, 
-  Building2, 
+  Building2,
+  Factory, 
   Briefcase, 
   FileText, 
   Trophy, 
@@ -536,6 +537,87 @@ export default function ReportsPage() {
       }))
       .sort((a, b) => b.count - a.count || b.value - a.value);
   }, [scopedProjects]);
+
+  // -------------------------------------------------------------
+  // Industry Distribution (7 Categories + Unspecified Reconciled)
+  // -------------------------------------------------------------
+  const industryDistribution = useMemo(() => {
+    // 1. Deduplicate scoped projects by id to guarantee zero double-counting
+    const uniqueProjects = Array.from(new Map(scopedProjects.map(p => [p.id, p])).values());
+
+    // 2. Exact 7 Industry categories
+    const definedOrder = [
+      'Commercial',
+      'Hospitality',
+      'Health Care',
+      'Data Center',
+      'Governmental',
+      'Residential',
+      'Industrial'
+    ];
+
+    const stats: Record<string, { count: number; value: number }> = {};
+    definedOrder.forEach(ind => {
+      stats[ind] = { count: 0, value: 0 };
+    });
+
+    let unspecifiedCount = 0;
+    let unspecifiedValue = 0;
+
+    uniqueProjects.forEach(p => {
+      const val = (p.estimated_value || 0);
+      if (!p.industry || !p.industry.trim()) {
+        unspecifiedCount += 1;
+        unspecifiedValue += val;
+        return;
+      }
+
+      const raw = p.industry.trim();
+      const matched = definedOrder.find(
+        key => key.toLowerCase() === raw.toLowerCase() ||
+               key.toLowerCase().replace(/\s+/g, '_') === raw.toLowerCase()
+      );
+
+      if (matched) {
+        stats[matched].count += 1;
+        stats[matched].value += val;
+      } else {
+        unspecifiedCount += 1;
+        unspecifiedValue += val;
+      }
+    });
+
+    // 3. Totals reconciliation
+    const classifiedCount = Object.values(stats).reduce((sum, s) => sum + s.count, 0);
+    const classifiedValue = Object.values(stats).reduce((sum, s) => sum + s.value, 0);
+    const totalOverallCount = classifiedCount + unspecifiedCount;
+    const totalOverallValue = classifiedValue + unspecifiedValue;
+
+    const baseValue = totalOverallValue > 0 ? totalOverallValue : 1;
+
+    const classifiedBreakdown = definedOrder.map(industry => ({
+      industry,
+      count: stats[industry].count,
+      value: stats[industry].value,
+      percentage: totalOverallValue > 0 ? Math.round((stats[industry].value / baseValue) * 100) : 0
+    })).sort((a, b) => b.value - a.value || b.count - a.count);
+
+    const unspecified = {
+      industry: isRTL ? 'مشاريع بدون قطاع محدد (Unspecified)' : 'Unspecified Industry',
+      count: unspecifiedCount,
+      value: unspecifiedValue,
+      percentage: totalOverallValue > 0 ? Math.round((unspecifiedValue / baseValue) * 100) : 0
+    };
+
+    return {
+      classifiedBreakdown,
+      unspecified,
+      classifiedCount,
+      classifiedValue,
+      totalOverallCount,
+      totalOverallValue
+    };
+  }, [scopedProjects, isRTL]);
 
   // -------------------------------------------------------------
   // Sales Reps Scorecard (Team Performance)
@@ -2155,6 +2237,103 @@ export default function ReportsPage() {
               </tfoot>
             )}
           </table>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 4.5. PROJECTS DISTRIBUTION BY INDUSTRY */}
+      {/* ========================================================================= */}
+      <div className="crm-card p-5 rounded-2xl space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <Factory className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider font-urbanist">
+              {isRTL ? 'توزيع المشاريع حسب قطاعات الأعمال (Projects Distribution by Industry)' : 'Projects Distribution by Industry'}
+            </h3>
+          </div>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="font-bold text-slate-700 dark:text-slate-300">
+              {isRTL ? 'إجمالي المحفظة: ' : 'Total Portfolio: '}
+              <strong className="font-mono text-emerald-600 dark:text-emerald-400">
+                {industryDistribution.totalOverallCount} {isRTL ? 'مشروع' : 'deals'} ({formatCurrencySAR(industryDistribution.totalOverallValue)})
+              </strong>
+            </span>
+          </div>
+        </div>
+
+        {/* 7 Defined Industries Grid - Visually matching Systems Breakdown */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {industryDistribution.classifiedBreakdown.map((item) => (
+            <div 
+              key={item.industry}
+              className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-[#141820] space-y-2"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-900 dark:text-white font-urbanist truncate" title={item.industry}>
+                  {item.industry}
+                </span>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                  {item.count} {isRTL ? 'مشروع' : 'deals'}
+                </span>
+              </div>
+
+              {/* Progress bar matching 21 Systems Breakdown */}
+              <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                <div 
+                  className="bg-emerald-600 dark:bg-emerald-400 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${Math.min(100, item.percentage)}%` }} 
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                  {formatCurrencySAR(item.value)}
+                </span>
+                <span>{item.percentage}% {isRTL ? 'من الإجمالي' : 'share'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Unspecified Industry Box for Legacy Projects without Industry */}
+        {industryDistribution.unspecified.count > 0 && (
+          <div className="p-3.5 rounded-xl border border-dashed border-amber-300/80 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+              <div>
+                <span className="font-bold text-amber-950 dark:text-amber-200">
+                  {industryDistribution.unspecified.industry}
+                </span>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300/80">
+                  {isRTL 
+                    ? 'مشاريع مسجلة قبل تفعيل حقل قطاع المشروع (تم استبعادها من القطاعات السبعة لضمان دقة التصنيف ومطابقة إجمالي المحفظة)' 
+                    : 'Projects registered prior to industry field enforcement (excluded from 7 categories to preserve analytical accuracy while reconciling total portfolio)'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="font-mono font-bold px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 text-xs">
+                {industryDistribution.unspecified.count} {isRTL ? 'مشروع' : 'deals'}
+              </span>
+              <span className="font-mono font-black text-amber-900 dark:text-amber-200 text-sm">
+                {formatCurrencySAR(industryDistribution.unspecified.value)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Summary Footer Reconciling Totals */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
+          <span>
+            {isRTL ? 'إجمالي المشاريع المصنفة قطاعياً:' : 'Total Categorized Projects:'}{' '}
+            <strong className="text-slate-900 dark:text-white font-bold">{industryDistribution.classifiedCount}</strong>
+            {' '}({isRTL ? 'القيمة: ' : 'Value: '}
+            <strong className="text-slate-900 dark:text-white font-mono font-bold">{formatCurrencySAR(industryDistribution.classifiedValue)}</strong>)
+          </span>
+          <span>
+            {isRTL ? 'مطابقة المحفظة الكلية:' : 'Full Portfolio Reconciled:'}{' '}
+            <strong className="text-emerald-700 dark:text-emerald-400 font-mono font-bold">100%</strong>
+          </span>
         </div>
       </div>
 

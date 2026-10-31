@@ -123,6 +123,7 @@ export async function GET(req: Request) {
     const rawAllProjects = (projectsRes.data || []).map((p: any) => {
       let consultant_id = p.consultant_id;
       let consultant_name = p.consultant_name;
+      let industry = p.industry;
 
       // Resilient fallback: If native column not yet present, extract from structured internal_notes tag
       if (!consultant_id && p.internal_notes && p.internal_notes.includes('<!--CONSULTANT:')) {
@@ -136,12 +137,25 @@ export async function GET(req: Request) {
         }
       }
 
-      const cleanNotes = p.internal_notes ? p.internal_notes.replace(/\s*<!--CONSULTANT:[^>]+-->/g, '').trim() || null : null;
+      if (!industry && p.internal_notes && p.internal_notes.includes('<!--INDUSTRY:')) {
+        const indMatch = p.internal_notes.match(/<!--INDUSTRY:({[^>]+})-->/);
+        if (indMatch) {
+          try {
+            const parsed = JSON.parse(indMatch[1]);
+            industry = parsed.industry;
+          } catch (e) { /* ignore parse error */ }
+        }
+      }
+
+      const cleanNotes = p.internal_notes 
+        ? p.internal_notes.replace(/\s*<!--(CONSULTANT|INDUSTRY):[^>]+-->/g, '').trim() || null 
+        : null;
 
       return {
         ...p,
         consultant_id: consultant_id || undefined,
         consultant_name: consultant_name || undefined,
+        industry: industry || undefined,
         internal_notes: cleanNotes,
         members: membersByProject.get(p.id) || []
       };

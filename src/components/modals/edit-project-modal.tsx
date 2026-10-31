@@ -7,7 +7,8 @@ import {
   Lock, 
   Unlock, 
   DollarSign, 
-  Building2, 
+  Building2,
+  Factory, 
   User, 
   MapPin, 
   Calendar,
@@ -34,9 +35,10 @@ import {
   PROJECT_PRIORITIES,
   canEditCommercialValue,
   RFQ_PACKAGES,
-  SUBMITTAL_STATUSES
+  SUBMITTAL_STATUSES,
+  PROJECT_INDUSTRIES
 } from '@/lib/constants';
-import { Project, PipelineStage, OpportunityType, ProjectPriority, RFQPackage, SubmittalStatus } from '@/types/crm';
+import { Project, PipelineStage, OpportunityType, ProjectPriority, RFQPackage, SubmittalStatus, ProjectIndustry } from '@/types/crm';
 import { formatCurrencySAR, formatDateString, cn } from '@/lib/utils';
 import { useLanguage } from '@/lib/i18n/language-context';
 import { ProjectSystemsMultiSelect } from '@/components/projects/project-systems-select';
@@ -58,6 +60,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
   const [companyId, setCompanyId] = useState('');
   const [primaryContactId, setPrimaryContactId] = useState('');
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [industry, setIndustry] = useState<ProjectIndustry | ''>('');
   const [location, setLocation] = useState('Jeddah');
   const [opportunityType, setOpportunityType] = useState<OpportunityType>('tender');
   const [closingDate, setClosingDate] = useState('');
@@ -122,6 +125,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
       setSelectedContactIds(initContactIds);
       setPrimaryContactId(project.primary_contact_id || initContactIds[0] || '');
       setLocation(project.location || 'Jeddah');
+      setIndustry(project.industry || '');
       setOpportunityType(project.opportunity_type || 'tender');
       setClosingDate(project.closing_date || project.expected_award_date || '');
       setClosingDateError('');
@@ -243,6 +247,7 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
       primary_contact_phone: matchedContact?.phone,
       contact_ids: selectedContactIds,
       location,
+      industry: (industry as ProjectIndustry) || undefined,
       opportunity_type: opportunityType,
       closing_date: closingDate.trim() || undefined,
       pipeline_stage: pipelineStage,
@@ -540,7 +545,23 @@ export function EditProjectModal({ project, isOpen, onClose, onSaved }: EditProj
           </div>
 
           {/* Row 3: Location, Opportunity Type & Priority */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                <Factory className="w-3.5 h-3.5 text-blue-600 dark:text-[#8FC2F0]" />
+                <span>Project Industry</span>
+              </label>
+              <select
+                value={industry}
+                onChange={e => setIndustry(e.target.value as ProjectIndustry)}
+                className="w-full px-3 py-2 text-sm bg-white dark:bg-[#141820] border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              >
+                <option value="">{isRTL ? '-- غير محدد (اختر قطاع) --' : '-- Not Specified (Select Industry) --'}</option>
+                {PROJECT_INDUSTRIES.map(ind => (
+                  <option key={ind.value} value={ind.value}>{ind.label}</option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Location (City)</label>
               <select
